@@ -16,7 +16,7 @@ tqdm = "*"
 zarr = "*"
 copick = "^0.5.6"
 copick_utils = {git = "https://github.com/copick/copick-utils.git", branch = "main"}
-monai-weekly[mlflow] = "*"
+monai-weekly = { version = "*", extras = ["mlflow"] }
 
 [tool.poetry.dev-dependencies]
 pytest = "^6.2.3"
