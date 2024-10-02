@@ -14,7 +14,8 @@ RUN python3 -m pip install --no-cache-dir poetry==$POETRY_VERSION
 
 # Install dependencies
 COPY pyproject.toml ./
-RUN poetry config virtualenvs.create false
+# Set Poetry to not use virtual environments
+ENV POETRY_VIRTUALENVS_CREATE=false
 RUN poetry install
 
 # Install package
