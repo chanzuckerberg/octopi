@@ -1,0 +1,85 @@
+{
+    "config_type": "cryoet_data_portal",
+    "name": "polnet",
+    "description": "A Data Portal project.",
+    "version": "1.0.0",
+
+    "pickable_objects": [
+        {
+            "name": "membrane",
+            "is_particle": false,
+            "label": 1,
+            "go_id": "GO:0016020",            
+            "color": [150,150, 150, 255],
+            "radius": 10
+        },
+        {
+            "name": "adp-mitochondrial",
+            "is_particle": true,
+            "pdb_id": "6MRD",
+            "go_id": "GO:1990220",
+            "label": 2,
+            "color": [  0, 117, 220, 255],
+            "radius": 75,
+            "map_threshold": 0.037
+        },
+        {
+            "name": "alkaline-phosphate",
+            "is_particle": true,
+            "pdb_id": "1ZEF",
+            "go_id": "UniProtKB:P05187",
+            "label": 3,
+            "color": [  0, 117, 220, 255],
+            "radius": 75,
+            "map_threshold": 0.037
+        },
+        {
+            "name": "nucleosome",
+            "is_particle": true,
+            "pdb_id": "6UPH",
+            "go_id": "GO:0000786",
+            "label": 4,
+            "color": [  0, 117, 220, 255],
+            "radius": 65,
+            "map_threshold": 0.037
+        },        
+        {
+            "name": "ribosome",
+            "is_particle": true,
+            "pdb_id": "7TM3",
+            "go_id": "GO:0022626",
+            "label": 5,
+            "color": [  0, 117, 220, 255],
+            "radius": 165,
+            "map_threshold": 0.037
+        },
+        {
+            "name": "vault",
+            "is_particle": true,
+            "pdb_id": "7PKZ",
+            "go_id": "UniProtKB:Q62667",
+            "label": 6,
+            "color": [  0, 117, 220, 255],
+            "radius": 165,
+            "map_threshold": 0.037
+        },
+        {
+            "name": "virus-like-capsid",
+            "is_particle": true,
+            "pdb_id": "6NK5",
+            "go_id": "GO:0170047",
+            "label": 7,
+            "color": [  0, 117, 220, 255],
+            "radius": 140,
+            "map_threshold": 0.037
+        }             
+    ],
+
+    "overlay_root": "./data",
+
+    "overlay_fs_args": {
+        "auto_mkdir": true
+    },
+
+    "dataset_ids": [10439]
+}
