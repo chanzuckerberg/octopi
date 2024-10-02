@@ -1,5 +1,5 @@
 [tool.poetry]
-name = "model-exploration"
+name = "model_explore"
 version = "0.0.1"
 description = "Model architecture exploration for cryoET particle picking"
 authors = ["CZII autonomous 3d particle picking team"]
@@ -26,8 +26,3 @@ pytest = "^6.2.3"
 [build-system]
 requires = ["poetry-core>=1.0.0"]
 build-backend = "poetry.core.masonry.api"
-
-[tool.poetry.package]
-# Tells Poetry where to find your package
-include = "model_explore"
-from = "src"
