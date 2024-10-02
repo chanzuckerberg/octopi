@@ -4,14 +4,15 @@ import copick
 from tqdm import tqdm
 from monai.data import DataLoader, CacheDataset, decollate_batch
 from monai.transforms import (
-    Compose, 
-    EnsureChannelFirstd, 
-    Orientationd, 
-    Spacingd, 
-    EnsureTyped, 
-    AsDiscrete, 
-    RandFlipd, 
-    RandRotate90d, 
+    Compose,
+    EnsureChannelFirstd,
+    Orientationd,
+    Spacingd,
+    EnsureTyped,
+    ToTensord,
+    AsDiscrete,
+    RandFlipd,
+    RandRotate90d,
     RandGridPatchd,
     NormalizeIntensityd,
 )
@@ -24,24 +25,25 @@ from model_explore.utils import get_tomogram_array, get_segmentation_array, stac
 
 transforms = Compose([
     EnsureChannelFirstd(keys=["image", "label"], channel_dim="no_channel"),
+    ToTensord(keys=["image"], dtype=np.float32)
     NormalizeIntensityd(keys=["image"]),
     Orientationd(keys=["image", "label"], axcodes="RAS"),
     Spacingd(keys=["image", "label"], pixdim=(1.5, 1.5, 2.0), mode=("bilinear", "nearest")),
     EnsureTyped(keys=["image", "label"]),
     RandRotate90d(keys=["image", "label"], prob=0.5, spatial_axes=(1, 2)),
     RandFlipd(keys=["image", "label"], prob=0.5, spatial_axis=0),
-    RandGridPatchd(keys=["image", "label"], patch_size=(96, 96, 96), patch_overlap=(32, 32, 32)),  # Tiling into patches 
+    RandGridPatchd(keys=["image", "label"], patch_size=(96, 96, 96), patch_overlap=(32, 32, 32)),  # Tiling into patches
 ])
 
 
-def train(train_loader, 
-          model, 
-          loss_function, 
-          metrics_function, 
-          optimizer, 
-          nclasses=8, 
-          max_epochs=100): 
-    
+def train(train_loader,
+          model,
+          loss_function,
+          metrics_function,
+          optimizer,
+          nclasses=8,
+          max_epochs=100):
+
     post_pred = AsDiscrete(argmax=True, to_onehot=nclasses)
     post_label = AsDiscrete(to_onehot=nclasses)
     val_interval = 2
@@ -83,8 +85,8 @@ def train(train_loader,
                     val_outputs = model(val_inputs)
                     metric_val_outputs = [post_pred(i) for i in decollate_batch(val_outputs)]
                     metric_val_labels = [post_label(i) for i in decollate_batch(val_labels)]
-                    
-                    
+
+
                     # compute metric for current iteration
                     metrics_function(y_pred=metric_val_outputs, y=metric_val_labels)
 
@@ -98,7 +100,7 @@ def train(train_loader,
                     best_metric = metric
                     best_metric_epoch = epoch + 1
                     torch.save(model.state_dict(), os.path.join('./', "best_metric_model.pth"))
-                    
+
                     print("saved new best metric model")
                 print(
                     f"current epoch: {epoch + 1} current mean recall per class: {', '.join(metric_per_class)}"
@@ -112,7 +114,7 @@ if __name__ == "__main__":
     root = copick.from_file(copick_config_path)
 
     nclasses = len(root.pickable_objects) + 1
-    voxel_spacing = 10 
+    voxel_spacing = 10
     tomo_type = "wbp"
     painting_segmentation_name = "paintedPicks"
     data_dicts = []
@@ -125,13 +127,13 @@ if __name__ == "__main__":
         for pickable_object in root.pickable_objects:
             print(f"Painting {pickable_object.name}")
             # radius = pickable_object.radius / voxel_spacing * paint_scale
-            radius = 10 
+            radius = 10
             painting_segmentation_name = "paintedPicks"
             try:
                 pick_set = run.get_picks(object_name=pickable_object.name, user_id="data-portal")[0]
                 segmentation_from_picks(radius, painting_segmentation_name, run, voxel_spacing, tomo_type, pickable_object, pick_set, user_id="paintedPicks", session_id="0")
             except:
-                pass  
+                pass
 
     data_dicts = []
     for run in tqdm(root.runs[:end]):
@@ -140,7 +142,7 @@ if __name__ == "__main__":
         data_dicts.append({"image": tomogram, "label": segmentation})
 
 
-    train_files, val_files = data_dicts[:int(end/2)], data_dicts[int(end/2):end]  
+    train_files, val_files = data_dicts[:int(end/2)], data_dicts[int(end/2):end]
     print(f"Number of training samples: {len(train_files)}")
     print(f"Number of validation samples: {len(val_files)}")
 
