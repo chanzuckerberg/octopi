@@ -4,7 +4,7 @@ FROM nvidia/cuda:11.8.0-runtime-ubuntu22.04
 WORKDIR /usr/app
 
 # Base utilities
-RUN apt update && apt install -y python3-pip 
+RUN apt update && apt install -y python3-pip git
 RUN ln -s /usr/bin/python3 /usr/bin/python
 
 # Install pip and Poetry
