@@ -13,7 +13,7 @@ ENV POETRY_VERSION=1.8.3
 RUN python3 -m pip install --no-cache-dir poetry==$POETRY_VERSION
 
 # Install dependencies
-# COPY pyproject.toml poetry.lock ./
+COPY pyproject.toml ./
 RUN poetry config virtualenvs.create false
 RUN poetry install
 
@@ -21,6 +21,5 @@ RUN poetry install
 COPY . ./
 RUN pip install .
 
-
-# Wait for work
-RUN python src/model_explore/train.py
+# run cmd after the build
+CMD ["python", "src/model_explore/train.py"]
