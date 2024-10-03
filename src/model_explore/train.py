@@ -24,7 +24,7 @@ from model_explore.utils import get_tomogram_array, get_segmentation_array, stac
 
 
 transforms = Compose([
-    ToTensord(keys=["image"], dtype=torch.float32),
+    #ToTensord(keys=["image"], dtype=torch.float32),
     EnsureChannelFirstd(keys=["image", "label"], channel_dim="no_channel"),
     NormalizeIntensityd(keys=["image"]),
     Orientationd(keys=["image", "label"], axcodes="RAS"),
