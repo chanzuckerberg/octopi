@@ -21,6 +21,7 @@ from monai.losses import TverskyLoss
 from monai.metrics import DiceMetric, ConfusionMatrixMetric
 from copick_utils.segmentation.segmentation_from_picks import segmentation_from_picks
 from model_explore.utils import get_tomogram_array, get_segmentation_array, stack_patches
+import mlflow
 
 
 transforms = Compose([
@@ -73,6 +74,8 @@ def train(train_loader,
         epoch_loss /= step
         epoch_loss_values.append(epoch_loss)
         print(f"epoch {epoch + 1} average loss: {epoch_loss:.4f}")
+        mlflow.log_metric("train_loss", epoch_loss, step=epoch+1)
+
 
         if (epoch + 1) % val_interval == 0:
             model.eval()
@@ -86,13 +89,15 @@ def train(train_loader,
                     metric_val_outputs = [post_pred(i) for i in decollate_batch(val_outputs)]
                     metric_val_labels = [post_label(i) for i in decollate_batch(val_labels)]
 
-
                     # compute metric for current iteration
                     metrics_function(y_pred=metric_val_outputs, y=metric_val_labels)
 
                 metrics = metrics_function.aggregate(reduction="mean_batch")
                 metric_per_class = ["{:.4g}".format(x) for x in metrics]
                 metric = torch.mean(metrics).numpy(force=True)
+                mlflow.log_metric("validation metric", metric, step=epoch+1)
+                for i,m in enumerate(metrics):
+                    mlflow.log_metric(f"validation metric class {i+1}", m, step=epoch+1)
                 metrics_function.reset()
 
                 metric_values.append(metric)
@@ -168,9 +173,11 @@ if __name__ == "__main__":
     ).to(device)
 
     optimizer = torch.optim.Adam(model.parameters(), lr)
-    #loss_function = DiceLoss(include_background=True, to_onehot_y=True, softmax=True)  # softmax=True for multiclass
     loss_function = TverskyLoss(include_background=True, to_onehot_y=True, softmax=True)  # softmax=True for multiclass
     dice_metric = DiceMetric(include_background=False, reduction="mean", ignore_empty=True)  # must use onehot for multiclass
     recall_metric = ConfusionMatrixMetric(include_background=False, metric_name="recall", reduction="None")
 
-    train(train_loader, model, loss_function, dice_metric, optimizer, max_epochs=epochs)
+    mlflow.set_experiment('training 3D U-Net model for the cryoET ML Challenge')
+    with mlflow.start_run():    
+        train(train_loader, model, loss_function, dice_metric, optimizer, max_epochs=epochs)
+    mlflow.end_run()
