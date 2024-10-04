@@ -6,7 +6,7 @@ def get_tomogram_array(copick_run, voxel_spacing=10, tomo_type="wbp"):
     voxel_spacing_obj = copick_run.get_voxel_spacing(voxel_spacing)
     tomogram = voxel_spacing_obj.get_tomogram(tomo_type)
     image = zarr.open(tomogram.zarr(), mode="r")["0"]
-    return image[:]
+    return image[:].astype(np.float32)
 
 
 def get_segmentation_array(
@@ -25,7 +25,7 @@ def get_segmentation_array(
     seg_membrane = np.array(array[:])
     # seg_membrane = zarr.open(seg_memb[0].zarr().path, mode="r")['0'][:]
     segmentation[seg_membrane == 1] = 1
-    return segmentation
+    return segmentation.astype(np.unit8)
 
 
 def stack_patches(data):
