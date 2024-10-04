@@ -17,10 +17,8 @@ zarr = "*"
 copick = "^0.5.6"
 #s3fs = "^2024.9.0"
 click = "^8.1.7"
-monai = "1.3.2"
-mlflow = "*"
 #copick-utils = {git = "https://github.com/copick/copick-utils.git", branch = "dev"}
-#monai-weekly = { version = "*", extras = ["mlflow"] }
+monai-weekly = { version = "1.4.dev2435", extras = ["mlflow"] }
 
 [tool.poetry.dev-dependencies]
 pytest = "^6.2.3"
