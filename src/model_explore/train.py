@@ -1,8 +1,9 @@
 import os
 import torch
 import copick
+import numpy as np
 from tqdm import tqdm
-from monai.data import DataLoader, CacheDataset, decollate_batch
+from monai.data import DataLoader, Dataset, CacheDataset, decollate_batch
 from monai.transforms import (
     Compose,
     EnsureChannelFirstd,
@@ -15,25 +16,45 @@ from monai.transforms import (
     RandRotate90d,
     RandGridPatchd,
     NormalizeIntensityd,
+    RandGridPatchd,
+    NormalizeIntensityd,
+    RandCropByLabelClassesd,
+    Resized, 
+    RandZoomd,
+    Activations, 
+    CropForegroundd, 
+    ScaleIntensityRanged, 
+    RandCropByPosNegLabeld,      
 )
 from monai.networks.nets import UNet
 from monai.losses import TverskyLoss
 from monai.metrics import DiceMetric, ConfusionMatrixMetric
 from copick_utils.segmentation.segmentation_from_picks import segmentation_from_picks
-from model_explore.utils import get_tomogram_array, get_segmentation_array, stack_patches
 import mlflow
 
 
-transforms = Compose([
-    #ToTensord(keys=["image"], dtype=torch.float32),
+my_num_samples = 16
+train_batch_size = 1
+val_batch_size = 1
+
+# Non-random transforms to be cached
+non_random_transforms = Compose([
     EnsureChannelFirstd(keys=["image", "label"], channel_dim="no_channel"),
-    NormalizeIntensityd(keys=["image"]),
-    Orientationd(keys=["image", "label"], axcodes="RAS"),
-    Spacingd(keys=["image", "label"], pixdim=(1.5, 1.5, 2.0), mode=("bilinear", "nearest")),
-    EnsureTyped(keys=["image", "label"]),
-    RandRotate90d(keys=["image", "label"], prob=0.5, spatial_axes=(1, 2)),
-    RandFlipd(keys=["image", "label"], prob=0.5, spatial_axis=0),
-    RandGridPatchd(keys=["image", "label"], patch_size=(96, 96, 96), patch_overlap=(32, 32, 32)),  # Tiling into patches
+    NormalizeIntensityd(keys="image"),
+    Orientationd(keys=["image", "label"], axcodes="RAS")
+])
+
+# Random transforms to be applied during training
+random_transforms = Compose([
+    RandCropByLabelClassesd(
+        keys=["image", "label"],
+        label_key="label",
+        spatial_size=[96, 96, 96],
+        num_classes=8,
+        num_samples=my_num_samples
+    ),
+    RandRotate90d(keys=["image", "label"], prob=0.5, spatial_axes=[0, 2]),
+    RandFlipd(keys=["image", "label"], prob=0.5, spatial_axis=0),    
 ])
 
 
@@ -60,10 +81,8 @@ def train(train_loader,
         step = 0
         for batch_data in train_loader:
             step += 1
-            inputs, labels = (
-                stack_patches(batch_data["image"]).to(device),
-                stack_patches(batch_data["label"]).to(device),
-            )
+            inputs = batch_data["image"].to(device)  # Shape: [B, C, H, W, D]
+            labels = batch_data["label"].to(device)  # Shape: [B, C, H, W, D]  
             optimizer.zero_grad()
             outputs = model(inputs)
             loss = loss_function(outputs, labels)
@@ -81,10 +100,8 @@ def train(train_loader,
             model.eval()
             with torch.no_grad():
                 for val_data in val_loader:
-                    val_inputs, val_labels = (
-                        stack_patches(val_data["image"]).to(device),
-                        stack_patches(val_data["label"]).to(device),
-                    )
+                    val_inputs = val_data["image"].to(device)
+                    val_labels = val_data["label"].to(device)
                     val_outputs = model(val_inputs)
                     metric_val_outputs = [post_pred(i) for i in decollate_batch(val_outputs)]
                     metric_val_labels = [post_label(i) for i in decollate_batch(val_labels)]
@@ -128,22 +145,39 @@ if __name__ == "__main__":
     lr = 1e-3
     epochs = 20
 
-    for run in tqdm(root.runs[:end]):
-        for pickable_object in root.pickable_objects:
-            print(f"Painting {pickable_object.name}")
-            # radius = pickable_object.radius / voxel_spacing * paint_scale
-            radius = 10
-            painting_segmentation_name = "paintedPicks"
-            try:
-                pick_set = run.get_picks(object_name=pickable_object.name, user_id="data-portal")[0]
-                segmentation_from_picks(radius, painting_segmentation_name, run, voxel_spacing, tomo_type, pickable_object, pick_set, user_id="paintedPicks", session_id="0")
-            except:
-                pass
 
+    from copick_utils.segmentation import target_generator
+    import copick_utils.writers.write as write
+    from collections import defaultdict
+
+    target_objects = defaultdict(dict)
+    for object in root.pickable_objects:
+        if object.is_particle:
+            target_objects[object.name]['label'] = object.label
+            target_objects[object.name]['radius'] = object.radius
+
+
+    # for run in tqdm(root.runs):
+    #     tomo = run.get_voxel_spacing(10)
+    #     tomo = tomo.get_tomogram('wbp').numpy()
+    #     target = np.zeros(tomo.shape, dtype=np.uint8)
+    #     for pickable_object in root.pickable_objects:
+    #         pick = run.get_picks(object_name=pickable_object.name, user_id="data-portal")
+    #         if len(pick):  
+    #             target = target_generator.from_picks(pick[0], 
+    #                                                 target, 
+    #                                                 target_objects[pickable_object.name]['radius'] * 0.8,
+    #                                                 target_objects[pickable_object.name]['label']
+    #                                                 )
+    #     write.segmentation(run, target, "user0", segmentationName='paintedPicks')
+
+    
     data_dicts = []
-    for run in tqdm(root.runs[:end]):
-        tomogram = get_tomogram_array(run)
-        segmentation = get_segmentation_array(run, painting_segmentation_name)
+    for run in tqdm(root.runs[:2]):
+        tomogram = run.get_voxel_spacing(10).get_tomogram('wbp').numpy()
+        segmentation = run.get_segmentations(name='paintedPicks', user_id='user0', voxel_size=10, is_multilabel=True)[0].numpy()
+        membrane_seg = run.get_segmentations(name='membrane', user_id="data-portal")[0].numpy()
+        segmentation[membrane_seg==1]=1  
         data_dicts.append({"image": tomogram, "label": segmentation})
 
 
@@ -151,14 +185,36 @@ if __name__ == "__main__":
     print(f"Number of training samples: {len(train_files)}")
     print(f"Number of validation samples: {len(val_files)}")
 
-    train_ds = CacheDataset(data=train_files, transform=transforms)
-    val_ds = CacheDataset(data=val_files, transform=transforms)
+    # Create the cached dataset with non-random transforms
+    train_ds = CacheDataset(data=train_files, transform=non_random_transforms, cache_rate=1.0)
 
-    train_batch_size = 1
-    val_batch_size = 1
-    train_loader = DataLoader(train_ds, batch_size=train_batch_size, shuffle=True, num_workers=4, pin_memory=torch.cuda.is_available())
-    val_loader = DataLoader(val_ds, batch_size=val_batch_size, num_workers=4, pin_memory=torch.cuda.is_available())
+    # Wrap the cached dataset to apply random transforms during iteration
+    train_ds = Dataset(data=train_ds, transform=random_transforms)
 
+    # DataLoader remains the same
+    train_loader = DataLoader(
+        train_ds,
+        batch_size=train_batch_size,
+        shuffle=True,
+        num_workers=4,
+        pin_memory=torch.cuda.is_available()
+    )
+
+    # Create validation dataset
+    val_ds = CacheDataset(data=val_files, transform=non_random_transforms, cache_rate=1.0)
+
+    # Wrap the cached dataset to apply random transforms during iteration
+    val_ds = Dataset(data=val_ds, transform=random_transforms)
+
+    # Create validation DataLoader
+    val_loader = DataLoader(
+        val_ds,
+        batch_size=val_batch_size,
+        num_workers=1,
+        pin_memory=torch.cuda.is_available(),
+        shuffle=False,  # Ensure the data order remains consistent
+    )
+    
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(device)
