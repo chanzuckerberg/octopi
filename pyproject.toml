@@ -9,16 +9,17 @@ readme = "README.md"
 [tool.poetry.dependencies]
 python = "^3.9"
 requests = "^2.25.1"
-torch = { version = "^2.0.0", extras = ["cuda118"] }
-torchvision = "^0.15.2"
+torch = { version = "*", source = "https://download.pytorch.org/whl/nightly/cu118", allow-prereleases = true }
 matplotlib = "^3.4.3"
 tqdm = "*"
 zarr = "*"
 copick = "^0.5.6"
 #s3fs = "^2024.9.0"
 click = "^8.1.7"
+nibabel = "5.2.1"
+mlflow = "*"
+monai-weekly = { version = "1.4.dev2440", allow-prereleases = true }
 #copick-utils = {git = "https://github.com/copick/copick-utils.git", branch = "dev"}
-monai-weekly = { version = "1.4.dev2435", extras = ["mlflow"] }
 
 [tool.poetry.dev-dependencies]
 pytest = "^6.2.3"
