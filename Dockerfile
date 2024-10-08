@@ -9,7 +9,7 @@ RUN ln -s /usr/bin/python3 /usr/bin/python
 
 # Install pip and Poetry
 RUN pip install --upgrade pip
-RUN pip install git+https://github.com/copick/copick-utils.git@dev
+RUN pip install git+https://github.com/copick/copick-utils.git
 ENV POETRY_VERSION=1.8.3
 RUN python3 -m pip install --no-cache-dir poetry==$POETRY_VERSION
 
@@ -24,4 +24,4 @@ COPY . ./
 RUN pip install .
 
 # run cmd after the build
-CMD ["python", "src/model_explore/train.py"]
+CMD ["python3", "src/model_explore/train.py"]
