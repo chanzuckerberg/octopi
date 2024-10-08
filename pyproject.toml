@@ -18,8 +18,9 @@ copick = "^0.5.6"
 click = "^8.1.7"
 nibabel = "5.2.1"
 mlflow = "*"
+python-dotenv = "*"
 monai-weekly = { version = "1.4.dev2440", allow-prereleases = true }
-#copick-utils = {git = "https://github.com/copick/copick-utils.git", branch = "dev"}
+copick-utils = {git = "https://github.com/copick/copick-utils.git", branch = "main"}
 
 [tool.poetry.dev-dependencies]
 pytest = "^6.2.3"

@@ -4,6 +4,7 @@ import copick
 import numpy as np
 from tqdm import tqdm
 from monai.data import DataLoader, Dataset, CacheDataset, decollate_batch
+from dotenv import load_dotenv
 from monai.transforms import (
     Compose,
     EnsureChannelFirstd,
@@ -137,13 +138,10 @@ if __name__ == "__main__":
 
     nclasses = len(root.pickable_objects) + 1
     voxel_spacing = 10
-    tomo_type = "wbp"
-    painting_segmentation_name = "paintedPicks"
     data_dicts = []
-    paint_scale = 0.8  # how large the paint ball size wrt particle size
     end = 2
     lr = 1e-3
-    epochs = 20
+    epochs = 200
 
 
     from copick_utils.segmentation import target_generator
@@ -155,7 +153,6 @@ if __name__ == "__main__":
         if object.is_particle:
             target_objects[object.name]['label'] = object.label
             target_objects[object.name]['radius'] = object.radius
-
 
     # for run in tqdm(root.runs):
     #     tomo = run.get_voxel_spacing(10)
@@ -233,7 +230,23 @@ if __name__ == "__main__":
     dice_metric = DiceMetric(include_background=False, reduction="mean", ignore_empty=True)  # must use onehot for multiclass
     recall_metric = ConfusionMatrixMetric(include_background=False, metric_name="recall", reduction="None")
 
-    mlflow.set_experiment('training 3D U-Net model for the cryoET ML Challenge')
-    with mlflow.start_run():    
-        train(train_loader, model, loss_function, dice_metric, optimizer, max_epochs=epochs)
-    mlflow.end_run()
+    username = os.getenv('MLFLOW_TRACKING_USERNAME')
+    password = os.getenv('MLFLOW_TRACKING_PASSWORD')
+    if not password or not username:
+        print("Password not found in environment, loading from .env file...")
+        load_dotenv()  # Loads environment variables from a .env file
+        username = os.getenv('MLFLOW_TRACKING_USERNAME')
+        password = os.getenv('MLFLOW_TRACKING_PASSWORD')
+        
+    # Check again after loading .env file
+    if not password:
+        raise ValueError("Password is not set in environment variables or .env file!")
+    else:
+        print("Password loaded successfully")
+        os.environ['MLFLOW_TRACKING_USERNAME'] = username
+        os.environ['MLFLOW_TRACKING_PASSWORD'] = password
+        mlflow.set_tracking_uri("http://mlflow.mlflow.svc.cluster.local:5000")
+        mlflow.set_experiment('training-3D-UNet-model-for-the-cryoET-ML-Challenge')
+        with mlflow.start_run():    
+            train(train_loader, model, loss_function, dice_metric, optimizer, max_epochs=epochs)
+        mlflow.end_run()
