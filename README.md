@@ -7,4 +7,5 @@ MLFLOW_TRACKING_USERNAME = Your_CZ_email
 MLFLOW_TRACKING_PASSWORD = Your_mlflow_access_token
 ```
 
+Then use the command `python3 /src/model_explore/train.py`
 To view the tracking results, go to a deployed [mlflow server](https://mlflow.cw.use4-prod.si.czi.technology/). Note the project name needs to be registered first.
