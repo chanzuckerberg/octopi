@@ -1,0 +1,238 @@
+import os
+import argparse
+import mlflow
+import pytorch_lightning as pl
+from pytorch_lightning import Trainer
+from pytorch_lightning.loggers import MLFlowLogger
+from pytorch_lightning.callbacks import ModelCheckpoint, LearningRateMonitor
+import torch.nn as nn
+import torch
+from pytorch_lightning.strategies import DDPStrategy
+import os
+import copick
+import numpy as np
+from tqdm import tqdm
+from monai.data import DataLoader, Dataset, CacheDataset, decollate_batch
+from dotenv import load_dotenv
+from monai.transforms import (
+    Compose,
+    EnsureChannelFirstd,
+    Orientationd,
+    AsDiscrete,
+    RandFlipd,
+    RandRotate90d,
+    NormalizeIntensityd,
+    NormalizeIntensityd,
+    RandCropByLabelClassesd,    
+)
+from monai.networks.nets import UNet
+from monai.losses import TverskyLoss
+from monai.metrics import DiceMetric, ConfusionMatrixMetric
+from copick_utils.segmentation.segmentation_from_picks import segmentation_from_picks
+import mlflow
+from dataclasses import dataclass
+
+@dataclass
+class plconfig:
+    spatial_dims: int = 3
+    in_channels: int = 1
+    out_channels: int = 8
+    channels: tuple = (48, 64, 80, 80)
+    strides: tuple = (2, 2, 1)
+    num_res_units: int = 1
+    train_batch_size: int = 1
+    val_batch_size: int = 1
+
+# Placeholder for the actual model class, should be replaced with your model
+class Model(pl.LightningModule):
+    def __init__(self, config, lr=1e-3):
+        super().__init__()
+        self.save_hyperparameters()
+
+        self.config = config
+        self.model = UNet(
+            spatial_dims=self.config.spatial_dims,
+            in_channels=self.config.in_channels,
+            out_channels=self.config.out_channels,
+            channels=self.config.channels,
+            strides=self.config.strides,
+            num_res_units=self.config.num_res_units,
+        )
+        self.loss_fn = TverskyLoss(include_background=True, to_onehot_y=True, softmax=True)  # softmax=True for multiclass
+        self.metric_fn = DiceMetric(include_background=False, reduction="mean", ignore_empty=True)
+
+    def forward(self, x):
+        return self.model(x)
+
+    def training_step(self, batch, batch_idx):
+        x, y = batch['image'], batch['label']
+        y_hat = self(x)
+        loss = self.loss_fn(y_hat, y)
+        return loss
+    
+    def validation_step(self, batch, batch_idx):
+        x, y = batch['image'], batch['label']
+        y_hat = self(x)
+        metric_val_outputs = [AsDiscrete(argmax=True, to_onehot=self.config.out_channels)(i) for i in decollate_batch(y_hat)]
+        metric_val_labels = [AsDiscrete(to_onehot=self.config.out_channels)(i) for i in decollate_batch(y)]
+
+        # compute metric for current iteration
+        self.metric_fn(y_pred=metric_val_outputs, y=metric_val_labels)
+        metrics = self.metric_fn.aggregate(reduction="mean_batch")
+        metric_per_class = ["{:.4g}".format(x) for x in metrics]
+        metric = torch.mean(metrics) # cannot log ndarray 
+        self.log('val_metric', metric, prog_bar=True, on_epoch=True, sync_dist=True) # sync_dist=True for distributed training
+        return {'val_metric': metric}
+
+    def configure_optimizers(self):
+        return torch.optim.Adam(self.parameters(), lr=self.hparams.lr)
+    
+    
+
+def data_from_copick():
+    from collections import defaultdict
+    
+    copick_config_path = "copick_config_dataportal_10439.json"
+    root = copick.from_file(copick_config_path)
+
+    data_dicts = []
+    target_objects = defaultdict(dict)
+    for object in root.pickable_objects:
+        if object.is_particle:
+            target_objects[object.name]['label'] = object.label
+            target_objects[object.name]['radius'] = object.radius
+    
+    data_dicts = []
+    for run in tqdm(root.runs[:2]):
+        tomogram = run.get_voxel_spacing(10).get_tomogram('wbp').numpy()
+        segmentation = run.get_segmentations(name='paintedPicks', user_id='user0', voxel_size=10, is_multilabel=True)[0].numpy()
+        membrane_seg = run.get_segmentations(name='membrane', user_id="data-portal")[0].numpy()
+        segmentation[membrane_seg==1] = 1  
+        data_dicts.append({"image": tomogram, "label": segmentation})
+    
+    return data_dicts
+
+
+def get_args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--batch_size', type=int, default=32)
+    parser.add_argument('--learning_rate', type=float, default=1e-4)
+    parser.add_argument('--num_epochs', type=int, default=20)
+    parser.add_argument('--num_gpus', type=int, default=1)
+    parser.add_argument('--world_size', type=int, default=8)
+    parser.add_argument('--tracking_uri', type=str, default="http://mlflow.mlflow.svc.cluster.local:5000")
+    parser.add_argument('--exp_name', type=str, default="distributed-training")
+    parser.add_argument('--run_name', type=str, default="default_run")
+    return parser.parse_args()
+
+
+# Non-random transforms to be cached
+non_random_transforms = Compose([
+    EnsureChannelFirstd(keys=["image", "label"], channel_dim="no_channel"),
+    NormalizeIntensityd(keys="image"),
+    Orientationd(keys=["image", "label"], axcodes="RAS")
+])
+
+# Random transforms to be applied during training
+random_transforms = Compose([
+    RandCropByLabelClassesd(
+        keys=["image", "label"],
+        label_key="label",
+        spatial_size=[96, 96, 96],
+        num_classes=8,
+        num_samples=16 #TODO
+    ),
+    RandRotate90d(keys=["image", "label"], prob=0.5, spatial_axes=[0, 2]),
+    RandFlipd(keys=["image", "label"], prob=0.5, spatial_axis=0),    
+])
+
+
+
+def train():
+    args = get_args()
+    # MLflow setup
+    username = os.getenv('MLFLOW_TRACKING_USERNAME')
+    password = os.getenv('MLFLOW_TRACKING_PASSWORD')
+    if not password or not username:
+        print("Password not found in environment, loading from .env file...")
+        load_dotenv()  # Loads environment variables from a .env file
+        username = os.getenv('MLFLOW_TRACKING_USERNAME')
+        password = os.getenv('MLFLOW_TRACKING_PASSWORD')
+        
+    # Check again after loading .env file
+    if not password:
+        raise ValueError("Password is not set in environment variables or .env file!")
+    else:
+        print("Password loaded successfully")
+        os.environ['MLFLOW_TRACKING_USERNAME'] = username
+        os.environ['MLFLOW_TRACKING_PASSWORD'] = password
+    
+    mlf_logger = MLFlowLogger(experiment_name='training-3D-UNet-model-for-the-cryoET-ML-Challenge',
+                              tracking_uri='http://mlflow.mlflow.svc.cluster.local:5000',
+                              #run_name='test1'
+                              )
+
+    # Trainer callbacks
+    checkpoint_callback = ModelCheckpoint(monitor='val_metric', save_top_k=1, mode='min')
+    lr_monitor = LearningRateMonitor(logging_interval='epoch')
+
+    # Detect distributed training environment
+    devices = list(range(args.num_gpus))
+    
+    # Configuration placeholder (you can expand with your own settings)
+    # config = {"lr": args.learning_rate, "batch_size": args.batch_size}
+
+    # Initialize model
+    model = Model(plconfig)
+
+    # Priotize performace over precision
+    torch.set_float32_matmul_precision('medium') # or torch.set_float32_matmul_precision('high')
+
+    # Trainer for distributed training with DDP
+    trainer = Trainer(
+        max_epochs=args.num_epochs,
+        logger=mlf_logger,
+        callbacks=[checkpoint_callback, lr_monitor],
+        strategy=DDPStrategy(find_unused_parameters=False),
+        accelerator="gpu",
+        devices=devices,
+        num_nodes=1, #int(os.environ.get("WORLD_SIZE", 1)) // args.num_gpus,
+        log_every_n_steps=1
+    )
+
+    data_dicts = data_from_copick()
+    end = 2
+    train_files, val_files = data_dicts[:int(end/2)], data_dicts[int(end/2):end]
+    print(f"Number of training samples: {len(train_files)}")
+    print(f"Number of validation samples: {len(val_files)}")
+
+    # Create the cached dataset with non-random transforms
+    train_ds = CacheDataset(data=train_files, transform=non_random_transforms, cache_rate=1.0)
+    # Wrap the cached dataset to apply random transforms during iteration
+    train_ds = Dataset(data=train_ds, transform=random_transforms)
+
+    train_loader = DataLoader(
+        train_ds,
+        batch_size=plconfig.train_batch_size,
+        shuffle=True,
+        num_workers=4,
+        pin_memory=torch.cuda.is_available()
+    )
+
+    # Create validation dataset
+    val_ds = CacheDataset(data=val_files, transform=non_random_transforms, cache_rate=1.0)
+    val_ds = Dataset(data=val_ds, transform=random_transforms)
+    val_loader = DataLoader(
+        val_ds,
+        batch_size=plconfig.val_batch_size,
+        num_workers=4,
+        pin_memory=torch.cuda.is_available(),
+        shuffle=False,  # Ensure the data order remains consistent
+    )
+    
+
+    trainer.fit(model, train_loader, val_loader)
+    mlflow.end_run() 
+
+if __name__ == "__main__":
+    train()
