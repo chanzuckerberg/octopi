@@ -9,7 +9,7 @@ readme = "README.md"
 [tool.poetry.dependencies]
 python = "^3.9"
 requests = "^2.25.1"
-torch = { version = "*", source = "https://download.pytorch.org/whl/nightly/cu118", allow-prereleases = true }
+torch = { version = "*", source = "https://download.pytorch.org/whl/cu118", allow-prereleases = true }
 matplotlib = "^3.4.3"
 tqdm = "*"
 zarr = "*"
