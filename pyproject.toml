@@ -21,6 +21,7 @@ mlflow = "*"
 python-dotenv = "*"
 monai-weekly = { version = "1.4.dev2440", allow-prereleases = true }
 copick-utils = {git = "https://github.com/copick/copick-utils.git", branch = "main"}
+pytorch-lightning = "*"
 
 [tool.poetry.dev-dependencies]
 pytest = "^6.2.3"
