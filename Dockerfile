@@ -26,5 +26,4 @@ RUN poetry install
 COPY . ./
 RUN pip install .
 
-# run cmd after the build
-CMD ["python3", "src/model_explore/train.py"]
+ENTRYPOINT ["python3", "src/model_explore/train.py"]
