@@ -32,6 +32,20 @@ from copick_utils.segmentation.segmentation_from_picks import segmentation_from_
 import mlflow
 from dataclasses import dataclass
 
+
+def get_args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--batch_size', type=int, default=32)
+    parser.add_argument('--learning_rate', type=float, default=1e-4)
+    parser.add_argument('--num_epochs', type=int, default=20)
+    parser.add_argument('--num_gpus', type=int, default=1)
+    parser.add_argument('--world_size', type=int, default=8)
+    parser.add_argument('--tracking_uri', type=str, default="http://mlflow.mlflow.svc.cluster.local:5000")
+    parser.add_argument('--exp_name', type=str, default="distributed-training")
+    parser.add_argument('--run_name', type=str, default="default_run")
+    return parser.parse_args()
+
+
 @dataclass
 class plconfig:
     spatial_dims: int = 3
@@ -79,7 +93,8 @@ class Model(pl.LightningModule):
         # compute metric for current iteration
         self.metric_fn(y_pred=metric_val_outputs, y=metric_val_labels)
         metrics = self.metric_fn.aggregate(reduction="mean_batch")
-        metric_per_class = ["{:.4g}".format(x) for x in metrics]
+        for i,m in enumerate(metrics):
+            self.log(f"validation metric class {i+1}", m, prog_bar=True, on_epoch=True, sync_dist=True)
         metric = torch.mean(metrics) # cannot log ndarray 
         self.log('val_metric', metric, prog_bar=True, on_epoch=True, sync_dist=True) # sync_dist=True for distributed training
         return {'val_metric': metric}
@@ -111,19 +126,6 @@ def data_from_copick():
         data_dicts.append({"image": tomogram, "label": segmentation})
     
     return data_dicts
-
-
-def get_args():
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--batch_size', type=int, default=32)
-    parser.add_argument('--learning_rate', type=float, default=1e-4)
-    parser.add_argument('--num_epochs', type=int, default=20)
-    parser.add_argument('--num_gpus', type=int, default=1)
-    parser.add_argument('--world_size', type=int, default=8)
-    parser.add_argument('--tracking_uri', type=str, default="http://mlflow.mlflow.svc.cluster.local:5000")
-    parser.add_argument('--exp_name', type=str, default="distributed-training")
-    parser.add_argument('--run_name', type=str, default="default_run")
-    return parser.parse_args()
 
 
 # Non-random transforms to be cached
@@ -229,7 +231,6 @@ def train():
         pin_memory=torch.cuda.is_available(),
         shuffle=False,  # Ensure the data order remains consistent
     )
-    
 
     trainer.fit(model, train_loader, val_loader)
     mlflow.end_run() 
