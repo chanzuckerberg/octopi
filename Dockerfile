@@ -12,6 +12,7 @@ RUN ln -s /usr/bin/python3 /usr/bin/python
 # Install pip and Poetry
 RUN pip install --upgrade pip
 RUN pip install git+https://github.com/copick/copick-utils.git
+RUN pip install torch torchvision --extra-index-url https://download.pytorch.org/whl/cu118
 ENV POETRY_VERSION=1.8.3
 RUN python3 -m pip install --no-cache-dir poetry==$POETRY_VERSION
 
