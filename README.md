@@ -35,7 +35,7 @@ python3 /src/model_explore/train_pl.py
 
 ## Hyperparameter tuning with Optuna and PyTorch Lightning 
 ```
-python3 /src/model_explore/optuna_pl_ddp.py 
+python3 /src/model_explore/optuna_pl.py 
     --copick_config_path your_copick_config_path \
     --train_batch_size 1 \
     --val_batch_size 1 \
