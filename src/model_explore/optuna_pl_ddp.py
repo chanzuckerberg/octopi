@@ -1,0 +1,280 @@
+"""
+Hyperparameter tuning with Optuna and PyTorch Lighning 
+"""
+
+import os
+import argparse
+import copick
+import torch
+from tqdm import tqdm
+import pytorch_lightning as pl
+import torch.distributed as dist
+from pytorch_lightning import Trainer
+from pytorch_lightning.loggers import MLFlowLogger
+from pytorch_lightning.callbacks import ModelCheckpoint, LearningRateMonitor, EarlyStopping
+from monai.data import DataLoader, Dataset, CacheDataset, decollate_batch
+from dotenv import load_dotenv
+from monai.transforms import (
+    Compose,
+    EnsureChannelFirstd,
+    Orientationd,
+    AsDiscrete,
+    RandFlipd,
+    RandRotate90d,
+    NormalizeIntensityd,
+    NormalizeIntensityd,
+    RandCropByLabelClassesd,    
+)
+from monai.networks.nets import UNet
+from monai.losses import TverskyLoss
+from monai.metrics import DiceMetric, ConfusionMatrixMetric
+import optuna
+from typing import Union, Tuple, List
+
+
+def get_args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--copick_config_path', type=str, default='copick_config_dataportal_10439.json')
+    parser.add_argument('--train_batch_size', type=int, default=1)
+    parser.add_argument('--val_batch_size', type=int, default=1)
+    parser.add_argument('--num_random_samples_per_batch', type=int, default=16)
+    parser.add_argument('--learning_rate', type=float, default=1e-4)
+    parser.add_argument('--num_epochs', type=int, default=20)
+    parser.add_argument('--num_gpus', type=int, default=1)
+    parser.add_argument('--num_optuna_trials', type=int, default=10)
+    return parser.parse_args()
+
+
+# Placeholder for the actual model class, should be replaced with your model
+class Model(pl.LightningModule):
+    def __init__(
+        self, 
+        spatial_dims: int = 3,
+        in_channels: int = 1,
+        out_channels: int = 8,
+        channels: Union[Tuple[int, ...], List[int]] = (48, 64, 80, 80),
+        strides: Union[Tuple[int, ...], List[int]] = (2, 2, 1),
+        num_res_units: int = 1,
+        lr: float=1e-3):
+    
+        super().__init__()
+        self.save_hyperparameters()
+        self.model = UNet(
+            spatial_dims=self.hparams.spatial_dims,
+            in_channels=self.hparams.in_channels,
+            out_channels=self.hparams.out_channels,
+            channels=self.hparams.channels,
+            strides=self.hparams.strides,
+            num_res_units=self.hparams.num_res_units,
+        )
+        self.loss_fn = TverskyLoss(include_background=True, to_onehot_y=True, softmax=True)  # softmax=True for multiclass
+        self.metric_fn = DiceMetric(include_background=False, reduction="mean", ignore_empty=True)
+
+    def forward(self, x):
+        return self.model(x)
+
+    def training_step(self, batch, batch_idx):
+        x, y = batch['image'], batch['label']
+        y_hat = self(x)
+        loss = self.loss_fn(y_hat, y)
+        return loss
+    
+    def validation_step(self, batch, batch_idx):
+        with torch.no_grad(): # This ensures that gradients are not stored in memory
+            x, y = batch['image'], batch['label']
+            y_hat = self(x)
+            metric_val_outputs = [AsDiscrete(argmax=True, to_onehot=self.hparams.out_channels)(i) for i in decollate_batch(y_hat)]
+            metric_val_labels = [AsDiscrete(to_onehot=self.hparams.out_channels)(i) for i in decollate_batch(y)]
+
+            # compute metric for current iteration
+            self.metric_fn(y_pred=metric_val_outputs, y=metric_val_labels)
+            metrics = self.metric_fn.aggregate(reduction="mean_batch")
+            for i,m in enumerate(metrics):
+                self.log(f"validation metric class {i+1}", m, prog_bar=True, on_epoch=True, sync_dist=True)
+            metric = torch.mean(metrics) # cannot log ndarray 
+            self.log('val_metric', metric, prog_bar=True, on_epoch=True, sync_dist=True) # sync_dist=True for distributed training
+        return {'val_metric': metric}
+
+    def configure_optimizers(self):
+        return torch.optim.Adam(self.parameters(), lr=self.hparams.lr)
+    
+    
+
+def data_from_copick(copick_config_path):
+    from collections import defaultdict
+    root = copick.from_file(copick_config_path)
+    nclasses = len(root.pickable_objects) + 1
+    data_dicts = []
+    target_objects = defaultdict(dict)
+    for object in root.pickable_objects:
+        if object.is_particle:
+            target_objects[object.name]['label'] = object.label
+            target_objects[object.name]['radius'] = object.radius
+    
+    data_dicts = []
+    for run in tqdm(root.runs[:2]):
+        tomogram = run.get_voxel_spacing(10).get_tomogram('wbp').numpy()
+        segmentation = run.get_segmentations(name='paintedPicks', user_id='user0', voxel_size=10, is_multilabel=True)[0].numpy()
+        membrane_seg = run.get_segmentations(name='membrane', user_id="data-portal")[0].numpy()
+        segmentation[membrane_seg==1] = 1  
+        data_dicts.append({"image": tomogram, "label": segmentation})
+    
+    return data_dicts, nclasses
+
+
+# def sync_hyperparameters(trial):
+#     # Sample hyperparameters on rank 0
+#     if dist.get_rank() == 0:
+#         # Sample number of channels
+#         num_layers = trial.suggest_int("num_layers", 3, 5)
+#         # Generate increasing channels based on 16, 32, 64
+#         base_channel = trial.suggest_categorical("base_channel", [8, 16, 32, 64])
+#         channels = [base_channel * (2 ** i) for i in range(num_layers)]
+#         # Sample number of downsampling layers (those with stride of 2)
+#         num_downsampling_layers = trial.suggest_int("num_downsampling_layers", 1, num_layers - 1)
+#         # Define strides: first num_downsampling_layers with stride 2, and the rest with stride 1
+#         strides_pattern = [2] * num_downsampling_layers + [1] * (num_layers - num_downsampling_layers - 1)        
+#         # Number of residual units
+#         num_res_units = trial.suggest_int("num_res_units", 1, 3)
+#     else:
+#         channels = [0, 0, 0, 0]
+#         strides_pattern = [0, 0, 0]
+#         num_res_units = 0
+
+#     # Convert to tensors and sync across ranks
+#     channels = torch.tensor(channels).to(dist.get_rank())
+#     strides_pattern = torch.tensor(strides_pattern).to(dist.get_rank())
+#     num_res_units = torch.tensor(num_res_units).to(dist.get_rank())
+
+#     dist.broadcast(channels, 0)
+#     dist.broadcast(strides_pattern, 0)
+#     dist.broadcast(num_res_units, 0)
+
+#     return channels.tolist(), strides_pattern.tolist(), num_res_units.item()
+
+
+def objective(trial):
+    args = get_args()
+    mlf_logger = MLFlowLogger(experiment_name='training-3D-UNet-model-for-the-cryoET-ML-Challenge',
+                              tracking_uri='http://mlflow.mlflow.svc.cluster.local:5000',
+                              #run_name='test1'
+                              )
+
+    # Trainer callbacks
+    checkpoint_callback = ModelCheckpoint(monitor='val_metric', save_top_k=1, mode='max')
+    lr_monitor = LearningRateMonitor(logging_interval='epoch')
+    #early_stopping = EarlyStopping(monitor="val_metric", patience=5)  # only supporting minimization 
+
+    # Detect distributed training environment
+    devices = list(range(args.num_gpus))
+
+    #channels, strides_pattern, num_res_units = sync_hyperparameters(trial)
+    # Sample number of channels
+    num_layers = trial.suggest_int("num_layers", 3, 5)
+    # Generate increasing channels based on 16, 32, 64
+    base_channel = trial.suggest_categorical("base_channel", [8, 16, 32, 64])
+    channels = [base_channel * (2 ** i) for i in range(num_layers)]
+    # Sample number of downsampling layers (those with stride of 2)
+    num_downsampling_layers = trial.suggest_int("num_downsampling_layers", 1, num_layers - 1)
+    # Define strides: first num_downsampling_layers with stride 2, and the rest with stride 1
+    strides_pattern = [2] * num_downsampling_layers + [1] * (num_layers - num_downsampling_layers - 1)        
+    # Number of residual units
+    num_res_units = trial.suggest_int("num_res_units", 1, 3)
+    model = Model(channels=channels,
+                  strides=strides_pattern,
+                  num_res_units=num_res_units,
+                  lr=args.learning_rate)
+
+    # Priotize performace over precision
+    torch.set_float32_matmul_precision('medium') # or torch.set_float32_matmul_precision('high')    
+    
+    # Trainer for distributed training with DDP
+    trainer = Trainer(
+        max_epochs=args.num_epochs,
+        logger=mlf_logger,
+        callbacks=[checkpoint_callback, lr_monitor],
+        strategy='ddp',
+        accelerator="gpu",
+        devices=devices,
+        num_nodes=1, #int(os.environ.get("WORLD_SIZE", 1)) // args.num_gpus,
+        log_every_n_steps=1
+    )
+
+    data_dicts, nclasses = data_from_copick(args.copick_config_path)
+    end = 2
+    train_files, val_files = data_dicts[:int(end/2)], data_dicts[int(end/2):end]
+    print(f"Number of training samples: {len(train_files)}")
+    print(f"Number of validation samples: {len(val_files)}")
+
+    # Non-random transforms to be cached
+    non_random_transforms = Compose([
+        EnsureChannelFirstd(keys=["image", "label"], channel_dim="no_channel"),
+        NormalizeIntensityd(keys="image"),
+        Orientationd(keys=["image", "label"], axcodes="RAS")
+    ])
+
+    # Random transforms to be applied during training
+    random_transforms = Compose([
+        RandCropByLabelClassesd(
+            keys=["image", "label"],
+            label_key="label",
+            spatial_size=[96, 96, 96],
+            num_classes=nclasses,
+            num_samples=args.num_random_samples_per_batch
+        ),
+        RandRotate90d(keys=["image", "label"], prob=0.5, spatial_axes=[0, 2]),
+        RandFlipd(keys=["image", "label"], prob=0.5, spatial_axis=0),    
+    ])
+
+    # Create the cached dataset with non-random transforms
+    train_ds = CacheDataset(data=train_files, transform=non_random_transforms, cache_rate=1.0)
+    train_ds = Dataset(data=train_ds, transform=random_transforms)
+    train_loader = DataLoader(
+        train_ds,
+        batch_size=args.train_batch_size,
+        shuffle=True,
+        num_workers=4,
+        pin_memory=torch.cuda.is_available()
+    )
+
+    # Create validation dataset
+    val_ds = CacheDataset(data=val_files, transform=non_random_transforms, cache_rate=1.0)
+    val_ds = Dataset(data=val_ds, transform=random_transforms)
+    val_loader = DataLoader(
+        val_ds,
+        batch_size=args.val_batch_size,
+        num_workers=4,
+        pin_memory=torch.cuda.is_available(),
+        shuffle=False,  # Ensure the data order remains consistent
+    )
+
+    trainer.fit(model, train_loader, val_loader)
+    return checkpoint_callback.best_model_score
+
+
+if __name__ == "__main__":
+    args = get_args()
+    # MLflow setup
+    username = os.getenv('MLFLOW_TRACKING_USERNAME')
+    password = os.getenv('MLFLOW_TRACKING_PASSWORD')
+    if not password or not username:
+        print("Password not found in environment, loading from .env file...")
+        load_dotenv()  # Loads environment variables from a .env file
+        username = os.getenv('MLFLOW_TRACKING_USERNAME')
+        password = os.getenv('MLFLOW_TRACKING_PASSWORD')
+        
+    # Check again after loading .env file
+    if not password:
+        raise ValueError("Password is not set in environment variables or .env file!")
+    else:
+        print("Password loaded successfully")
+        os.environ['MLFLOW_TRACKING_USERNAME'] = username
+        os.environ['MLFLOW_TRACKING_PASSWORD'] = password
+    
+    # Create an Optuna study to maximize validation accuracy
+    study = optuna.create_study(direction="maximize")
+    study.optimize(objective, n_trials=args.num_optuna_trials)
+
+    # Print the best hyperparameters
+    print(f"Best trial: {study.best_trial.value}")
+    print(f"Best hyperparameters: {study.best_trial.params}")
