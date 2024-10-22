@@ -15,14 +15,16 @@ Generate picks segmentations for dataset 10439 from the CZ cryoET Dataportal (on
 ```
 python3 /src/model_explore/segmentation_from_picks.py 
     --copick_config_path copick_config_dataportal_10439.json \
-    --user_name user0 \
-    --segmentation_name paintedPicks
+    --copick_user_name user0 \
+    --copick_segmentation_name paintedPicks
 ```
 
 ## Training a 3d U-Net model with generic PyTorch  
 ```
 python3 /src/model_explore/train.py 
     --copick_config_path copick_config_dataportal_10439.json \
+    --copick_user_name user0 \
+    --copick_segmentation_name paintedPicks \
     --train_batch_size 1 \
     --val_batch_size 1 \
     --num_random_samples_per_batch 16 \
@@ -34,6 +36,8 @@ python3 /src/model_explore/train.py
 ```
 python3 /src/model_explore/train_pl.py 
     --copick_config_path copick_config_dataportal_10439.json \
+    --copick_user_name user0 \
+    --copick_segmentation_name paintedPicks \
     --train_batch_size 1 \
     --val_batch_size 1 \
     --num_random_samples_per_batch 16 \
@@ -46,6 +50,8 @@ python3 /src/model_explore/train_pl.py
 ```
 python3 /src/model_explore/optuna_pl_ddp.py 
     --copick_config_path copick_config_dataportal_10439.json \
+    --copick_user_name user0 \
+    --copick_segmentation_name paintedPicks \
     --train_batch_size 1 \
     --val_batch_size 1 \
     --num_random_samples_per_batch 16 \
