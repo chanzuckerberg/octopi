@@ -198,7 +198,7 @@ def train():
     lr_monitor = LearningRateMonitor(logging_interval='epoch')
 
     # Detect distributed training environment
-    devices = list(range(1, args.num_gpus+1))
+    devices = list(range(args.num_gpus))
 
     # Initialize model
     model = Model(lr=args.learning_rate)
