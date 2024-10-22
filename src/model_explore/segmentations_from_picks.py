@@ -12,8 +12,8 @@ def get_args():
         description = "Generate picks segmenations from copick files."
     )
     parser.add_argument('--copick_config_path', type=str, default='copick_config_dataportal_10439.json')
-    parser.add_argument('--user_name', type=str, default='user0')
-    parser.add_argument('--segmentation_name', type=str, default='paintedPicks')
+    parser.add_argument('--copick_user_name', type=str, default='user0')
+    parser.add_argument('--copick_segmentation_name', type=str, default='paintedPicks')
     return parser.parse_args()
 
 
