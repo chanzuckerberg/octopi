@@ -1,7 +1,3 @@
-"""
-Train a 3d U-Net model using generic PyTorch and track the experiment results with MLflow.
-"""
-
 import os
 import torch
 import copick
@@ -28,7 +24,9 @@ from collections import defaultdict
 
 
 def get_args():
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(
+        description = "Train a 3d U-Net model using generic PyTorch and track the experiment results with MLflow."
+    )
     parser.add_argument('--copick_config_path', type=str, default='copick_config_dataportal_10439.json')
     parser.add_argument('--train_batch_size', type=int, default=1)
     parser.add_argument('--val_batch_size', type=int, default=1)

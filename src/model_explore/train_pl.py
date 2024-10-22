@@ -1,7 +1,3 @@
-"""
-Train a 3d U-Net model with PyTorch Lightning supporting distributed training strategies.
-"""
-
 import os
 import argparse
 from typing import Optional, Union, Tuple, List
@@ -35,7 +31,9 @@ from monai.metrics import DiceMetric, ConfusionMatrixMetric
 
 
 def get_args():
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(
+        description = "Train a 3d U-Net model with PyTorch Lightning supporting distributed training strategies."
+    )
     parser.add_argument('--copick_config_path', type=str, default='copick_config_dataportal_10439.json')
     parser.add_argument('--train_batch_size', type=int, default=1)
     parser.add_argument('--val_batch_size', type=int, default=1)
@@ -194,7 +192,7 @@ def train():
     lr_monitor = LearningRateMonitor(logging_interval='epoch')
 
     # Detect distributed training environment
-    devices = list(range(1, args.num_gpus+1))
+    devices = list(range(args.num_gpus))
 
     # Initialize model
     model = Model(lr=args.learning_rate)
