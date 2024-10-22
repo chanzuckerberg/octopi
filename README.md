@@ -10,7 +10,7 @@ MLFLOW_TRACKING_USERNAME = Your_CZ_email
 MLFLOW_TRACKING_PASSWORD = Your_mlflow_access_token
 ```
 
-## Training with generic PyTorch  
+## Training a 3d U-Net model with generic PyTorch  
 ```
 python3 /src/model_explore/train.py 
     --copick_config_path your_copick_config_path \
@@ -21,7 +21,7 @@ python3 /src/model_explore/train.py
     --num_epochs 200
 ```
 
-## Training with PyTorch Lighting (distributed training)
+## Training a 3d U-Net model with PyTorch Lighting (distributed training)
 ```
 python3 /src/model_explore/train_pl.py 
     --copick_config_path your_copick_config_path \
