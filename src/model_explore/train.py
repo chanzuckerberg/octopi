@@ -1,8 +1,12 @@
+"""
+Train a 3d U-Net model using generic PyTorch and track the experiment results with MLflow.
+"""
+
 import os
 import torch
 import copick
-import numpy as np
 from tqdm import tqdm
+import argparse
 from monai.data import DataLoader, Dataset, CacheDataset, decollate_batch
 from dotenv import load_dotenv
 from monai.transforms import (
@@ -19,33 +23,19 @@ from monai.transforms import (
 from monai.networks.nets import UNet
 from monai.losses import TverskyLoss
 from monai.metrics import DiceMetric, ConfusionMatrixMetric
-from copick_utils.segmentation.segmentation_from_picks import segmentation_from_picks
 import mlflow
+from collections import defaultdict
 
 
-my_num_samples = 16
-train_batch_size = 1
-val_batch_size = 1
-
-# Non-random transforms to be cached
-non_random_transforms = Compose([
-    EnsureChannelFirstd(keys=["image", "label"], channel_dim="no_channel"),
-    NormalizeIntensityd(keys="image"),
-    Orientationd(keys=["image", "label"], axcodes="RAS")
-])
-
-# Random transforms to be applied during training
-random_transforms = Compose([
-    RandCropByLabelClassesd(
-        keys=["image", "label"],
-        label_key="label",
-        spatial_size=[96, 96, 96],
-        num_classes=8,
-        num_samples=my_num_samples
-    ),
-    RandRotate90d(keys=["image", "label"], prob=0.5, spatial_axes=[0, 2]),
-    RandFlipd(keys=["image", "label"], prob=0.5, spatial_axis=0),    
-])
+def get_args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--copick_config_path', type=str, default='copick_config_dataportal_10439.json')
+    parser.add_argument('--train_batch_size', type=int, default=1)
+    parser.add_argument('--val_batch_size', type=int, default=1)
+    parser.add_argument('--num_random_samples_per_batch', type=int, default=16)
+    parser.add_argument('--learning_rate', type=float, default=1e-4)
+    parser.add_argument('--num_epochs', type=int, default=20)
+    return parser.parse_args()
 
 
 def train(train_loader,
@@ -122,41 +112,19 @@ def train(train_loader,
 
 
 if __name__ == "__main__":
-    copick_config_path = "copick_config_dataportal_10439.json"
-    root = copick.from_file(copick_config_path)
+    args = get_args()
+    root = copick.from_file(args.copick_config_path)
 
     nclasses = len(root.pickable_objects) + 1
     voxel_spacing = 10
     data_dicts = []
     end = 2
-    lr = 1e-3
-    epochs = 200
-
-
-    from copick_utils.segmentation import target_generator
-    import copick_utils.writers.write as write
-    from collections import defaultdict
 
     target_objects = defaultdict(dict)
     for object in root.pickable_objects:
         if object.is_particle:
             target_objects[object.name]['label'] = object.label
             target_objects[object.name]['radius'] = object.radius
-
-    # for run in tqdm(root.runs):
-    #     tomo = run.get_voxel_spacing(10)
-    #     tomo = tomo.get_tomogram('wbp').numpy()
-    #     target = np.zeros(tomo.shape, dtype=np.uint8)
-    #     for pickable_object in root.pickable_objects:
-    #         pick = run.get_picks(object_name=pickable_object.name, user_id="data-portal")
-    #         if len(pick):  
-    #             target = target_generator.from_picks(pick[0], 
-    #                                                 target, 
-    #                                                 target_objects[pickable_object.name]['radius'] * 0.8,
-    #                                                 target_objects[pickable_object.name]['label']
-    #                                                 )
-    #     write.segmentation(run, target, "user0", segmentationName='paintedPicks')
-
     
     data_dicts = []
     for run in tqdm(root.runs[:2]):
@@ -171,16 +139,33 @@ if __name__ == "__main__":
     print(f"Number of training samples: {len(train_files)}")
     print(f"Number of validation samples: {len(val_files)}")
 
+    # Non-random transforms to be cached
+    non_random_transforms = Compose([
+        EnsureChannelFirstd(keys=["image", "label"], channel_dim="no_channel"),
+        NormalizeIntensityd(keys="image"),
+        Orientationd(keys=["image", "label"], axcodes="RAS")
+    ])
+
+    # Random transforms to be applied during training
+    random_transforms = Compose([
+        RandCropByLabelClassesd(
+            keys=["image", "label"],
+            label_key="label",
+            spatial_size=[96, 96, 96],
+            num_classes=8,
+            num_samples=args.num_random_samples_per_batch
+        ),
+        RandRotate90d(keys=["image", "label"], prob=0.5, spatial_axes=[0, 2]),
+        RandFlipd(keys=["image", "label"], prob=0.5, spatial_axis=0),    
+    ])
+    
+
     # Create the cached dataset with non-random transforms
     train_ds = CacheDataset(data=train_files, transform=non_random_transforms, cache_rate=1.0)
-
-    # Wrap the cached dataset to apply random transforms during iteration
     train_ds = Dataset(data=train_ds, transform=random_transforms)
-
-    # DataLoader remains the same
     train_loader = DataLoader(
         train_ds,
-        batch_size=train_batch_size,
+        batch_size=args.train_batch_size,
         shuffle=True,
         num_workers=4,
         pin_memory=torch.cuda.is_available()
@@ -188,14 +173,10 @@ if __name__ == "__main__":
 
     # Create validation dataset
     val_ds = CacheDataset(data=val_files, transform=non_random_transforms, cache_rate=1.0)
-
-    # Wrap the cached dataset to apply random transforms during iteration
     val_ds = Dataset(data=val_ds, transform=random_transforms)
-
-    # Create validation DataLoader
     val_loader = DataLoader(
         val_ds,
-        batch_size=val_batch_size,
+        batch_size=args.val_batch_size,
         num_workers=1,
         pin_memory=torch.cuda.is_available(),
         shuffle=False,  # Ensure the data order remains consistent
@@ -214,7 +195,7 @@ if __name__ == "__main__":
         num_res_units=1,
     ).to(device)
 
-    optimizer = torch.optim.Adam(model.parameters(), lr)
+    optimizer = torch.optim.Adam(model.parameters(), args.learning_rate)
     loss_function = TverskyLoss(include_background=True, to_onehot_y=True, softmax=True)  # softmax=True for multiclass
     dice_metric = DiceMetric(include_background=False, reduction="mean", ignore_empty=True)  # must use onehot for multiclass
     recall_metric = ConfusionMatrixMetric(include_background=False, metric_name="recall", reduction="None")
@@ -237,5 +218,5 @@ if __name__ == "__main__":
         mlflow.set_tracking_uri("http://mlflow.mlflow.svc.cluster.local:5000")
         mlflow.set_experiment('training-3D-UNet-model-for-the-cryoET-ML-Challenge')
         with mlflow.start_run():    
-            train(train_loader, model, loss_function, dice_metric, optimizer, max_epochs=epochs)
+            train(train_loader, model, loss_function, dice_metric, optimizer, max_epochs=args.num_epochs)
         mlflow.end_run()
