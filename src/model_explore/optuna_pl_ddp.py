@@ -1,12 +1,10 @@
-"""
-Hyperparameter tuning with Optuna and PyTorch Lighning 
-"""
-
 import os
 import argparse
 import copick
 import torch
 from tqdm import tqdm
+from typing import Optional, Union, Tuple, List
+from collections import defaultdict
 import pytorch_lightning as pl
 import torch.distributed as dist
 from pytorch_lightning import Trainer
@@ -29,11 +27,12 @@ from monai.networks.nets import UNet
 from monai.losses import TverskyLoss
 from monai.metrics import DiceMetric, ConfusionMatrixMetric
 import optuna
-from typing import Union, Tuple, List
 
 
 def get_args():
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(
+        description = "Hyperparamter tuning using PyTorch Lightning distributed data-parallel and Optuna."
+    )
     parser.add_argument('--copick_config_path', type=str, default='copick_config_dataportal_10439.json')
     parser.add_argument('--train_batch_size', type=int, default=1)
     parser.add_argument('--val_batch_size', type=int, default=1)
@@ -97,62 +96,94 @@ class Model(pl.LightningModule):
     def configure_optimizers(self):
         return torch.optim.Adam(self.parameters(), lr=self.hparams.lr)
     
+
+class CopickDataModule(pl.LightningDataModule):
+    def __init__(
+        self, 
+        copick_config_path: str, 
+        train_batch_size: int,
+        val_batch_size: int,
+        num_random_samples_per_batch: int):
     
+        super().__init__()
+        self.train_batch_size = train_batch_size
+        self.val_batch_size = val_batch_size
+        
+        self.data_dicts, self.nclasses = self.data_from_copick(copick_config_path)
+        self.train_files = self.data_dicts[:int(len(self.data_dicts)//2)]
+        self.val_files = self.data_dicts[int(len(self.data_dicts)//2):]
+        print(f"Number of training samples: {len(self.train_files)}")
+        print(f"Number of validation samples: {len(self.val_files)}")
 
-def data_from_copick(copick_config_path):
-    from collections import defaultdict
-    root = copick.from_file(copick_config_path)
-    nclasses = len(root.pickable_objects) + 1
-    data_dicts = []
-    target_objects = defaultdict(dict)
-    for object in root.pickable_objects:
-        if object.is_particle:
-            target_objects[object.name]['label'] = object.label
-            target_objects[object.name]['radius'] = object.radius
-    
-    data_dicts = []
-    for run in tqdm(root.runs[:2]):
-        tomogram = run.get_voxel_spacing(10).get_tomogram('wbp').numpy()
-        segmentation = run.get_segmentations(name='paintedPicks', user_id='user0', voxel_size=10, is_multilabel=True)[0].numpy()
-        membrane_seg = run.get_segmentations(name='membrane', user_id="data-portal")[0].numpy()
-        segmentation[membrane_seg==1] = 1  
-        data_dicts.append({"image": tomogram, "label": segmentation})
-    
-    return data_dicts, nclasses
+        # Non-random transforms to be cached
+        self.non_random_transforms = Compose([
+            EnsureChannelFirstd(keys=["image", "label"], channel_dim="no_channel"),
+            NormalizeIntensityd(keys="image"),
+            Orientationd(keys=["image", "label"], axcodes="RAS")
+        ])
+
+        # Random transforms to be applied during training
+        self.random_transforms = Compose([
+            RandCropByLabelClassesd(
+                keys=["image", "label"],
+                label_key="label",
+                spatial_size=[96, 96, 96],
+                num_classes=self.nclasses,
+                num_samples=num_random_samples_per_batch 
+            ),
+            RandRotate90d(keys=["image", "label"], prob=0.5, spatial_axes=[0, 2]),
+            RandFlipd(keys=["image", "label"], prob=0.5, spatial_axis=0),    
+        ])
+
+    def setup(self, stage: Optional[str] = None) -> None:
+        self.train_ds = CacheDataset(data=self.train_files, transform=self.non_random_transforms, cache_rate=1.0)
+        self.train_ds = Dataset(data=self.train_ds, transform=self.random_transforms)
+        self.val_ds = CacheDataset(data=self.val_files, transform=self.non_random_transforms, cache_rate=1.0)
+        self.val_ds = Dataset(data=self.val_ds, transform=self.random_transforms)
+
+    def train_dataloader(self) -> DataLoader:
+        return DataLoader(
+                self.train_ds,
+                batch_size=self.train_batch_size,
+                shuffle=True,
+                num_workers=4,
+                persistent_workers=True,
+                pin_memory=torch.cuda.is_available(),
+            )
+
+    def val_dataloader(self) -> DataLoader:
+        return DataLoader(
+                self.val_ds,
+                batch_size=self.val_batch_size,
+                shuffle=False,  # Ensure the data order remains consistent
+                num_workers=4,
+                persistent_workers=True,
+                pin_memory=torch.cuda.is_available(),
+            )
+
+    @staticmethod
+    def data_from_copick(copick_config_path):
+        root = copick.from_file(copick_config_path)
+        nclasses = len(root.pickable_objects) + 1
+        data_dicts = []
+        target_objects = defaultdict(dict)
+        for object in root.pickable_objects:
+            if object.is_particle:
+                target_objects[object.name]['label'] = object.label
+                target_objects[object.name]['radius'] = object.radius
+        
+        data_dicts = []
+        for run in tqdm(root.runs[:2]):
+            tomogram = run.get_voxel_spacing(10).get_tomogram('wbp').numpy()
+            segmentation = run.get_segmentations(name='paintedPicks', user_id='user0', voxel_size=10, is_multilabel=True)[0].numpy()
+            membrane_seg = run.get_segmentations(name='membrane', user_id="data-portal")[0].numpy()
+            segmentation[membrane_seg==1] = 1  
+            data_dicts.append({"image": tomogram, "label": segmentation})
+        
+        return data_dicts, nclasses
 
 
-# def sync_hyperparameters(trial):
-#     # Sample hyperparameters on rank 0
-#     if dist.get_rank() == 0:
-#         # Sample number of channels
-#         num_layers = trial.suggest_int("num_layers", 3, 5)
-#         # Generate increasing channels based on 16, 32, 64
-#         base_channel = trial.suggest_categorical("base_channel", [8, 16, 32, 64])
-#         channels = [base_channel * (2 ** i) for i in range(num_layers)]
-#         # Sample number of downsampling layers (those with stride of 2)
-#         num_downsampling_layers = trial.suggest_int("num_downsampling_layers", 1, num_layers - 1)
-#         # Define strides: first num_downsampling_layers with stride 2, and the rest with stride 1
-#         strides_pattern = [2] * num_downsampling_layers + [1] * (num_layers - num_downsampling_layers - 1)        
-#         # Number of residual units
-#         num_res_units = trial.suggest_int("num_res_units", 1, 3)
-#     else:
-#         channels = [0, 0, 0, 0]
-#         strides_pattern = [0, 0, 0]
-#         num_res_units = 0
-
-#     # Convert to tensors and sync across ranks
-#     channels = torch.tensor(channels).to(dist.get_rank())
-#     strides_pattern = torch.tensor(strides_pattern).to(dist.get_rank())
-#     num_res_units = torch.tensor(num_res_units).to(dist.get_rank())
-
-#     dist.broadcast(channels, 0)
-#     dist.broadcast(strides_pattern, 0)
-#     dist.broadcast(num_res_units, 0)
-
-#     return channels.tolist(), strides_pattern.tolist(), num_res_units.item()
-
-
-def objective(trial):
+def objective(trial: optuna.trial.Trial) -> float:
     args = get_args()
     mlf_logger = MLFlowLogger(experiment_name='training-3D-UNet-model-for-the-cryoET-ML-Challenge',
                               tracking_uri='http://mlflow.mlflow.svc.cluster.local:5000',
@@ -168,21 +199,16 @@ def objective(trial):
     devices = list(range(args.num_gpus))
 
     #channels, strides_pattern, num_res_units = sync_hyperparameters(trial)
-    # Sample number of channels
+    # We optimize the number of layers, strides, and number of residual units
     num_layers = trial.suggest_int("num_layers", 3, 5)
-    # Generate increasing channels based on 16, 32, 64
     base_channel = trial.suggest_categorical("base_channel", [8, 16, 32, 64])
     channels = [base_channel * (2 ** i) for i in range(num_layers)]
-    # Sample number of downsampling layers (those with stride of 2)
     num_downsampling_layers = trial.suggest_int("num_downsampling_layers", 1, num_layers - 1)
-    # Define strides: first num_downsampling_layers with stride 2, and the rest with stride 1
     strides_pattern = [2] * num_downsampling_layers + [1] * (num_layers - num_downsampling_layers - 1)        
-    # Number of residual units
     num_res_units = trial.suggest_int("num_res_units", 1, 3)
-    model = Model(channels=channels,
-                  strides=strides_pattern,
-                  num_res_units=num_res_units,
-                  lr=args.learning_rate)
+    
+    model = Model(channels=channels, strides=strides_pattern, num_res_units=num_res_units, lr=args.learning_rate)
+    datamodule = CopickDataModule(args.copick_config_path, args.train_batch_size, args.val_batch_size, args.num_random_samples_per_batch)
 
     # Priotize performace over precision
     torch.set_float32_matmul_precision('medium') # or torch.set_float32_matmul_precision('high')    
@@ -192,62 +218,17 @@ def objective(trial):
         max_epochs=args.num_epochs,
         logger=mlf_logger,
         callbacks=[checkpoint_callback, lr_monitor],
-        strategy='ddp',
+        strategy="ddp_spawn",
         accelerator="gpu",
         devices=devices,
         num_nodes=1, #int(os.environ.get("WORLD_SIZE", 1)) // args.num_gpus,
         log_every_n_steps=1
     )
 
-    data_dicts, nclasses = data_from_copick(args.copick_config_path)
-    end = 2
-    train_files, val_files = data_dicts[:int(end/2)], data_dicts[int(end/2):end]
-    print(f"Number of training samples: {len(train_files)}")
-    print(f"Number of validation samples: {len(val_files)}")
+    hyperparameters = dict(op_num_layers=num_layers, op_base_channel=base_channel, op_num_downsampling_layers=num_downsampling_layers, op_num_res_units=num_res_units)
+    trainer.logger.log_hyperparams(hyperparameters)
+    trainer.fit(model, datamodule=datamodule)
 
-    # Non-random transforms to be cached
-    non_random_transforms = Compose([
-        EnsureChannelFirstd(keys=["image", "label"], channel_dim="no_channel"),
-        NormalizeIntensityd(keys="image"),
-        Orientationd(keys=["image", "label"], axcodes="RAS")
-    ])
-
-    # Random transforms to be applied during training
-    random_transforms = Compose([
-        RandCropByLabelClassesd(
-            keys=["image", "label"],
-            label_key="label",
-            spatial_size=[96, 96, 96],
-            num_classes=nclasses,
-            num_samples=args.num_random_samples_per_batch
-        ),
-        RandRotate90d(keys=["image", "label"], prob=0.5, spatial_axes=[0, 2]),
-        RandFlipd(keys=["image", "label"], prob=0.5, spatial_axis=0),    
-    ])
-
-    # Create the cached dataset with non-random transforms
-    train_ds = CacheDataset(data=train_files, transform=non_random_transforms, cache_rate=1.0)
-    train_ds = Dataset(data=train_ds, transform=random_transforms)
-    train_loader = DataLoader(
-        train_ds,
-        batch_size=args.train_batch_size,
-        shuffle=True,
-        num_workers=4,
-        pin_memory=torch.cuda.is_available()
-    )
-
-    # Create validation dataset
-    val_ds = CacheDataset(data=val_files, transform=non_random_transforms, cache_rate=1.0)
-    val_ds = Dataset(data=val_ds, transform=random_transforms)
-    val_loader = DataLoader(
-        val_ds,
-        batch_size=args.val_batch_size,
-        num_workers=4,
-        pin_memory=torch.cuda.is_available(),
-        shuffle=False,  # Ensure the data order remains consistent
-    )
-
-    trainer.fit(model, train_loader, val_loader)
     return checkpoint_callback.best_model_score
 
 
@@ -268,11 +249,16 @@ if __name__ == "__main__":
     else:
         print("Password loaded successfully")
         os.environ['MLFLOW_TRACKING_USERNAME'] = username
-        os.environ['MLFLOW_TRACKING_PASSWORD'] = password
+        os.environ['MLFLOW_TRACKING_PASSWORD'] = password    
     
-    # Create an Optuna study to maximize validation accuracy
-    study = optuna.create_study(direction="maximize")
-    study.optimize(objective, n_trials=args.num_optuna_trials)
+    storage = "sqlite:///example.db"
+    study = optuna.create_study(
+        study_name="pl_ddp",
+        storage=storage,
+        direction="maximize",
+        load_if_exists=True,
+    )
+    study.optimize(objective, n_trials=args.num_optuna_trials, timeout=600)
 
     # Print the best hyperparameters
     print(f"Best trial: {study.best_trial.value}")
