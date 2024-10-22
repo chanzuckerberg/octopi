@@ -45,7 +45,6 @@ def get_args():
     return parser.parse_args()
 
 
-# Placeholder for the actual model class, should be replaced with your model
 class Model(pl.LightningModule):
     def __init__(
         self, 
