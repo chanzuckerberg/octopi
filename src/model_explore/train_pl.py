@@ -35,6 +35,8 @@ def get_args():
         description = "Train a 3d U-Net model with PyTorch Lightning supporting distributed training strategies."
     )
     parser.add_argument('--copick_config_path', type=str, default='copick_config_dataportal_10439.json')
+    parser.add_argument('--copick_user_name', type=str, default='user0')
+    parser.add_argument('--copick_segmentation_name', type=str, default='paintedPicks')
     parser.add_argument('--train_batch_size', type=int, default=1)
     parser.add_argument('--val_batch_size', type=int, default=1)
     parser.add_argument('--num_random_samples_per_batch', type=int, default=16)
@@ -100,7 +102,9 @@ class Model(pl.LightningModule):
 class CopickDataModule(pl.LightningDataModule):
     def __init__(
         self, 
-        copick_config_path: str, 
+        copick_config_path: str,
+        copick_user_name: str,
+        copick_segmentation_name: str, 
         train_batch_size: int,
         val_batch_size: int,
         num_random_samples_per_batch: int):
@@ -109,7 +113,7 @@ class CopickDataModule(pl.LightningDataModule):
         self.train_batch_size = train_batch_size
         self.val_batch_size = val_batch_size
         
-        self.data_dicts, self.nclasses = self.data_from_copick(copick_config_path)
+        self.data_dicts, self.nclasses = self.data_from_copick(copick_config_path, copick_user_name, copick_segmentation_name)
         self.train_files = self.data_dicts[:int(len(self.data_dicts)//2)]
         self.val_files = self.data_dicts[int(len(self.data_dicts)//2):]
         print(f"Number of training samples: {len(self.train_files)}")
@@ -160,7 +164,7 @@ class CopickDataModule(pl.LightningDataModule):
             )
 
     @staticmethod
-    def data_from_copick(copick_config_path):
+    def data_from_copick(copick_config_path, copick_user_name, copick_segmentation_name):
         root = copick.from_file(copick_config_path)
         nclasses = len(root.pickable_objects) + 1
         data_dicts = []
@@ -173,9 +177,11 @@ class CopickDataModule(pl.LightningDataModule):
         data_dicts = []
         for run in tqdm(root.runs[:2]):
             tomogram = run.get_voxel_spacing(10).get_tomogram('wbp').numpy()
-            segmentation = run.get_segmentations(name='paintedPicks', user_id='user0', voxel_size=10, is_multilabel=True)[0].numpy()
-            membrane_seg = run.get_segmentations(name='membrane', user_id="data-portal")[0].numpy()
-            segmentation[membrane_seg==1] = 1  
+            segmentation = run.get_segmentations(name=copick_segmentation_name, user_id=copick_user_name, voxel_size=10, is_multilabel=True)[0].numpy()
+            membrane_seg = run.get_segmentations(name='membrane', user_id="data-portal")
+            if membrane_seg:
+                membrane_seg = run.get_segmentations(name='membrane', user_id="data-portal")[0].numpy()
+                segmentation[membrane_seg==1]=1    
             data_dicts.append({"image": tomogram, "label": segmentation})
         
         return data_dicts, nclasses
@@ -192,11 +198,12 @@ def train():
     lr_monitor = LearningRateMonitor(logging_interval='epoch')
 
     # Detect distributed training environment
-    devices = list(range(args.num_gpus))
+    devices = list(range(1, args.num_gpus+1))
 
     # Initialize model
     model = Model(lr=args.learning_rate)
-    datamodule = CopickDataModule(args.copick_config_path, args.train_batch_size, args.val_batch_size, args.num_random_samples_per_batch)
+    datamodule = CopickDataModule(args.copick_config_path, args.copick_user_name, args.copick_segmentation_name,
+                                  args.train_batch_size, args.val_batch_size, args.num_random_samples_per_batch)
 
     # Priotize performace over precision
     torch.set_float32_matmul_precision('medium') # or torch.set_float32_matmul_precision('high')

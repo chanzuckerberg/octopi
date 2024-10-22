@@ -34,6 +34,8 @@ def get_args():
         description = "Hyperparamter tuning using PyTorch Lightning distributed data-parallel and Optuna."
     )
     parser.add_argument('--copick_config_path', type=str, default='copick_config_dataportal_10439.json')
+    parser.add_argument('--copick_user_name', type=str, default='user0')
+    parser.add_argument('--copick_segmentation_name', type=str, default='paintedPicks')
     parser.add_argument('--train_batch_size', type=int, default=1)
     parser.add_argument('--val_batch_size', type=int, default=1)
     parser.add_argument('--num_random_samples_per_batch', type=int, default=16)

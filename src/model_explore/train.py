@@ -28,6 +28,8 @@ def get_args():
         description = "Train a 3d U-Net model using generic PyTorch and track the experiment results with MLflow."
     )
     parser.add_argument('--copick_config_path', type=str, default='copick_config_dataportal_10439.json')
+    parser.add_argument('--copick_user_name', type=str, default='user0')
+    parser.add_argument('--copick_segmentation_name', type=str, default='paintedPicks')
     parser.add_argument('--train_batch_size', type=int, default=1)
     parser.add_argument('--val_batch_size', type=int, default=1)
     parser.add_argument('--num_random_samples_per_batch', type=int, default=16)
@@ -127,11 +129,12 @@ if __name__ == "__main__":
     data_dicts = []
     for run in tqdm(root.runs[:2]):
         tomogram = run.get_voxel_spacing(10).get_tomogram('wbp').numpy()
-        segmentation = run.get_segmentations(name='paintedPicks', user_id='user0', voxel_size=10, is_multilabel=True)[0].numpy()
-        membrane_seg = run.get_segmentations(name='membrane', user_id="data-portal")[0].numpy()
-        segmentation[membrane_seg==1]=1  
+        segmentation = run.get_segmentations(name=args.copick_segmentation_name, user_id=args.copick_user_name, voxel_size=10, is_multilabel=True)[0].numpy()
+        membrane_seg = run.get_segmentations(name='membrane', user_id="data-portal")
+        if membrane_seg:
+            membrane_seg = run.get_segmentations(name='membrane', user_id="data-portal")[0].numpy()
+            segmentation[membrane_seg==1]=1  
         data_dicts.append({"image": tomogram, "label": segmentation})
-
 
     train_files, val_files = data_dicts[:int(end/2)], data_dicts[int(end/2):end]
     print(f"Number of training samples: {len(train_files)}")
