@@ -33,5 +33,18 @@ python3 /src/model_explore/train_pl.py
     --num_epochs 200 
 ```
 
+## Hyperparameter tuning with Optuna and PyTorch Lightning 
+```
+python3 /src/model_explore/optuna_pl_ddp.py 
+    --copick_config_path your_copick_config_path \
+    --train_batch_size 1 \
+    --val_batch_size 1 \
+    --num_random_samples_per_batch 16 \
+    --learning_rate 1e-4 \
+    --num_gpus 4 \
+    --num_epochs 200 \
+    --num_optuna_trials 10 
+```
+
 ## MLflow tracking 
 To view the tracking results, go to a deployed [mlflow server](https://mlflow.cw.use4-prod.si.czi.technology/). Note the project name needs to be registered first.
