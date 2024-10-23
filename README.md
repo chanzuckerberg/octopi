@@ -70,7 +70,7 @@ runai submit --name test -i ghcr.io/chanzuckerberg/cziimaginginstitute-model-exp
 To view the tracking results, go to the CZI [mlflow server](https://mlflow.cw.use4-prod.si.czi.technology/). Note the project name needs to be registered first.
 
 
-## Results 
+## Example results 
 We optimized 3d U-Net architecture with 8 tomograms from dataset 10439, 25 Optuna trials, and 100 epoch for each trial.  
 ```
 [I 2024-10-23 20:59:47,927] Trial 69 finished with value: 0.10366249829530716 and parameters: {'num_layers': 4, 'base_channel': 64, 'num_downsampling_layers': 2, 'num_res_units': 3}. Best is trial 65 with value: 0.11890766769647598.   
