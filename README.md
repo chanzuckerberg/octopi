@@ -64,7 +64,10 @@ python3 /src/model_explore/optuna_pl_ddp.py
 
 ## Submit a container on Coreweave  
 ```
-runai submit --name test -i ghcr.io/chanzuckerberg/cziimaginginstitute-model-exploration:<tag> --command "python3 src/model_explore/optuna_pl_ddp.py --num_gpus 4" -e MLFLOW_TRACKING_USERNAME=<Your_CZ_email> -e MLFLOW_TRACKING_PASSWORD=<Your_mlflow_access_token> -g 4 --preemptible --interactive --existing-pvc claimname=autonomous-3d-particle-picking-pvc,path=/usr/app/data 
+runai submit --name <job_name> -i ghcr.io/chanzuckerberg/cziimaginginstitute-model-exploration:<tag> 
+             --command "python3 src/model_explore/optuna_pl_ddp.py --num_gpus 4" 
+             -e MLFLOW_TRACKING_USERNAME=<Your_CZ_email> -e MLFLOW_TRACKING_PASSWORD=<Your_mlflow_access_token> -g 4 
+             --preemptible --interactive --existing-pvc claimname=autonomous-3d-particle-picking-pvc,path=/usr/app/data 
 ```
  
 ## MLflow tracking   
