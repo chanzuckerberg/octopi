@@ -232,9 +232,8 @@ def objective(trial: optuna.trial.Trial) -> float:
     hyperparameters = dict(op_num_layers=num_layers, op_base_channel=base_channel, op_num_downsampling_layers=num_downsampling_layers, op_num_res_units=num_res_units)
     trainer.logger.log_hyperparams(hyperparameters)
     trainer.fit(model, datamodule=datamodule)
-    best_model_score = checkpoint_callback.best_model_score
     callback.check_pruned()
-    return best_model_score
+    return trainer.callback_metrics["val_metric"].item()
 
 
 if __name__ == "__main__":
