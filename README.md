@@ -61,5 +61,22 @@ python3 /src/model_explore/optuna_pl_ddp.py
     --num_optuna_trials 50 
 ```
 
+## Launching hyperparameter tuning as a container on Coreweave
+```
+runai submit --name test -i ghcr.io/chanzuckerberg/cziimaginginstitute-model-exploration:sha-f00e1bf -g 4 --existing-pvc claimname=autonomous-3d-particle-picking-pvc,path=/usr/app/data
+```
+ 
 ## MLflow tracking 
 To view the tracking results, go to the CZI [mlflow server](https://mlflow.cw.use4-prod.si.czi.technology/). Note the project name needs to be registered first.
+
+
+## Results 
+We optimized 3d U-Net architecture with 8 tomograms from dataset 10439, 25 Optuna trials, and 100 epoch for each trial.  
+```
+[I 2024-10-23 20:59:47,927] Trial 69 finished with value: 0.10366249829530716 and parameters: {'num_layers': 4, 'base_channel': 64, 'num_downsampling_layers': 2, 'num_res_units': 3}. Best is trial 65 with value: 0.11890766769647598.   
+Best trial: 0.11890766769647598   
+Best hyperparameters: {'num_layers': 4, 'base_channel': 64, 'num_downsampling_layers': 2, 'num_res_units': 3}   
+```  
+This gives the model structure: `channels [64, 128, 256, 512], strides [2, 2, 1], num_res_units 3`.
+
+
