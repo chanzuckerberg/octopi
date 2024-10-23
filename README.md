@@ -1,16 +1,17 @@
 # cziimaginginstitute-model-exploration
 Codebase for CZII's 3d particle picking model exploration project.
 
-## Installation and setup the environment
+## Run codes via ssh
+### Installation and setup the environment
 Inside the directory, run `pip install -e .` 
 
 To use CZI cloud MLflow tracker, add a `.env` in the root directory like below. You can get a CZI MLflow access token from [here](https://mlflow.cw.use4-prod.si.czi.technology/api/2.0/mlflow/users/access-token) (note that a new token will be generated everytime you open this site).
 ```
-MLFLOW_TRACKING_USERNAME = Your_CZ_email
-MLFLOW_TRACKING_PASSWORD = Your_mlflow_access_token
+MLFLOW_TRACKING_USERNAME = <Your_CZ_email>
+MLFLOW_TRACKING_PASSWORD = <Your_mlflow_access_token>
 ```
 
-## Prepare the dataset 
+### Prepare the dataset 
 Generate picks segmentations for dataset 10439 from the CZ cryoET Dataportal (only need to run this step once). 
 ```
 python3 /src/model_explore/segmentation_from_picks.py 
@@ -19,7 +20,7 @@ python3 /src/model_explore/segmentation_from_picks.py
     --copick_segmentation_name paintedPicks
 ```
 
-## Training a 3d U-Net model with generic PyTorch  
+### Training a 3d U-Net model with generic PyTorch  
 ```
 python3 /src/model_explore/train.py 
     --copick_config_path copick_config_dataportal_10439.json \
@@ -32,7 +33,7 @@ python3 /src/model_explore/train.py
     --num_epochs 100
 ```
 
-## Training a 3d U-Net model with PyTorch Lighting (distributed training)
+### Training a 3d U-Net model with PyTorch Lighting (distributed training)
 ```
 python3 /src/model_explore/train_pl.py 
     --copick_config_path copick_config_dataportal_10439.json \
@@ -46,7 +47,7 @@ python3 /src/model_explore/train_pl.py
     --num_epochs 100 
 ```
 
-## Model hyperparameter tuning with Optuna and PyTorch Lightning 
+### Model hyperparameter tuning with Optuna and PyTorch Lightning 
 ```
 python3 /src/model_explore/optuna_pl_ddp.py 
     --copick_config_path copick_config_dataportal_10439.json \
@@ -61,16 +62,16 @@ python3 /src/model_explore/optuna_pl_ddp.py
     --num_optuna_trials 50 
 ```
 
-## Launching hyperparameter tuning as a container on Coreweave
+## Submit a container on Coreweave  
 ```
-runai submit --name test -i ghcr.io/chanzuckerberg/cziimaginginstitute-model-exploration:sha-f00e1bf -g 4 --existing-pvc claimname=autonomous-3d-particle-picking-pvc,path=/usr/app/data
+runai submit --name test -i ghcr.io/chanzuckerberg/cziimaginginstitute-model-exploration:<tag> --command "python3 src/model_explore/optuna_pl_ddp.py --num_gpus 4" -e MLFLOW_TRACKING_USERNAME=<Your_CZ_email> -e MLFLOW_TRACKING_PASSWORD=<Your_mlflow_access_token> -g 4 --preemptible --interactive --existing-pvc claimname=autonomous-3d-particle-picking-pvc,path=/usr/app/data 
 ```
  
-## MLflow tracking 
+## MLflow tracking   
 To view the tracking results, go to the CZI [mlflow server](https://mlflow.cw.use4-prod.si.czi.technology/). Note the project name needs to be registered first.
 
 
-## Example results 
+## Example results   
 We optimized 3d U-Net architecture with 8 tomograms from dataset 10439, 25 Optuna trials, and 100 epoch for each trial.  
 ```
 [I 2024-10-23 20:59:47,927] Trial 69 finished with value: 0.10366249829530716 and parameters: {'num_layers': 4, 'base_channel': 64, 'num_downsampling_layers': 2, 'num_res_units': 3}. Best is trial 65 with value: 0.11890766769647598.   
