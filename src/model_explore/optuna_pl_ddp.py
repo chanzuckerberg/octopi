@@ -9,7 +9,7 @@ import pytorch_lightning as pl
 import torch.distributed as dist
 from pytorch_lightning import Trainer
 from pytorch_lightning.loggers import MLFlowLogger
-from pytorch_lightning.callbacks import ModelCheckpoint, LearningRateMonitor, EarlyStopping
+from pytorch_lightning.callbacks import ModelCheckpoint, LearningRateMonitor
 from monai.data import DataLoader, Dataset, CacheDataset, decollate_batch
 from dotenv import load_dotenv
 from monai.transforms import (
@@ -27,6 +27,7 @@ from monai.networks.nets import UNet
 from monai.losses import TverskyLoss
 from monai.metrics import DiceMetric, ConfusionMatrixMetric
 import optuna
+from optuna.integration import PyTorchLightningPruningCallback
 
 
 def get_args():
@@ -43,6 +44,7 @@ def get_args():
     parser.add_argument('--num_epochs', type=int, default=20)
     parser.add_argument('--num_gpus', type=int, default=1)
     parser.add_argument('--num_optuna_trials', type=int, default=10)
+    parser.add_argument('--pruning', action="store_true", help="Activate the pruning feature. `MedianPruner` stops unpromising trials at the early stages of training.")
     return parser.parse_args()
 
 
@@ -175,7 +177,7 @@ class CopickDataModule(pl.LightningDataModule):
                 target_objects[object.name]['radius'] = object.radius
         
         data_dicts = []
-        for run in tqdm(root.runs[:2]):
+        for run in tqdm(root.runs[:8]):
             tomogram = run.get_voxel_spacing(10).get_tomogram('wbp').numpy()
             segmentation = run.get_segmentations(name='paintedPicks', user_id='user0', voxel_size=10, is_multilabel=True)[0].numpy()
             membrane_seg = run.get_segmentations(name='membrane', user_id="data-portal")[0].numpy()
@@ -195,7 +197,6 @@ def objective(trial: optuna.trial.Trial) -> float:
     # Trainer callbacks
     checkpoint_callback = ModelCheckpoint(monitor='val_metric', save_top_k=1, mode='max')
     lr_monitor = LearningRateMonitor(logging_interval='epoch')
-    #early_stopping = EarlyStopping(monitor="val_metric", patience=5)  # only supporting minimization 
 
     # Detect distributed training environment
     devices = list(range(args.num_gpus))
@@ -211,6 +212,7 @@ def objective(trial: optuna.trial.Trial) -> float:
     
     model = Model(channels=channels, strides=strides_pattern, num_res_units=num_res_units, lr=args.learning_rate)
     datamodule = CopickDataModule(args.copick_config_path, args.train_batch_size, args.val_batch_size, args.num_random_samples_per_batch)
+    callback = PyTorchLightningPruningCallback(trial, monitor="val_metric")
 
     # Priotize performace over precision
     torch.set_float32_matmul_precision('medium') # or torch.set_float32_matmul_precision('high')    
@@ -230,8 +232,9 @@ def objective(trial: optuna.trial.Trial) -> float:
     hyperparameters = dict(op_num_layers=num_layers, op_base_channel=base_channel, op_num_downsampling_layers=num_downsampling_layers, op_num_res_units=num_res_units)
     trainer.logger.log_hyperparams(hyperparameters)
     trainer.fit(model, datamodule=datamodule)
-
-    return checkpoint_callback.best_model_score
+    best_model_score = checkpoint_callback.best_model_score
+    callback.check_pruned()
+    return best_model_score
 
 
 if __name__ == "__main__":
@@ -253,14 +256,18 @@ if __name__ == "__main__":
         os.environ['MLFLOW_TRACKING_USERNAME'] = username
         os.environ['MLFLOW_TRACKING_PASSWORD'] = password    
     
+    pruner: optuna.pruners.BasePruner = (
+        optuna.pruners.MedianPruner() if args.pruning else optuna.pruners.NopPruner()
+    )
     storage = "sqlite:///example.db"
     study = optuna.create_study(
         study_name="pl_ddp",
         storage=storage,
         direction="maximize",
         load_if_exists=True,
+        pruner=pruner
     )
-    study.optimize(objective, n_trials=args.num_optuna_trials, timeout=600)
+    study.optimize(objective, n_trials=args.num_optuna_trials)
 
     # Print the best hyperparameters
     print(f"Best trial: {study.best_trial.value}")
