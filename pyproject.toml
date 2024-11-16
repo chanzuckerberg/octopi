@@ -24,12 +24,19 @@ optuna-integration = { version = "*", extras = ["pytorch_lightning"] }
 python-dotenv = "*"
 monai-weekly = { version = "1.4.dev2440", allow-prereleases = true }
 copick-utils = {git = "https://github.com/copick/copick-utils.git", branch = "main"}
+multiprocess = "*"
 
 [tool.poetry.dev-dependencies]
 pytest = "^6.2.3"
 black = "^24.8.0"
 pre-commit = "^3.8.0"
 ruff = "^0.6.4"
+
+[tool.poetry.scripts]
+create-targets = "src.model_explore.pytorch.entry_points.run_local_train:main"
+train-unet = "src.model_explore.pytorch.entry_points.run_local_train:main"
+inference = "src.model_explore.pytorch.entry_points.run_segment_predict:main"
+localize = "src.model_explore.pytorch.entry_points.run_localize:main"
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]
