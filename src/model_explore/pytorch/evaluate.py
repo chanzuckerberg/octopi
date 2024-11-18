@@ -97,7 +97,7 @@ class evaluator:
                 mu_val = float(np.mean(summary_metrics[name][key]))
                 std_val = float(np.std(summary_metrics[name][key]))
 
-                # Populate the new dictionary with structured data
+                # Populate the  new dictionary with structured data
                 final_summary_metrics[name][key] = {
                     'mean': mu_val,
                     'std': std_val
@@ -165,3 +165,4 @@ class evaluator:
             
             # Print the object name and its metrics
             print(f"{name}: [{formatted_metrics}]")
+        print()

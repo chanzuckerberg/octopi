@@ -95,16 +95,16 @@ def objective(
 
 ##############################################################################################################################
 
-def objective2(parent_run_id,
-              trial,  
-              n_classes,
-              train_loader, 
-              val_loader, 
-              loss_function,
-              metrics_function, 
-              epochs,
-              random_seed = 42,
-              gpu_count = 1,):
+def multi_gpu_objective(parent_run_id,
+                        trial,  
+                        n_classes,
+                        train_loader, 
+                        val_loader, 
+                        loss_function,
+                        metrics_function, 
+                        epochs,
+                        random_seed = 42,
+                        gpu_count = 1,):
     
     # Initialize MLflow client
     mlflow_client = MlflowClient()
@@ -180,13 +180,13 @@ def objective2(parent_run_id,
     lr = 1e-3
     optimizer = torch.optim.Adam(model.parameters(), lr)
 
-    score = train(train_loader, val_loader, 
-                    model, device, loss_function, 
-                    metrics_function, 
-                    optimizer, max_epochs=epochs,
-                    client = mlflow_client,
-                    trial_run_id = target_run_id,
-                    my_device = device)
+    score = train.mlflow_train(train_loader, val_loader, 
+                               model, device, loss_function, 
+                               metrics_function, 
+                               optimizer, max_epochs=epochs,
+                               client = mlflow_client,
+                               trial_run_id = target_run_id,
+                               my_device = device)
 
     # Log the score (e.g., validation loss or F1 score) for each trial
     my_metrics.my_log_metric('score', score, 0, mlflow_client, target_run_id)

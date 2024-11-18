@@ -2,7 +2,7 @@ from model_explore.pytorch import evaluate, utils
 from typing import List
 import argparse
 
-def evaluate(
+def my_evaluator(
     copick_config_path: str,
     ground_truth_user_id: str,
     ground_truth_session_id: str,
@@ -45,7 +45,7 @@ def cli():
     args = parser.parse_args()
 
     # Call the evaluate function with parsed arguments
-    evaluate(
+    my_evaluator(
         copick_config_path=args.copick_config_path,
         ground_truth_user_id=args.ground_truth_user_id,
         ground_truth_session_id=args.ground_truth_session_id,
