@@ -1,6 +1,8 @@
 from skimage.morphology import binary_erosion, binary_dilation, ball
+from scipy.cluster.hierarchy import fcluster, linkage
 from skimage.segmentation import watershed
 from skimage.measure import regionprops
+from scipy.spatial import distance
 from dataclasses import dataclass
 from typing import List, Optional
 import scipy.ndimage as ndi
@@ -37,7 +39,7 @@ def processs_localization(run,
         if method == 'watershed':
             points = extract_particle_centroids_via_watershed(seg, obj[1], filter_size, min_radius, max_radius)
         elif method == 'com': 
-            points = extract_particle_centroids_via_watershed(seg, obj[1], filter_size, min_radius, max_radius)
+            points = extract_particle_centroids_via_com(seg, obj[1], min_radius, max_radius)
         points = np.array(points)
         points = points[:,[2,1,0]] 
 
@@ -144,9 +146,25 @@ def extract_particle_centroids_via_com(
         com = ndi.center_of_mass(label_objs == object_num)
         swapped_com = (com[2], com[1], com[0])
         deepFinderCoords.append(swapped_com)
-
-    # For some reason, consistently extracting center coordinate
-    # Remove the row with the closest index
-    # deepFinderCoords = np.delete(deepFinderCoords, remove_index, axis=0) 
    
     return deepFinderCoords
+
+def remove_repeated_picks(coordinates, distanceThreshold, pixelSize = 1):
+
+    # Calculate the distance matrix for the 3D coordinates
+    dist_matrix = distance.cdist(coordinates[:, :3]/pixelSize, coordinates[:, :3]/pixelSize)
+
+    # Create a linkage matrix using single linkage method
+    Z = linkage(dist_matrix, method='complete')
+
+    # Form flat clusters with a distance threshold to determine groups
+    clusters = fcluster(Z, t=distanceThreshold, criterion='distance')
+
+    # Initialize an array to store the average of each group
+    unique_coordinates = np.zeros((max(clusters), coordinates.shape[1]))
+
+    # Calculate the mean for each cluster
+    for i in range(1, max(clusters) + 1):
+        unique_coordinates[i-1] = np.mean(coordinates[clusters == i], axis=0)
+
+    return unique_coordinates    

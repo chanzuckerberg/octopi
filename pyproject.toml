@@ -38,6 +38,7 @@ train-unet-local = "model_explore.pytorch.entry_points.run_local_train:cli"
 train-unet-mlflow = "model_explore.pytorch.entry_points.run_mlflow_train:cli"
 inference = "model_explore.pytorch.entry_points.run_segment_predict:cli"
 localize = "model_explore.pytorch.entry_points.run_localize:cli"
+evaluate = "model_explore.pytorch.entry_points.run_evaluate:cli"
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]
