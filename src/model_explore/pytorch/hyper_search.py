@@ -14,7 +14,8 @@ def objective(
     data_generator,
     num_samples: int = 16,
     reload_frequency: int = 15,
-    random_seed = 42):
+    random_seed: int = 42,
+    val_interval: int = 25):
 
     utils.set_seed(random_seed)
         
@@ -77,7 +78,7 @@ def objective(
         # Train the Model
         score = train.mlflow_train(data_generator, 
                                     max_epochs = epochs,
-                                    val_interval = 5,
+                                    val_interval = val_interval,
                                     my_num_samples = num_samples,
                                     reload_frequency = reload_frequency,
                                     verbose=False)[0]

@@ -1,5 +1,6 @@
 from dotenv import load_dotenv
 import torch, random, os
+from typing import List
 import numpy as np
 
 ##############################################################################################################################
@@ -42,4 +43,21 @@ def set_seed(seed):
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
 
-# ##############################################################################################################################
+###############################################################################################################################
+
+def parse_list(value: str) -> List[str]:
+    """
+    Parse a string representing a list of items.
+    Supports formats like '[item1,item2,item3]' or 'item1,item2,item3'.
+    """
+    value = value.strip("[]")  # Remove brackets if present
+    return [x.strip() for x in value.split(",")]
+
+###############################################################################################################################
+
+def parse_int_list(value: str) -> List[int]:
+    """
+    Parse a string representing a list of integers.
+    Supports formats like '[1,2,3]' or '1,2,3'.
+    """
+    return [int(x) for x in parse_list(value)]

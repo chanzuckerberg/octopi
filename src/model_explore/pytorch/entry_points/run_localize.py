@@ -1,4 +1,4 @@
-from model_explore.pytorch import localize 
+from model_explore.pytorch import localize, utils
 import multiprocess as mp
 from typing import List
 import copick, argparse
@@ -7,14 +7,14 @@ from tqdm import tqdm
 def pick_particles(
     copick_config_path: str,
     method: str = 'watershed',
-    seg_name: str = 'prediction',
+    seg_name: str = 'segment-predict',
     seg_user_id: str = None,
     seg_session_id: str = None,
     voxel_size: str = 10,
-    pick_session_id: str = '0',
+    pick_session_id: str = '1',
     pick_user_id: str = 'monai',
-    radius_min_scale: float = 0.3,
-    radius_max_scale: float = 1.7,
+    radius_min_scale: float = 0.5,
+    radius_max_scale: float = 1.5,
     filter_size: float = 10,
     runIDs: List[str] = None,
     n_procs: int = None,
@@ -87,6 +87,47 @@ def pick_particles(
 
     print('Localization Complete!')
 
+# Entry point with argparse
+def cli():
+    parser = argparse.ArgumentParser(description="Localized particles in tomograms using multiprocessing.")
+    parser.add_argument("--copick_config_path", type=str, required=True, help="Path to the CoPick configuration file.")
+    parser.add_argument("--method", type=str, choices=['watershed', 'com'], default='watershed', required=False, help="Localization method to use.")
+    parser.add_argument("--seg_name", type=str, default='segment-predict', required=False, help="Name of the segmentation.")
+    parser.add_argument("--seg_user_id", type=str, default=None,  required=False, help="User ID for the segmentation.")
+    parser.add_argument("--seg_session_id", type=str, default=None, required=False, help="Session ID for the segmentation.")
+    parser.add_argument("--voxel_size", type=float, default=10, required=False, help="Voxel size for localization.")
+    parser.add_argument("--pick_session_id", type=str, default='1', required=False, help="Session ID for the particle picks.")
+    parser.add_argument("--pick_user_id", type=str, default='monai', required=False, help="User ID for the particle picks.")
+    parser.add_argument("--radius_min_scale", type=float, default=0.5, required=False, help="Minimum radius scale for particles.")
+    parser.add_argument("--radius_max_scale", type=float, default=1.5, required=False, help="Maximum radius scale for particles.")
+    parser.add_argument("--filter_size", type=float, default=10, required=False, help="Filter size for localization.")
+    parser.add_argument("--runIDs", type=utils.parse_list, default = None, required=False, help="List of runIDs to run inference on, e.g., run1,run2,run3 or [run1,run2,run3].")
+    parser.add_argument("--n_procs", type=int, default=None, required=False, help="Number of CPU processes to parallelize runs across. Defaults to the max number of cores available or available runs.")
+
+    args = parser.parse_args()
+
+    # Set multiprocessing start method
+    mp.set_start_method("spawn")
+    
+    pick_particles(
+        copick_config_path=args.copick_config_path,
+        method=args.method,
+        seg_name=args.seg_name,
+        seg_user_id=args.seg_user_id,
+        seg_session_id=args.seg_session_id,
+        voxel_size=args.voxel_size,
+        pick_session_id=args.pick_session_id,
+        pick_user_id=args.pick_user_id,
+        radius_min_scale=args.radius_min_scale,
+        radius_max_scale=args.radius_max_scale,
+        filter_size=args.filter_size,
+        runIDs=args.runIDs,
+        n_procs=args.n_procs,
+    )
+
+if __name__ == "__main__":
+    cli()
+
 # def time_pick_particles():
 #     import json, time
 
@@ -121,41 +162,3 @@ def pick_particles(
 
 # if __name__ == "__main__":
 #     time_pick_particles()
-
-# Entry point with argparse
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Localized particles in tomograms using multiprocessing.")
-    parser.add_argument("copick_config_path", type=str, help="Path to the CoPick configuration file.")
-    parser.add_argument("--method", type=str, choices=['watershed', 'com'], default='watershed', help="Localization method to use.")
-    parser.add_argument("--seg_name", type=str, default='prediction', help="Name of the segmentation.")
-    parser.add_argument("--seg_user_id", type=str, default=None, help="User ID for the segmentation.")
-    parser.add_argument("--seg_session_id", type=str, default=None, help="Session ID for the segmentation.")
-    parser.add_argument("--voxel_size", type=float, default=10, help="Voxel size for localization.")
-    parser.add_argument("--pick_session_id", type=str, default='0', help="Session ID for the particle picks.")
-    parser.add_argument("--pick_user_id", type=str, default='monai', help="User ID for the particle picks.")
-    parser.add_argument("--radius_min_scale", type=float, default=0.3, help="Minimum radius scale for particles.")
-    parser.add_argument("--radius_max_scale", type=float, default=1.7, help="Maximum radius scale for particles.")
-    parser.add_argument("--filter_size", type=float, default=10, help="Filter size for localization.")
-    parser.add_argument("--runIDs", type=str, nargs='*', default=None, help="List of specific RunIDs to process. If not provided, all runs are processed.")
-    parser.add_argument("--n_procs", type=int, default=None, help="Number of processes to use. Defaults to the number of CPUs or available runs.")
-
-    args = parser.parse_args()
-
-    # Set multiprocessing start method
-    mp.set_start_method("spawn")
-    
-    pick_particles(
-        copick_config_path=args.copick_config_path,
-        method=args.method,
-        seg_name=args.seg_name,
-        seg_user_id=args.seg_user_id,
-        seg_session_id=args.seg_session_id,
-        voxel_size=args.voxel_size,
-        pick_session_id=args.pick_session_id,
-        pick_user_id=args.pick_user_id,
-        radius_min_scale=args.radius_min_scale,
-        radius_max_scale=args.radius_max_scale,
-        filter_size=args.filter_size,
-        runIDs=args.runIDs,
-        n_procs=args.n_procs,
-    )

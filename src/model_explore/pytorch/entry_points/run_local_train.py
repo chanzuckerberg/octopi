@@ -17,20 +17,21 @@ from typing import List, Optional
 
 def train_model(
     copick_config_path: str,
-    trainRunIDs: List[str],
-    validateRunIDs: List[str],    
-    channels: List[int],
-    strides: List[int],
-    res_units: int,
-    model_save_path: str,
-    model_weights: Optional[str],
-    target_name: str,
-    target_user_id: str,
-    target_session_id: str,
-    num_tomo_crops: int,
-    reload_frequency: int,
-    lr: float,
-    num_epochs: int
+    target_name: str = None,
+    target_user_id: str = None,
+    target_session_id: str = None,
+    trainRunIDs: List[str] = None,
+    validateRunIDs: List[str] = None,    
+    channels: List[int] = [32,64,128,128],
+    strides: List[int] = [2,2,1],
+    res_units: int = 2,
+    model_save_path: str = 'results',
+    model_weights: Optional[str] = None,
+    num_tomo_crops: int = 16,
+    reload_frequency: int = 15,
+    lr: float = 1e-3,
+    num_epochs: int = 100,
+    val_interval: int = 25,
     ):
 
     # Split Experiment into Train and Validation Runs
@@ -62,7 +63,6 @@ def train_model(
     if model_weights: 
         model.load_state_dict(torch.load(model_weights, weights_only=True))
 
-
     # Optimizer
     optimizer = torch.optim.Adam(model.parameters(), lr)
 
@@ -74,7 +74,7 @@ def train_model(
                                 max_epochs = num_epochs,
                                 my_num_samples = num_tomo_crops,
                                 reload_frequency = reload_frequency,
-                                val_interval = 5,
+                                val_interval = val_interval,
                                 verbose=True)
 
     parameters_save_name = os.path.join(model_save_path, 'training_parameters.json')
@@ -84,42 +84,34 @@ def train_model(
     io.save_results_to_json(results, results_save_name)
 
 # Entry point with argparse
-if __name__ == "__main__":
+def cli():
+
     parser = argparse.ArgumentParser(description="Train a UNet model on tomographic data.")
-    parser.add_argument("copick_config_path", type=str, help="Path to the CoPick configuration file.")
-    parser.add_argument("--trainRunIDs", type=str, required=True, help="Comma-separated list of training run IDs.")
-    parser.add_argument("--validateRunIDs", type=str, required=True, help="Comma-separated list of validation run IDs.")
-    parser.add_argument("--channels", type=str, required=True, help="Comma-separated list of channel sizes for each layer.")
-    parser.add_argument("--strides", type=str, required=True, help="Comma-separated list of stride sizes for each layer.")
-    parser.add_argument("--res_units", type=int, required=True, help="Number of residual units in the UNet.")
-    parser.add_argument("--model_save_path", type=str, required=True, help="Path to save the trained model and results.")
-    parser.add_argument("--target_name", type=str, required=True, help="Name of the target segmentation.")
-    parser.add_argument("--target_user_id", type=str, required=True, help="User ID for the target segmentation.")
-    parser.add_argument("--target_session_id", type=str, required=True, help="Session ID for the target segmentation.")
-    parser.add_argument("--num_tomo_crops", type=int, required=True, help="Number of tomogram crops to use.")
-    parser.add_argument("--reload_frequency", type=int, required=True, help="Frequency to reload training data.")
-    parser.add_argument("--lr", type=float, required=True, help="Learning rate for the optimizer.")
-    parser.add_argument("--num_epochs", type=int, required=True, help="Number of training epochs.")
+    parser.add_argument("copick_config_path", type=str, required=True, help="Path to the CoPick configuration file.")
+    parser.add_argument("--trainRunIDs", type=utils.parse_list, required=False, help="List of training run IDs, e.g., run1,run2,run3 or [run1,run2,run3].")
+    parser.add_argument("--validateRunIDs", type=utils.parse_list, required=False, help="List of validation run IDs, e.g., run4,run5,run6 or [run4,run5,run6].")
+    parser.add_argument("--channels", type=utils.parse_int_list, required=False, help="List of channel sizes for each layer, e.g., 32,64,128,128 or [32,64,128,128].")
+    parser.add_argument("--strides", type=utils.parse_int_list, required=False, help="List of stride sizes for each layer, e.g., 2,2,1 or [2,2,1].")
+    parser.add_argument("--res_units", type=int, required=False, help="Number of residual units in the UNet.")
+    parser.add_argument("--model_save_path", type=str, required=False, help="Path to save the trained model and results.")
+    parser.add_argument("--target_name", type=str, required=False, help="Name of the target segmentation.")
+    parser.add_argument("--target_user_id", type=str, required=False, help="User ID for the target segmentation.")
+    parser.add_argument("--target_session_id", type=str, required=False, help="Session ID for the target segmentation.")
+    parser.add_argument("--num_tomo_crops", type=int, required=False, help="Number of tomogram crops to use.")
+    parser.add_argument("--reload_frequency", type=int, required=False, help="Frequency to reload training data.")
+    parser.add_argument("--lr", type=float, required=False, help="Learning rate for the optimizer.")
+    parser.add_argument("--num_epochs", type=int, required=False, help="Number of training epochs.")
+    parser.add_argument("--val_interval", type=int, required=False, default=25, help="Interval for validation metric calculations.")
 
     args = parser.parse_args()
-
-    # Convert comma-separated arguments into lists
-    trainRunIDs = args.trainRunIDs.split(",")
-    validateRunIDs = args.validateRunIDs.split(",")
-    channels = list(map(int, args.channels.split(",")))
-    strides = list(map(int, args.strides.split(",")))
-
-    # Ensure the model save path exists
-    if not os.path.exists(args.model_save_path):
-        os.makedirs(args.model_save_path)
 
     # Call the training function
     train_model(
         copick_config_path=args.copick_config_path,
-        trainRunIDs=trainRunIDs,
-        validateRunIDs=validateRunIDs,
-        channels=channels,
-        strides=strides,
+        trainRunIDs=args.trainRunIDs,
+        validateRunIDs=args.validateRunIDs,
+        channels=args.channels,
+        strides=args.strides,
         res_units=args.res_units,
         model_save_path=args.model_save_path,
         target_name=args.target_name,
@@ -129,4 +121,8 @@ if __name__ == "__main__":
         reload_frequency=args.reload_frequency,
         lr=args.lr,
         num_epochs=args.num_epochs,
+        val_interval=args.val_interval,
     )
+
+if __name__ == "__main__":
+    cli()
