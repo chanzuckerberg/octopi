@@ -1,5 +1,6 @@
 from monai.losses import DiceLoss, FocalLoss, TverskyLoss
-from model_explore.pytorch import io, trainer, utils, data
+from model_explore.pytorch.datasets import generators
+from model_explore.pytorch import io, trainer, utils
 from monai.metrics import ConfusionMatrixMetric
 from monai.networks.nets import UNet
 import torch, mlflow, argparse
@@ -18,7 +19,7 @@ def train_model_on_mflow(
     model_save_path: str = None,
     model_weights: str = None, 
     num_tomo_crops: int = 16,
-    reload_frequency: int = 25,
+    tomo_batch_size: int = 20,
     lr: float = 1e-3,
     num_epochs: int = 100,
     val_interval: int = 25,
@@ -28,15 +29,19 @@ def train_model_on_mflow(
 
     # Split Experiment into Train and Validation Runs
     Nclass = io.get_num_classes(copick_config_path)
-    data_generator = data.train_generator(copick_config_path, 
-                                          target_name, 
-                                          target_session_id = target_session_id,
-                                          target_user_id = target_user_id,
-                                          Nclasses = Nclass,
-                                          tomo_batch_size = 20)
+    data_generator = generators.TrainLoaderManager(copick_config_path, 
+                                                   target_name, 
+                                                   target_session_id = target_session_id,
+                                                   target_user_id = target_user_id,
+                                                   Nclasses = Nclass,
+                                                   tomo_batch_size = tomo_batch_size)
     
+    # Get the data splits
     data_generator.get_data_splits(trainRunIDs = trainRunIDs,
                                    validateRunIDs = validateRunIDs)
+    
+    # Get the reload frequency
+    data_generator.get_reload_frequency(num_epochs)    
 
     # Monai Functions
     loss_function = TverskyLoss(include_background=True, to_onehot_y=True, softmax=True)  
@@ -74,7 +79,6 @@ def train_model_on_mflow(
                         max_epochs = num_epochs,
                         my_num_samples = num_tomo_crops,
                         val_interval = val_interval,
-                        reload_frequency = reload_frequency,
                         model_save_path = model_save_path,
                         verbose=False )
         
@@ -96,19 +100,19 @@ def cli():
     )
 
     # Add arguments
-    parser.add_argument("--copick_config_path", type=str, required=True, help="Path to the CoPick configuration file.")
+    parser.add_argument("--copick-config-path", type=str, required=True, help="Path to the CoPick configuration file.")
     parser.add_argument("--trainRunIDs", type=utils.parse_list, default=None, help="List of training run IDs, e.g., run1,run2,run3 or [run1,run2,run3].")
     parser.add_argument("--validateRunIDs", type=utils.parse_list, default=None, help="List of validation run IDs, e.g., run4,run5,run6 or [run4,run5,run6].")
-    parser.add_argument("--channels", type=utils.parse_int_list, default="32,64,128,128", help="List of channel sizes for the UNet model, e.g., 32,64,128,128 or [32,64,128,128].")
-    parser.add_argument("--strides", type=utils.parse_int_list, default="2,2,1", help="List of stride sizes for the UNet model, e.g., 2,2,1 or [2,2,1].")
+    parser.add_argument("--channels", type=utils.parse_int_list, default = [32,64,128,128], help="List of channel sizes for the UNet model, e.g., 32,64,128,128 or [32,64,128,128].")
+    parser.add_argument("--strides", type=utils.parse_int_list, default = [2,2,1], help="List of stride sizes for the UNet model, e.g., 2,2,1 or [2,2,1].")
     parser.add_argument("--res-units", type=int, required=False, default=2, help="Number of residual units in the UNet model.")
     parser.add_argument("--model-save-path", type=str, required=False, default=None, help="Path to save the trained model.")
     parser.add_argument("--model-weights", type=str, required=False, default=None, help="Path to the pretrained model weights.")
     parser.add_argument("--target-name", type=str, required=True, help="Copick Name of the target segmentation for training.")
     parser.add_argument("--target-user-id", type=str, required=False, default=None, help="User ID of the target segmentation for training.")
     parser.add_argument("--target-session-id", type=str, required=False, default=None, help="Session ID of the target segmentation for training.")
-    parser.add_argument("--num-tomo-crops", type=int, required=False, default = "16", help="Number of tomographic crops per training batch.")
-    parser.add_argument("--reload-frequency", type=int, required=False, default = 15, help="Frequency of data reloading during training.")
+    parser.add_argument("--num-tomo-crops", type=int, required=False, default = 16, help="Number of tomographic crops per training batch.")
+    parser.add_argument("--tomo-batch-size", type=int, required=False, default = 25, help="Number of tomograms to load per epoch for training.")
     parser.add_argument("--lr", type=float, required=False, default=1e-3, help="Learning rate for training.")
     parser.add_argument("--num-epochs", type=int, required=False, default=100, help="Number of epochs for training.")
     parser.add_argument("--val-interval", type=int, required=False, default=15, help="Number of epochs to wait prior to measuring validation metrics.")    
@@ -132,7 +136,7 @@ def cli():
         target_user_id=args.target_user_id,
         target_session_id=args.target_session_id,
         num_tomo_crops=args.num_tomo_crops,
-        reload_frequency=args.reload_frequency,
+        tomo_batch_size=args.tomo_batch_size,
         lr=args.lr,
         num_epochs=args.num_epochs,
         mlflow_tracking_uri=args.mlflow_tracking_uri,

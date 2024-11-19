@@ -1,4 +1,5 @@
-from model_explore.pytorch import io, data, hyper_search, utils
+from model_explore.pytorch import io, hyper_search, utils
+from model_explore.pytorch.datasets import generators
 import torch, mlflow, os, copick, optuna, argparse
 from typing import List
 
@@ -16,19 +17,23 @@ def model_search(
     random_seed: int = 42,
     num_epochs: int = 100,
     num_trials: int = 10,
+    tomo_batch_size: int = 20,
     trainRunIDs: List[str] = None,
     validateRunIDs: List[str] = None,   
     ):
 
     # Split Experiment into Train and Validation Runs
     Nclass = io.get_num_classes(copick_config)
-    data_generator = data.train_generator(copick_config, 
-                                          segmentation_name, 
-                                          Nclasses = Nclass,
-                                          tomo_batch_size = 20)
+    data_generator = generators.TrainLoaderManager(copick_config, 
+                                                   segmentation_name, 
+                                                   Nclasses = Nclass,
+                                                   tomo_batch_size = tomo_batch_size)
     
     data_generator.get_data_splits(trainRunIDs = trainRunIDs,
                                    validateRunIDs = validateRunIDs)
+
+    # Get the reload frequency
+    data_generator.get_reload_frequency(num_epochs) 
 
     # Determine Device to Run Optuna On
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -85,9 +90,9 @@ def cli():
     parser.add_argument("--random-seed", type=int, default=42, required=False, help="Random seed for reproducibility (default: 42).")
     parser.add_argument("--num-epochs", type=int, default=100, required=False, help="Number of epochs per trial (default: 100).")
     parser.add_argument("--num-trials", type=int, default=10, required=False, help="Number of trials for architecture search (default: 10).")
+    parser.add_argument("--tomo-batch-size", type=int, default=20, required=False, help="Batch size for tomograms (default: 20).")
     parser.add_argument("--trainRunIDs", type=utils.parse_list, default=None, required=False, help="List of training run IDs, e.g., run1,run2 or [run1,run2].")
     parser.add_argument("--validateRunIDs", type=utils.parse_list, default=None, required=False, help="List of validation run IDs, e.g., run3,run4 or [run3,run4].")
-
     # Parse arguments
     args = parser.parse_args()
 
@@ -100,7 +105,8 @@ def cli():
         num_epochs=args.num_epochs,
         num_trials=args.num_trials,
         trainRunIDs=args.trainRunIDs,
-        validateRunIDs=args.validateRunIDs,
+        validateRunIDs=args.validateRunIDs, 
+        tomo_batch_size=args.tomo_batch_size,
     )
 
 if __name__ == "__main__":

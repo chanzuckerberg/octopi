@@ -2,7 +2,6 @@ import model_explore.pytorch.my_metrics as metrics
 from typing import Dict, List, Optional, Tuple
 from monai.data import decollate_batch
 from monai.transforms import AsDiscrete
-from model_explore.pytorch import io
 import matplotlib.pyplot as plt
 from tqdm import tqdm 
 import torch, os
@@ -96,13 +95,11 @@ class unet:
                      data_load_gen, 
                      my_num_samples: int = 15,                     
                      max_epochs: int = 100,
-                     val_interval: int = 15,
-                     reload_frequency: int = 15,                     
+                     val_interval: int = 15,                 
                      model_save_path: str = None,
                      verbose: bool = False):
         
         self.num_samples = my_num_samples
-        self.reload_frequency = reload_frequency
 
         # Create Save Folder if It Doesn't Exist
         if model_save_path is not None and not os.path.exists(model_save_path):
@@ -116,14 +113,14 @@ class unet:
         best_metric_epoch = -1
 
         # Produce Dataloaders for the First Training Iteration
-        self.train_loader, self.val_loader = data_load_gen.create_train_dataloaders()                
+        self.train_loader, self.val_loader = data_load_gen.create_train_dataloaders( num_samples = my_num_samples )                
 
         # Initialize tqdm around the epoch loop
         for epoch in tqdm(range(max_epochs), desc="Training Progress", unit="epoch"):
 
-            # Logic to load tomograms every few epochs 
-            if (epoch + 1) % reload_frequency == 0:
-                self.train_loader, self.val_loader = data_load_gen.create_train_dataloaders( my_num_samples )
+            # Load new tomograms every few epochs 
+            if data_load_gen.reload_frequency > 0 and (epoch + 1) % data_load_gen.reload_frequency == 0:
+                self.train_loader, self.val_loader = data_load_gen.create_train_dataloaders( num_samples = my_num_samples )
 
             # Compute and log average epoch loss
             epoch_loss = self.train_update()
@@ -175,11 +172,9 @@ class unet:
                      my_num_samples: int = 15,
                      max_epochs: int = 100,
                      val_interval: int = 15,
-                     reload_frequency: int = 15,
                      verbose: bool = False):
         
         self.num_samples = my_num_samples
-        self.reload_frequency = reload_frequency
 
         # Create Save Folder if It Doesn't Exist
         if not os.path.exists(model_save_path):
@@ -191,14 +186,14 @@ class unet:
         self.post_label = AsDiscrete(to_onehot=Nclass)  
 
         # Produce Dataloaders for the First Training Iteration
-        self.train_loader, self.val_loader = data_load_gen.create_train_dataloaders()        
+        self.train_loader, self.val_loader = data_load_gen.create_train_dataloaders(num_samples = my_num_samples)        
 
         # Initialize tqdm around the epoch loop
         for epoch in tqdm(range(max_epochs), desc="Training Progress", unit="epoch"):
 
-            # Logic to load tomograms every few epochs 
-            if (epoch + 1) % reload_frequency == 0:
-                self.train_loader, self.val_loader = data_load_gen.create_train_dataloaders( my_num_samples )
+            # Load new tomograms every few epochs 
+            if data_load_gen.reload_frequency > 0 and (epoch + 1) % data_load_gen.reload_frequency == 0:
+                self.train_loader, self.val_loader = data_load_gen.create_train_dataloaders( num_samples = my_num_samples )
 
             # Compute and log average epoch loss
             epoch_loss = self.train_update()

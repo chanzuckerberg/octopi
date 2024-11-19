@@ -9,11 +9,12 @@ from monai.transforms import (
     RandCropByLabelClassesd,
     ScaleIntensityRanged,  
 )
+from model_explore.pytorch.datasets import dataset
 from model_explore.pytorch import io
 from typing import List, Optional
 import torch, os, random
 
-class train_generator:
+class TrainLoaderManager:
 
     def __init__(self, 
                  config: str, 
@@ -147,75 +148,96 @@ class train_generator:
     
     def create_train_dataloaders(
         self,
-        my_num_samples: int = 16):
+        crop_size: int = 96,
+        num_samples: int = 16):
     
         train_batch_size = 1
         val_batch_size = 1
 
+        # Non-random transforms to be cached
+        non_random_transforms = Compose([
+            EnsureChannelFirstd(keys=["image", "label"], channel_dim="no_channel"),
+            NormalizeIntensityd(keys="image"),
+            Orientationd(keys=["image", "label"], axcodes="RAS")
+        ])
+
+        # Random transforms to be applied during training
+        random_transforms = Compose([
+            # Geometric Transforms
+            RandCropByLabelClassesd(
+                keys=["image", "label"],
+                label_key="label",
+                spatial_size=[crop_size, crop_size, crop_size],
+                num_classes=self.Nclasses,
+                num_samples=num_samples
+            ),
+            RandRotate90d(keys=["image", "label"], prob=0.5, spatial_axes=[0, 2]),
+            RandFlipd(keys=["image", "label"], prob=0.5, spatial_axis=0),    
+        ])
+
+        # Validation transforms
+        val_transforms = Compose([
+            RandCropByLabelClassesd(
+                    keys=["image", "label"],
+                    label_key="label",
+                    spatial_size=[crop_size, crop_size, crop_size],
+                    num_classes=self.Nclasses,
+                    num_samples=num_samples, 
+            ),
+        ])
+
+        # Augmentations to Explore in the Future: 
+        # Intensity-based augmentations
+        # RandGaussianNoised(keys="image", prob=0.5, mean=0.0, std=0.1),
+        # RandAdjustContrastd(keys="image", prob=0.5, gamma=(0.9, 1.1)),
+        # RandScaleIntensityd(keys="image", factors=(0.9, 1.1), prob=0.5),
+        # RandShiftIntensityd(keys="image", offsets=(-0.1, 0.1), prob=0.5),
+        # RandGaussianSmoothd(keys="image", prob=0.5, sigma_x=(0.5, 1.5), sigma_y=(0.5, 1.5), sigma_z=(0.5, 1.5)),
+        # RandHistogramShiftd(keys="image", prob=0.5, num_control_points=(3, 5))
+
+        # Geometric Transforms
+        # RandAffined(
+        #     keys=["image", "label"],
+        #     rotate_range=(0.1, 0.1, 0.1),  # Rotation angles (radians) for x, y, z axes
+        #     scale_range=(0.1, 0.1, 0.1),   # Scale range for isotropic/anisotropic scaling
+        #     prob=0.5,                      # Probability of applying the transform
+        #     padding_mode="border"          # Handle out-of-bounds values
+        # )
+
         # We Only Need to Reload the Training Dataset if the Total Number of Runs is larger than 
         # the tomo batch size
-        if self.reload_training_dataset or self.train_loader is None: 
+        if self.train_loader is None: 
 
             # Fetch the next batch of run IDs
             trainRunIDs = self._extract_run_ids('train_data_iter', self._initialize_train_iterators)
             train_files = io.load_training_data(self.root, trainRunIDs, self.voxel_size, self.tomo_algorithm, 
                                                 self.target_name, self.target_session_id, self.target_user_id, 
                                                 progress_update=False)
-        
-
-            # Non-random transforms to be cached
-            non_random_transforms = Compose([
-                EnsureChannelFirstd(keys=["image", "label"], channel_dim="no_channel"),
-                NormalizeIntensityd(keys="image"),
-                Orientationd(keys=["image", "label"], axcodes="RAS")
-            ])
-
-            # Random transforms to be applied during training
-            random_transforms = Compose([
-                # Geometric Transforms
-                RandCropByLabelClassesd(
-                    keys=["image", "label"],
-                    label_key="label",
-                    spatial_size=[96, 96, 96],
-                    num_classes=self.Nclasses,
-                    num_samples=my_num_samples
-                ),
-                RandRotate90d(keys=["image", "label"], prob=0.5, spatial_axes=[0, 2]),
-                RandFlipd(keys=["image", "label"], prob=0.5, spatial_axis=0),    
-            ])
-            
-            # Augmentations to Explore in the Future: 
-            # Intensity-based augmentations
-            # RandGaussianNoised(keys="image", prob=0.5, mean=0.0, std=0.1),
-            # RandAdjustContrastd(keys="image", prob=0.5, gamma=(0.9, 1.1)),
-            # RandScaleIntensityd(keys="image", factors=(0.9, 1.1), prob=0.5),
-            # RandShiftIntensityd(keys="image", offsets=(-0.1, 0.1), prob=0.5),
-            # RandGaussianSmoothd(keys="image", prob=0.5, sigma_x=(0.5, 1.5), sigma_y=(0.5, 1.5), sigma_z=(0.5, 1.5)),
-            # RandHistogramShiftd(keys="image", prob=0.5, num_control_points=(3, 5))
-
-            # Geometric Transforms
-            # RandAffined(
-            #     keys=["image", "label"],
-            #     rotate_range=(0.1, 0.1, 0.1),  # Rotation angles (radians) for x, y, z axes
-            #     scale_range=(0.1, 0.1, 0.1),   # Scale range for isotropic/anisotropic scaling
-            #     prob=0.5,                      # Probability of applying the transform
-            #     padding_mode="border"          # Handle out-of-bounds values
-            # )
 
             # Create the cached dataset with non-random transforms
             train_ds = CacheDataset(data=train_files, transform=non_random_transforms, cache_rate=1.0)
 
             # Wrap the cached dataset to apply random transforms during iteration
-            train_ds = Dataset(data=train_ds, transform=random_transforms)
+            self.dynamic_train_dataset = dataset.DynamicDataset(data=train_ds, transform=random_transforms)
 
             # DataLoader remains the same
             self.train_loader = DataLoader(
-                train_ds,
+                self.dynamic_train_dataset,
                 batch_size=train_batch_size,
                 shuffle=True,
                 num_workers=4,
                 pin_memory=torch.cuda.is_available()
             )
+
+        else:
+            # Fetch the next batch of run IDs
+            trainRunIDs = self._extract_run_ids('train_data_iter', self._initialize_train_iterators)
+            train_files = io.load_training_data(self.root, trainRunIDs, self.voxel_size, self.tomo_algorithm, 
+                                                self.target_name, self.target_session_id, self.target_user_id, 
+                                                progress_update=False)
+
+            train_ds = CacheDataset(data=train_files, transform=non_random_transforms, cache_rate=1.0)
+            self.dynamic_train_dataset.update_data(train_ds)
 
         # We Only Need to Reload the Validation Dataset if the Total Number of Runs is larger than 
         # the tomo batch size
@@ -226,33 +248,54 @@ class train_generator:
                                                 self.target_name, self.target_session_id, self.target_user_id,
                                                 progress_update=False)    
 
-            # Validation transforms
-            val_transforms = Compose([
-                RandCropByLabelClassesd(
-                    keys=["image", "label"],
-                    label_key="label",
-                    spatial_size=[96, 96, 96],
-                    num_classes=self.Nclasses,
-                    num_samples=my_num_samples,  # Use 1 to get a single, consistent crop per image
-                ),
-            ])
-
             # Create validation dataset
             val_ds = CacheDataset(data=val_files, transform=non_random_transforms, cache_rate=1.0)
 
             # Wrap the cached dataset to apply random transforms during iteration
-            val_ds = Dataset(data=val_ds, transform=val_transforms)
+            self.dynamic_validation_dataset = dataset.DynamicDataset(data=val_ds, transform=val_transforms)
 
             # Create validation DataLoader
             self.val_loader  = DataLoader(
-                val_ds,
+                self.dynamic_validation_dataset,
                 batch_size=val_batch_size,
                 num_workers=4,
                 pin_memory=torch.cuda.is_available(),
                 shuffle=False,  # Ensure the data order remains consistent
             )
+        else:
+            validateRunIDs = self._extract_run_ids('val_data_iter', self._initialize_val_iterators)             
+            val_files   = io.load_training_data(self.root, validateRunIDs, self.voxel_size, self.tomo_algorithm, 
+                                                self.target_name, self.target_session_id, self.target_user_id,
+                                                progress_update=False)  
 
         return self.train_loader, self.val_loader
+    
+    def get_reload_frequency(self, num_epochs: int):
+        """
+        Automatically calculate the reload frequency for the dataset during training.
+
+        Returns:
+            int: Reload frequency (number of epochs between dataset reloads).
+        """
+        if not self.reload_training_dataset:
+            # No need to reload if all tomograms fit in memory
+            print("All training samples fit in memory. No reloading required.")
+            self.reload_frequency = -1
+
+        else:
+            # Calculate the number of segments based on total training runs and batch size
+            num_segments = (len(self.myRunIDs['train']) + self.tomo_batch_size - 1) // self.tomo_batch_size
+
+            # Calculate reload frequency to distribute reloading evenly over epochs
+            self.reload_frequency = max(num_epochs // num_segments, 1)
+
+            # Warn if the number of epochs is insufficient for full dataset coverage
+            if num_epochs < num_segments:
+                print(
+                    f"Warning: Chosen number of epochs ({num_epochs}) may not be sufficient "
+                    f"to train over all training samples. Consider increasing the number of epochs "
+                    f"to at least {num_segments}."
+                )
 
     def get_dataloader_parameters(self):
 
@@ -264,15 +307,15 @@ class train_generator:
             'voxel_size': self.voxel_size,
             'tomo_algorithm': self.tomo_algorithm,
             'tomo_batch_size': self.tomo_batch_size,
+            'reload_frequency': self.reload_frequency,
             'testRunIDs': self.myRunIDs['test'],
             'valRunIDs': self.myRunIDs['validate'],    
             'trainRunIDs': self.myRunIDs['train'],
         }
 
-        return parameters
+        return parameters                
 
-
-class predict_generator:
+class PredictLoaderManager:
 
     def __init__(self, 
                  config: str, 
