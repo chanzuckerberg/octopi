@@ -80,11 +80,11 @@ def cli():
     parser.add_argument("--config", type=str, required=True, help="Path to the CoPick configuration file.")
 
     # Optional arguments
-    parser.add_argument("--mlflow_experiment_name", type=str, default="model-search", required=False, help="Name of the MLflow experiment (default: 'model-search').")
-    parser.add_argument("--mlflow_tracking_uri", type=str, default="http://mlflow.mlflow.svc.cluster.local:5000", required=False, help="URI for the MLflow tracking server (default: 'http://mlflow.mlflow.svc.cluster.local:5000').")
-    parser.add_argument("--random_seed", type=int, default=42, required=False, help="Random seed for reproducibility (default: 42).")
-    parser.add_argument("--num_epochs", type=int, default=100, required=False, help="Number of epochs per trial (default: 100).")
-    parser.add_argument("--num_trials", type=int, default=10, required=False, help="Number of trials for architecture search (default: 10).")
+    parser.add_argument("--mlflow-experiment-name", type=str, default="model-search", required=False, help="Name of the MLflow experiment (default: 'model-search').")
+    parser.add_argument("--mlflow-tracking-uri", type=str, default="http://mlflow.mlflow.svc.cluster.local:5000", required=False, help="URI for the MLflow tracking server (default: 'http://mlflow.mlflow.svc.cluster.local:5000').")
+    parser.add_argument("--random-seed", type=int, default=42, required=False, help="Random seed for reproducibility (default: 42).")
+    parser.add_argument("--num-epochs", type=int, default=100, required=False, help="Number of epochs per trial (default: 100).")
+    parser.add_argument("--num-trials", type=int, default=10, required=False, help="Number of trials for architecture search (default: 10).")
     parser.add_argument("--trainRunIDs", type=utils.parse_list, default=None, required=False, help="List of training run IDs, e.g., run1,run2 or [run1,run2].")
     parser.add_argument("--validateRunIDs", type=utils.parse_list, default=None, required=False, help="List of validation run IDs, e.g., run3,run4 or [run3,run4].")
 

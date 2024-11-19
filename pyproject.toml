@@ -33,7 +33,7 @@ pre-commit = "^3.8.0"
 ruff = "^0.6.4"
 
 [tool.poetry.scripts]
-create-targets = "model_explore.pytorch.entry_points.run_local_train:cli"
+create-targets = "model_explore.segmentations_from_picks:cli"
 train-unet-local = "model_explore.pytorch.entry_points.run_local_train:cli"
 train-unet-mlflow = "model_explore.pytorch.entry_points.run_mlflow_train:cli"
 inference = "model_explore.pytorch.entry_points.run_segment_predict:cli"

@@ -172,6 +172,7 @@ class train_generator:
 
             # Random transforms to be applied during training
             random_transforms = Compose([
+                # Geometric Transforms
                 RandCropByLabelClassesd(
                     keys=["image", "label"],
                     label_key="label",
@@ -182,6 +183,24 @@ class train_generator:
                 RandRotate90d(keys=["image", "label"], prob=0.5, spatial_axes=[0, 2]),
                 RandFlipd(keys=["image", "label"], prob=0.5, spatial_axis=0),    
             ])
+            
+            # Augmentations to Explore in the Future: 
+            # Intensity-based augmentations
+            # RandGaussianNoised(keys="image", prob=0.5, mean=0.0, std=0.1),
+            # RandAdjustContrastd(keys="image", prob=0.5, gamma=(0.9, 1.1)),
+            # RandScaleIntensityd(keys="image", factors=(0.9, 1.1), prob=0.5),
+            # RandShiftIntensityd(keys="image", offsets=(-0.1, 0.1), prob=0.5),
+            # RandGaussianSmoothd(keys="image", prob=0.5, sigma_x=(0.5, 1.5), sigma_y=(0.5, 1.5), sigma_z=(0.5, 1.5)),
+            # RandHistogramShiftd(keys="image", prob=0.5, num_control_points=(3, 5))
+
+            # Geometric Transforms
+            # RandAffined(
+            #     keys=["image", "label"],
+            #     rotate_range=(0.1, 0.1, 0.1),  # Rotation angles (radians) for x, y, z axes
+            #     scale_range=(0.1, 0.1, 0.1),   # Scale range for isotropic/anisotropic scaling
+            #     prob=0.5,                      # Probability of applying the transform
+            #     padding_mode="border"          # Handle out-of-bounds values
+            # )
 
             # Create the cached dataset with non-random transforms
             train_ds = CacheDataset(data=train_files, transform=non_random_transforms, cache_rate=1.0)

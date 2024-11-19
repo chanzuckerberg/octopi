@@ -74,20 +74,20 @@ def cli():
     """
     CLI entry point for running inference.
     """
-    parser = argparse.ArgumentParser(description="Run segmentation predictions with a specified model and configuration.")
+    parser = argparse.ArgumentParser(description="Run segmentation predictions with a specified model and configuration on CryoET Tomograms.")
 
     # Add arguments
-    parser.add_argument("--config_path", type=str, required=True, help="Path to the configuration file.")
-    parser.add_argument("--model_weights", type=str, required=True, help="Path to the model weights file.")
+    parser.add_argument("--config-path", type=str, required=True, help="Path to the configuration file.")
+    parser.add_argument("--model-weights", type=str, required=True, help="Path to the model weights file.")
     parser.add_argument("--channels", type=utils.parse_int_list, required=False, default="32,64,128,128", help="List of channel sizes for each layer, e.g., 32,64,128,128 or [32,64,128,128].")
     parser.add_argument("--strides", type=utils.parse_int_list, required=False, default="2,2,1", help="List of stride values for each layer, e.g., 2,2,1 or [2,2,1].")
-    parser.add_argument("--res_units", type=int, default=2, required=False, help="Number of residual units. Default is 2.")
-    parser.add_argument("--voxel_size", type=float, default=10.0, required=False, help="Voxel size for tomogram reconstruction. Default is 10.0.")
-    parser.add_argument("--tomo_algorithm", type=str, default="wbp", required=False, help="Tomogram reconstruction algorithm. Default is 'wbp'.")
-    parser.add_argument("--segmentation_name", type=str, default="segment-predict", required=False, help="Name for the segmentation output. Default is 'segment-predict'.")
-    parser.add_argument("--segmentation_user_id", type=str, default="monai", required=False, help="User ID associated with the segmentation. Default is 'monai'.")
-    parser.add_argument("--segmentation_session_id", type=str, default="1", required=False, help="Session ID for the segmentation. Default is '1'.")
-    parser.add_argument("--run_ids", type=utils.parse_list, default=None, required=False, help="List of run IDs for prediction, e.g., run1,run2 or [run1,run2]. If not provided, all available runs will be processed.")
+    parser.add_argument("--res-units", type=int, default=2, required=False, help="Number of residual units. Default is 2.")
+    parser.add_argument("--voxel-size", type=float, default=10.0, required=False, help="Voxel size for tomogram reconstruction. Default is 10.0.")
+    parser.add_argument("--tomo-algorithm", type=str, default="wbp", required=False, help="Tomogram reconstruction algorithm. Default is 'wbp'.")
+    parser.add_argument("--segmentation-name", type=str, default="segment-predict", required=False, help="Name for the segmentation output. Default is 'segment-predict'.")
+    parser.add_argument("--segmentation-user-id", type=str, default="monai", required=False, help="User ID associated with the segmentation. Default is 'monai'.")
+    parser.add_argument("--segmentation-session-id", type=str, default="1", required=False, help="Session ID for the segmentation. Default is '1'.")
+    parser.add_argument("--run-ids", type=utils.parse_list, default=None, required=False, help="List of run IDs for prediction, e.g., run1,run2 or [run1,run2]. If not provided, all available runs will be processed.")
 
     # Parse arguments
     args = parser.parse_args()

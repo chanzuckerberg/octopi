@@ -85,23 +85,26 @@ def train_model(
 
 # Entry point with argparse
 def cli():
+    """
+    CLI entry point for training models where results are saved to a local directory.
+    """
 
-    parser = argparse.ArgumentParser(description="Train a UNet model on tomographic data.")
-    parser.add_argument("copick_config_path", type=str, required=True, help="Path to the CoPick configuration file.")
+    parser = argparse.ArgumentParser(description="Train a UNet model on CryoET Tomograms.")
+    parser.add_argument("--copick-config-path", type=str, required=True, help="Path to the CoPick configuration file.")
     parser.add_argument("--trainRunIDs", type=utils.parse_list, required=False, help="List of training run IDs, e.g., run1,run2,run3 or [run1,run2,run3].")
     parser.add_argument("--validateRunIDs", type=utils.parse_list, required=False, help="List of validation run IDs, e.g., run4,run5,run6 or [run4,run5,run6].")
     parser.add_argument("--channels", type=utils.parse_int_list, required=False, help="List of channel sizes for each layer, e.g., 32,64,128,128 or [32,64,128,128].")
     parser.add_argument("--strides", type=utils.parse_int_list, required=False, help="List of stride sizes for each layer, e.g., 2,2,1 or [2,2,1].")
-    parser.add_argument("--res_units", type=int, required=False, help="Number of residual units in the UNet.")
-    parser.add_argument("--model_save_path", type=str, required=False, help="Path to save the trained model and results.")
-    parser.add_argument("--target_name", type=str, required=False, help="Name of the target segmentation.")
-    parser.add_argument("--target_user_id", type=str, required=False, help="User ID for the target segmentation.")
-    parser.add_argument("--target_session_id", type=str, required=False, help="Session ID for the target segmentation.")
-    parser.add_argument("--num_tomo_crops", type=int, required=False, help="Number of tomogram crops to use.")
-    parser.add_argument("--reload_frequency", type=int, required=False, help="Frequency to reload training data.")
+    parser.add_argument("--res-units", type=int, required=False, help="Number of residual units in the UNet.")
+    parser.add_argument("--model-save-path", type=str, required=False, help="Path to save the trained model and results.")
+    parser.add_argument("--target-name", type=str, required=False, help="Name of the target segmentation.")
+    parser.add_argument("--target-user-id", type=str, required=False, help="User ID for the target segmentation.")
+    parser.add_argument("--target-session-id", type=str, required=False, help="Session ID for the target segmentation.")
+    parser.add_argument("--num-tomo-crops", type=int, required=False, help="Number of tomogram crops to use.")
+    parser.add_argument("--reload-frequency", type=int, required=False, help="Frequency to reload training data.")
     parser.add_argument("--lr", type=float, required=False, help="Learning rate for the optimizer.")
-    parser.add_argument("--num_epochs", type=int, required=False, help="Number of training epochs.")
-    parser.add_argument("--val_interval", type=int, required=False, default=25, help="Interval for validation metric calculations.")
+    parser.add_argument("--num-epochs", type=int, required=False, help="Number of training epochs.")
+    parser.add_argument("--val-interval", type=int, required=False, default=25, help="Interval for validation metric calculations.")
 
     args = parser.parse_args()
 

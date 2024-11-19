@@ -92,7 +92,7 @@ def train_model_on_mflow(
 def cli():
 
     parser = argparse.ArgumentParser(
-        description="Train a UNet model with MLflow integration."
+        description="Train a UNet model on CryoET Tomograms with MLflow integration."
     )
 
     # Add arguments
@@ -101,19 +101,19 @@ def cli():
     parser.add_argument("--validateRunIDs", type=utils.parse_list, default=None, help="List of validation run IDs, e.g., run4,run5,run6 or [run4,run5,run6].")
     parser.add_argument("--channels", type=utils.parse_int_list, default="32,64,128,128", help="List of channel sizes for the UNet model, e.g., 32,64,128,128 or [32,64,128,128].")
     parser.add_argument("--strides", type=utils.parse_int_list, default="2,2,1", help="List of stride sizes for the UNet model, e.g., 2,2,1 or [2,2,1].")
-    parser.add_argument("--res_units", type=int, required=False, default=2, help="Number of residual units in the UNet model.")
-    parser.add_argument("--model_save_path", type=str, required=False, default=None, help="Path to save the trained model.")
-    parser.add_argument("--model_weights", type=str, required=False, default=None, help="Path to the pretrained model weights.")
-    parser.add_argument("--target_name", type=str, required=True, help="Copick Name of the target segmentation for training.")
-    parser.add_argument("--target_user_id", type=str, required=False, default=None, help="User ID of the target segmentation for training.")
-    parser.add_argument("--target_session_id", type=str, required=False, default=None, help="Session ID of the target segmentation for training.")
-    parser.add_argument("--num_tomo_crops", type=int, required=False, default = "16", help="Number of tomographic crops per training batch.")
-    parser.add_argument("--reload_frequency", type=int, required=False, default = 15, help="Frequency of data reloading during training.")
+    parser.add_argument("--res-units", type=int, required=False, default=2, help="Number of residual units in the UNet model.")
+    parser.add_argument("--model-save-path", type=str, required=False, default=None, help="Path to save the trained model.")
+    parser.add_argument("--model-weights", type=str, required=False, default=None, help="Path to the pretrained model weights.")
+    parser.add_argument("--target-name", type=str, required=True, help="Copick Name of the target segmentation for training.")
+    parser.add_argument("--target-user-id", type=str, required=False, default=None, help="User ID of the target segmentation for training.")
+    parser.add_argument("--target-session-id", type=str, required=False, default=None, help="Session ID of the target segmentation for training.")
+    parser.add_argument("--num-tomo-crops", type=int, required=False, default = "16", help="Number of tomographic crops per training batch.")
+    parser.add_argument("--reload-frequency", type=int, required=False, default = 15, help="Frequency of data reloading during training.")
     parser.add_argument("--lr", type=float, required=False, default=1e-3, help="Learning rate for training.")
-    parser.add_argument("--num_epochs", type=int, required=False, default=100, help="Number of epochs for training.")
-    parser.add_argument("--val_interval", type=int, required=False, default=15, help="Number of epochs to wait prior to measuring validation metrics.")    
-    parser.add_argument("--mlflow_tracking_uri", type=str, required=False, default = "http://mlflow.mlflow.svc.cluster.local:5000", help="MLflow tracking URI.")
-    parser.add_argument("--mlflow_experiment_name", type=str, required=False, default = "model_train", help="Name of the MLflow experiment.")
+    parser.add_argument("--num-epochs", type=int, required=False, default=100, help="Number of epochs for training.")
+    parser.add_argument("--val-interval", type=int, required=False, default=15, help="Number of epochs to wait prior to measuring validation metrics.")    
+    parser.add_argument("--mlflow-tracking-uri", type=str, required=False, default = "http://mlflow.mlflow.svc.cluster.local:5000", help="MLflow tracking URI.")
+    parser.add_argument("--mlflow-experiment-name", type=str, required=False, default = "model_train", help="Name of the MLflow experiment.")
 
     # Parse arguments
     args = parser.parse_args()
