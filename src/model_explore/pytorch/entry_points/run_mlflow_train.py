@@ -11,11 +11,14 @@ def train_model_on_mflow(
     target_name: str,
     target_user_id: str = None,
     target_session_id: str = None,
+    tomo_algorithm: str = 'wbp',
+    voxel_size: float = 10,
     trainRunIDs: List[str] = None,
     validateRunIDs: List[str] = None,    
     channels: List[int] = [32,64,128,128],
     strides: List[int] = [2,2,1],
     res_units: int = 2,
+    Nclass: int = 3,    
     model_save_path: str = None,
     model_weights: str = None, 
     num_tomo_crops: int = 16,
@@ -28,11 +31,12 @@ def train_model_on_mflow(
     ):
 
     # Split Experiment into Train and Validation Runs
-    Nclass = io.get_num_classes(copick_config_path)
     data_generator = generators.TrainLoaderManager(copick_config_path, 
                                                    target_name, 
                                                    target_session_id = target_session_id,
                                                    target_user_id = target_user_id,
+                                                   tomo_algorithm = tomo_algorithm,
+                                                   voxel_size = voxel_size,                                                   
                                                    Nclasses = Nclass,
                                                    tomo_batch_size = tomo_batch_size)
     
@@ -106,6 +110,7 @@ def cli():
     parser.add_argument("--channels", type=utils.parse_int_list, default = [32,64,128,128], help="List of channel sizes for the UNet model, e.g., 32,64,128,128 or [32,64,128,128].")
     parser.add_argument("--strides", type=utils.parse_int_list, default = [2,2,1], help="List of stride sizes for the UNet model, e.g., 2,2,1 or [2,2,1].")
     parser.add_argument("--res-units", type=int, required=False, default=2, help="Number of residual units in the UNet model.")
+    parser.add_argument("--Nclass", type=int, required=False, default=3, help="Number of prediction classes in the model.")
     parser.add_argument("--model-save-path", type=str, required=False, default=None, help="Path to save the trained model.")
     parser.add_argument("--model-weights", type=str, required=False, default=None, help="Path to the pretrained model weights.")
     parser.add_argument("--target-name", type=str, required=True, help="Copick Name of the target segmentation for training.")
@@ -130,6 +135,7 @@ def cli():
         channels=args.channels,
         strides=args.strides,
         res_units=args.res_units,
+        Nclass=args.Nclass,
         model_save_path=args.model_save_path,
         model_weights=args.model_weights,
         target_name=args.target_name,
