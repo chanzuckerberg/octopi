@@ -21,12 +21,13 @@ class Predictor:
                  model_weights: str,
                  my_channels: List[int] = [48, 64, 80, 80],
                  my_strides: List[int] = [2, 2, 1],
-                 my_num_res_units: int = 1,
+                 my_num_res_units: int = 1, 
+                 my_nclass: int = 3,
                  device: Optional[str] = None):
 
         self.config = config
         self.root = copick.from_file(config)
-        Nclass = io.get_num_classes(config)      
+        self.Nclass = my_nclass     
 
         # Get the number of GPUs available
         num_gpus = torch.cuda.device_count()
@@ -43,7 +44,7 @@ class Predictor:
         self.model = UNet(
             spatial_dims=3,
             in_channels=1,
-            out_channels=Nclass,
+            out_channels=self.Nclass,
             channels=my_channels,
             strides=my_strides,
             num_res_units=my_num_res_units,
@@ -134,8 +135,9 @@ class MultiGPUPredictor(Predictor):
                  model_weights: str,
                  channels: List[int] = [48, 64, 80, 80],
                  strides: List[int] = [2, 2, 1],
-                 num_res_units: int = 1):
-        super().__init__(config, model_weights, channels, strides, num_res_units)
+                 num_res_units: int = 1,
+                 nclass: int = 3):
+        super().__init__(config, model_weights, channels, strides, num_res_units, nclass)
         self.num_gpus = torch.cuda.device_count()
         if self.num_gpus < 2:
             raise RuntimeError("MultiGPUPredictor requires at least 2 GPUs.")
@@ -161,7 +163,7 @@ class MultiGPUPredictor(Predictor):
 
     def multi_gpu_inference(self, 
                             num_tomos_per_batch: int = 15, 
-                            run_ids: Optional[List[str]] = None,
+                            runIDs: Optional[List[str]] = None,
                             voxel_spacing: float = 10,
                             tomo_algorithm: str = 'denoised', 
                             save: bool = False,
@@ -170,11 +172,11 @@ class MultiGPUPredictor(Predictor):
                             segmentation_session_id: str = '0') -> Optional[List[np.ndarray]]:
         """Run inference across multiple GPUs, optionally saving results or returning predictions."""
         
-        run_ids = run_ids or [run.name for run in self.root.runs]
+        runIDs = runIDs or [run.name for run in self.root.runs]
         all_predictions = []
 
-        # Divide run_ids into batches for each GPU
-        batches = [run_ids[i:i + num_tomos_per_batch] for i in range(0, len(run_ids), num_tomos_per_batch)]
+        # Divide runIDs into batches for each GPU
+        batches = [runIDs[i:i + num_tomos_per_batch] for i in range(0, len(run_ids), num_tomos_per_batch)]
         
         # Run inference in parallel across GPUs
         for i in range(0, len(batches), self.num_gpus):

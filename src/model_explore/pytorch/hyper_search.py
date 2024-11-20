@@ -13,7 +13,6 @@ def objective(
     device,
     data_generator,
     num_samples: int = 16,
-    reload_frequency: int = 15,
     random_seed: int = 42,
     val_interval: int = 25):
 
@@ -25,8 +24,12 @@ def objective(
     # Start a new MLflow run for each trial
     with mlflow.start_run(run_name = trial_num, nested=True):  # Nested=True allows it to be part of the overall experiment run
 
+        # Suggest alpha between 0.0 and 1.0 - Calculate beta based on the constraint alpha + beta = 1.0
+        alpha = trial.suggest_float("alpha", 0.15, 0.85)
+        beta = 1.0 - alpha
+
         # Monai Functions
-        loss_function = TverskyLoss(include_background=True, to_onehot_y=True, softmax=True)  
+        loss_function = TverskyLoss(include_background=True, to_onehot_y=True, softmax=True, alpha=alpha, beta=beta)  
         metrics_function = ConfusionMatrixMetric(include_background=False, metric_name=["recall",'precision','f1 score'], reduction="none")
 
         # Sample number of channels
@@ -80,7 +83,6 @@ def objective(
                                     max_epochs = epochs,
                                     val_interval = val_interval,
                                     my_num_samples = num_samples,
-                                    reload_frequency = reload_frequency,
                                     verbose=False)[0]
         
         # Log training parameters.

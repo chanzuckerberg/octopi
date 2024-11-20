@@ -117,11 +117,11 @@ def get_segmentation_array(run,
                            is_multilabel=True):
 
     seg = run.get_segmentations(name=segmentation_name, 
-                                       session_id = session_id,
-                                       user_id = user_id,
-                                       voxel_size=voxel_spacing, 
-                                       is_multilabel=is_multilabel)
-    
+                                session_id = session_id,
+                                user_id = user_id,
+                                voxel_size=voxel_spacing, 
+                                is_multilabel=is_multilabel)
+
     # No Segmentations Are Available, Result in Error
     if len(seg) == 0:
         raise ValueError(f'Missing Segmentation for Name: {segmentation_name}, UserID: {user_id}, SessionID: {session_id}')
@@ -236,13 +236,17 @@ def get_model_parameters(model):
 def get_optimizer_parameters(trainer):
 
     optimizer_parameters = {
-        'optimizer': trainer.optimizer.__class__.__name__,
+        'my_num_samples': trainer.num_samples,  
         'lr': trainer.optimizer.param_groups[0]['lr'],
-        'loss_function': trainer.loss_function.__class__.__name__,
+        'optimizer': trainer.optimizer.__class__.__name__,
         'metrics_function': trainer.metrics_function.__class__.__name__,
-        'my_num_samples': trainer.num_samples,
-        'reload_frequency': trainer.reload_frequency        
+        'loss_function': trainer.loss_function.__class__.__name__,
     }
+
+    # Log Tversky Loss Parameters
+    if trainer.loss_function.__class__.__name__ == 'TverskyLoss':
+        optimizer_parameters['alpha'] = trainer.loss_function.alpha
+        optimizer_parameters['beta'] = trainer.loss_function.beta
 
     return optimizer_parameters
 

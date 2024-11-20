@@ -105,7 +105,8 @@ class unet:
         if model_save_path is not None and not os.path.exists(model_save_path):
             os.makedirs(model_save_path, exist_ok=True) 
 
-        Nclass = data_load_gen.Nclasses            
+        Nclass = data_load_gen.Nclasses
+        results = self.create_results_dictionary(Nclass)         
         self.post_pred = AsDiscrete(argmax=True, to_onehot=Nclass)
         self.post_label = AsDiscrete(to_onehot=Nclass)  
 
@@ -124,6 +125,7 @@ class unet:
 
             # Compute and log average epoch loss
             epoch_loss = self.train_update()
+            results['loss'].append((epoch + 1, epoch_loss))            
             metrics.my_log_metric(f"train_loss", epoch_loss, epoch + 1, self.client, self.trial_run_id)
 
             if (epoch + 1) % val_interval == 0:

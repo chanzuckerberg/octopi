@@ -90,7 +90,7 @@ def pick_particles(
 # Entry point with argparse
 def cli():
     parser = argparse.ArgumentParser(description="Localized particles in tomograms using multiprocessing.")
-    parser.add_argument("--copick-config-path", type=str, required=True, help="Path to the CoPick configuration file.")
+    parser.add_argument("--copick-config", type=str, required=True, help="Path to the CoPick configuration file.")
     parser.add_argument("--method", type=str, choices=['watershed', 'com'], default='watershed', required=False, help="Localization method to use.")
     parser.add_argument("--seg-name", type=str, default='segment-predict', required=False, help="Name of the segmentation.")
     parser.add_argument("--seg-user-id", type=str, default=None,  required=False, help="User ID for the segmentation.")
@@ -110,7 +110,7 @@ def cli():
     mp.set_start_method("spawn")
     
     pick_particles(
-        copick_config_path=args.copick_config_path,
+        copick_config=args.copick_config,
         method=args.method,
         seg_name=args.seg_name,
         seg_user_id=args.seg_user_id,
