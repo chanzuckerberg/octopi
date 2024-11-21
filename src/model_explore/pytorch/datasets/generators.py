@@ -150,7 +150,7 @@ class TrainLoaderManager:
         self,
         crop_size: int = 96,
         num_samples: int = 16):
-    
+
         train_batch_size = 1
         val_batch_size = 1
 

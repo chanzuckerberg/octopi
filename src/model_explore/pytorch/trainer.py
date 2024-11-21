@@ -95,11 +95,14 @@ class unet:
                      data_load_gen, 
                      my_num_samples: int = 15,                     
                      max_epochs: int = 100,
+                     crop_size: int = 96,                     
                      val_interval: int = 15,                 
                      model_save_path: str = None,
                      verbose: bool = False):
         
+        self.crop_size = crop_size
         self.num_samples = my_num_samples
+        self.val_interval = val_interval
 
         # Create Save Folder if It Doesn't Exist
         if model_save_path is not None and not os.path.exists(model_save_path):
@@ -114,7 +117,7 @@ class unet:
         best_metric_epoch = -1
 
         # Produce Dataloaders for the First Training Iteration
-        self.train_loader, self.val_loader = data_load_gen.create_train_dataloaders( num_samples = my_num_samples )                
+        self.train_loader, self.val_loader = data_load_gen.create_train_dataloaders( crop_size = crop_size, num_samples = my_num_samples )                
 
         # Initialize tqdm around the epoch loop
         for epoch in tqdm(range(max_epochs), desc="Training Progress", unit="epoch"):
@@ -128,7 +131,7 @@ class unet:
             results['loss'].append((epoch + 1, epoch_loss))            
             metrics.my_log_metric(f"train_loss", epoch_loss, epoch + 1, self.client, self.trial_run_id)
 
-            if (epoch + 1) % val_interval == 0:
+            if (epoch + 1) % val_interval == 0 or (epoch + 1) == max_epochs:
 
                 # Update tqdm description with dynamic loss for each epoch
                 if verbose: tqdm.write(f"Epoch {epoch + 1}/{max_epochs}, avg_train_loss: {epoch_loss:.4f}")
@@ -172,11 +175,14 @@ class unet:
                      data_load_gen, 
                      model_save_path = 'results',
                      my_num_samples: int = 15,
+                     crop_size: int = 96,
                      max_epochs: int = 100,
                      val_interval: int = 15,
                      verbose: bool = False):
         
-        self.num_samples = my_num_samples
+        self.val_interval = val_interval
+        self.num_samples = my_num_samples   
+        self.crop_size = crop_size
 
         # Create Save Folder if It Doesn't Exist
         if not os.path.exists(model_save_path):
@@ -188,7 +194,7 @@ class unet:
         self.post_label = AsDiscrete(to_onehot=Nclass)  
 
         # Produce Dataloaders for the First Training Iteration
-        self.train_loader, self.val_loader = data_load_gen.create_train_dataloaders(num_samples = my_num_samples)        
+        self.train_loader, self.val_loader = data_load_gen.create_train_dataloaders( crop_size = crop_size, num_samples = my_num_samples)        
 
         # Initialize tqdm around the epoch loop
         for epoch in tqdm(range(max_epochs), desc="Training Progress", unit="epoch"):

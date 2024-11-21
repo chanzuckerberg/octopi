@@ -14,7 +14,7 @@ def objective(
     data_generator,
     num_samples: int = 16,
     random_seed: int = 42,
-    val_interval: int = 25):
+    val_interval: int = 15):
 
     utils.set_seed(random_seed)
         
@@ -69,7 +69,7 @@ def objective(
         # ).to(device)            
 
         # # Sample learning rate using Optuna
-        # learning_rate = trial.suggest_loguniform("learning_rate", 1e-5, 1e-3)
+        # learning_rate = trial.suggest_loguniform("learning_rate", 1e-5, 1e-2)
 
         # Define your loss and optimizer, and return the objective (e.g., validation loss)
         lr = 1e-3
