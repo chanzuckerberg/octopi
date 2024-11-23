@@ -51,22 +51,9 @@ def objective(
 
         # Now use channels, strides, and num_res_units in your model definition
         Nclass = data_generator.Nclasses
-        model = UNet(
-            spatial_dims=3,
-            in_channels=1,
-            out_channels=Nclass,
-            channels=channels,
-            strides=strides_pattern,
-            num_res_units=num_res_units,
-        ).to(device)
 
-        # model = AttentionUnet(
-        #     spatial_dims=3,
-        #     in_channels=1,
-        #     out_channels=n_classes,
-        #     channels=channels,
-        #     strides=strides_pattern,
-        # ).to(device)            
+        model_type = trial.suggest_categorical("model_type", ["UNet", "AttentionUnet"])
+        model = create_model(model_type, Nclass, channels, strides_pattern, num_res_units, device)
 
         # # Sample learning rate using Optuna
         # learning_rate = trial.suggest_loguniform("learning_rate", 1e-5, 1e-2)
@@ -78,8 +65,13 @@ def objective(
         # Create UNet-Trainer
         train = trainer.unet(model, device, loss_function, metrics_function, optimizer)
 
+        # Sample crop size in increments of 16
+        # Will sample from [64, 80, 96, 112, 128, 144, 160, 176, 192]
+        dim_in = trial.suggest_int("crop_size", 64, 192, step=16)  
+        
         # Train the Model
         score = train.mlflow_train(data_generator, 
+                                    crop_size = dim_in,
                                     max_epochs = epochs,
                                     val_interval = val_interval,
                                     my_num_samples = num_samples,
@@ -197,3 +189,36 @@ def multi_gpu_objective(parent_run_id,
 
 ##############################################################################################################################
 
+def create_model(model_type, n_classes, channels, strides_pattern, num_res_units, device):
+    """
+    Create either a UNet or AttentionUnet model based on trial parameters.
+    
+    Args:
+        trial: Optuna trial object
+        n_classes: Number of output classes
+        channels: List of channel sizes
+        strides_pattern: List of stride values
+        num_res_units: Number of residual units (only used for UNet)
+        device: torch device to place model on
+    """
+    model_type = trial.suggest_categorical("model_type", ["UNet", "AttentionUnet"])
+    
+    if model_type == "UNet":
+        model = UNet(
+            spatial_dims=3,
+            in_channels=1,
+            out_channels=n_classes,
+            channels=channels,
+            strides=strides_pattern,
+            num_res_units=num_res_units,
+        )
+    else:  # AttentionUnet
+        model = AttentionUnet(
+            spatial_dims=3,
+            in_channels=1,
+            out_channels=n_classes,
+            channels=channels,
+            strides=strides_pattern,
+        )
+    
+    return model.to(device)

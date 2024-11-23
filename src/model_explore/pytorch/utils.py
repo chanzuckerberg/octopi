@@ -43,26 +43,7 @@ def set_seed(seed):
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
 
-###############################################################################################################################
-
-def parse_list(value: str) -> List[str]:
-    """
-    Parse a string representing a list of items.
-    Supports formats like '[item1,item2,item3]' or 'item1,item2,item3'.
-    """
-    value = value.strip("[]")  # Remove brackets if present
-    return [x.strip() for x in value.split(",")]
-
-###############################################################################################################################
-
-def parse_int_list(value: str) -> List[int]:
-    """
-    Parse a string representing a list of integers.
-    Supports formats like '[1,2,3]' or '1,2,3'.
-    """
-    return [int(x) for x in parse_list(value)]
-
-###############################################################################################################################
+###############################################################################################################################    
 
 def get_copick_coordinates(copick_run,             # CoPick run object containing the segmentation data
                            name: str,              # Name of the object or protein for which coordinates are being extracted
@@ -86,3 +67,53 @@ def get_copick_coordinates(copick_run,             # CoPick run object containin
     
     # Return the array of coordinates
     return coordinates
+
+###############################################################################################################################
+
+def parse_list(value: str) -> List[str]:
+    """
+    Parse a string representing a list of items.
+    Supports formats like '[item1,item2,item3]' or 'item1,item2,item3'.
+    """
+    value = value.strip("[]")  # Remove brackets if present
+    return [x.strip() for x in value.split(",")]
+
+###############################################################################################################################
+
+def parse_int_list(value: str) -> List[int]:
+    """
+    Parse a string representing a list of integers.
+    Supports formats like '[1,2,3]' or '1,2,3'.
+    """
+    return [int(x) for x in parse_list(value)]
+
+###############################################################################################################################
+
+def parse_target(value: List[str]) -> List[Tuple[str, Union[str, None], Union[str, None], int]]:
+    targets = []
+    for v in value:
+        parts = v.split(',')
+        if len(parts) == 2:
+            obj_name, radius = parts
+            targets.append((obj_name, None, None, int(radius)))
+        elif len(parts) == 4:
+            obj_name, user_id, session_id, radius = parts
+            targets.append((obj_name, user_id, session_id, int(radius)))
+        else:
+            raise ValueError('Each target must be in the form "name,radius" or "name,user_id,session_id,radius".')
+    return targets
+
+
+def parse_seg_target(value: List[str]) -> List[Tuple[str, Union[str, None], Union[str, None]]]:
+    seg_targets = []
+    for v in value:
+        parts = v.split(',')
+        if len(parts) == 1:
+            name = parts[0]
+            seg_targets.append((name, None, None))
+        elif len(parts) == 3:
+            name, user_id, session_id = parts
+            seg_targets.append((name, user_id, session_id))
+        else:
+            raise ValueError('Each seg-target must be in the form "name" or "name,user_id,session_id".')
+    return seg_targets
