@@ -1,7 +1,9 @@
+from typing import List, Tuple, Union
 from dotenv import load_dotenv
 import torch, random, os
 from typing import List
 import numpy as np
+import argparse
 
 ##############################################################################################################################
 
@@ -89,31 +91,44 @@ def parse_int_list(value: str) -> List[int]:
 
 ###############################################################################################################################
 
-def parse_target(value: List[str]) -> List[Tuple[str, Union[str, None], Union[str, None], int]]:
+def parse_target(value: str) -> Tuple[str, Union[str, None], Union[str, None]]:
+    """
+    Parse a single target string.
+    Expected formats:
+      - "name"
+      - "name,user_id,session_id"
+    """
+    parts = value.split(',')
+    if len(parts) == 1:
+        obj_name = parts[0]
+        return obj_name, None, None
+    elif len(parts) == 3:
+        obj_name, user_id, session_id = parts
+        return obj_name, user_id, session_id
+    else:
+        raise argparse.ArgumentTypeError(
+            f"Invalid target format: '{value}'. Expected 'name' or 'name,user_id,session_id'."
+        )
+
+
+def parse_seg_target(value: str) -> List[Tuple[str, Union[str, None], Union[str, None]]]:
+    """
+    Parse segmentation targets. Each target can have the format:
+      - "name"
+      - "name,user_id,session_id"
+    Multiple targets can be comma-separated.
+    """
     targets = []
-    for v in value:
-        parts = v.split(',')
-        if len(parts) == 2:
-            obj_name, radius = parts
-            targets.append((obj_name, None, None, int(radius)))
-        elif len(parts) == 4:
-            obj_name, user_id, session_id, radius = parts
-            targets.append((obj_name, user_id, session_id, int(radius)))
-        else:
-            raise ValueError('Each target must be in the form "name,radius" or "name,user_id,session_id,radius".')
-    return targets
-
-
-def parse_seg_target(value: List[str]) -> List[Tuple[str, Union[str, None], Union[str, None]]]:
-    seg_targets = []
-    for v in value:
-        parts = v.split(',')
+    for target in value.split(';'):  # Use ';' as a separator for multiple targets
+        parts = target.split(',')
         if len(parts) == 1:
             name = parts[0]
-            seg_targets.append((name, None, None))
+            targets.append((name, None, None))
         elif len(parts) == 3:
             name, user_id, session_id = parts
-            seg_targets.append((name, user_id, session_id))
+            targets.append((name, user_id, session_id))
         else:
-            raise ValueError('Each seg-target must be in the form "name" or "name,user_id,session_id".')
-    return seg_targets
+            raise argparse.ArgumentTypeError(
+                f"Invalid seg-target format: '{target}'. Expected 'name' or 'name,user_id,session_id'."
+            )
+    return targets
