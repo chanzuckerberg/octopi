@@ -7,6 +7,10 @@ from monai.transforms import (
     NormalizeIntensityd,
     EnsureChannelFirstd, 
     RandCropByLabelClassesd,
+    RandScaleIntensityd,
+    RandShiftIntensityd,
+    RandAdjustContrastd,
+    RandGaussianNoised,
     ScaleIntensityRanged,  
 )
 from model_explore.pytorch.datasets import dataset
@@ -173,6 +177,12 @@ class TrainLoaderManager:
             ),
             RandRotate90d(keys=["image", "label"], prob=0.5, spatial_axes=[0, 2]),
             RandFlipd(keys=["image", "label"], prob=0.5, spatial_axis=0),    
+
+            # Intensity-based augmentations
+            RandScaleIntensityd(keys="image", factors=(0.9, 1.1), prob=0.5),
+            RandShiftIntensityd(keys="image", offsets=(-0.1, 0.1), prob=0.5),
+            RandAdjustContrastd(keys="image", prob=0.5, gamma=(0.9, 1.1)),            
+            RandGaussianNoised(keys="image", prob=0.5, mean=0.0, std=0.1),            
         ])
 
         # Validation transforms
@@ -188,12 +198,8 @@ class TrainLoaderManager:
 
         # Augmentations to Explore in the Future: 
         # Intensity-based augmentations
-        # RandGaussianNoised(keys="image", prob=0.5, mean=0.0, std=0.1),
-        # RandAdjustContrastd(keys="image", prob=0.5, gamma=(0.9, 1.1)),
-        # RandScaleIntensityd(keys="image", factors=(0.9, 1.1), prob=0.5),
-        # RandShiftIntensityd(keys="image", offsets=(-0.1, 0.1), prob=0.5),
-        # RandGaussianSmoothd(keys="image", prob=0.5, sigma_x=(0.5, 1.5), sigma_y=(0.5, 1.5), sigma_z=(0.5, 1.5)),
         # RandHistogramShiftd(keys="image", prob=0.5, num_control_points=(3, 5))
+        # RandGaussianSmoothd(keys="image", prob=0.5, sigma_x=(0.5, 1.5), sigma_y=(0.5, 1.5), sigma_z=(0.5, 1.5)),
 
         # Geometric Transforms
         # RandAffined(

@@ -6,13 +6,11 @@ from model_explore.pytorch import io, trainer
 from mlflow.tracking import MlflowClient
 import torch, mlflow
 
-
 def objective(
     trial,  
     epochs,
     device,
     data_generator,
-    num_samples: int = 16,
     random_seed: int = 42,
     val_interval: int = 15):
 
@@ -30,7 +28,10 @@ def objective(
 
         # Monai Functions
         loss_function = TverskyLoss(include_background=True, to_onehot_y=True, softmax=True, alpha=alpha, beta=beta)  
-        metrics_function = ConfusionMatrixMetric(include_background=False, metric_name=["recall",'precision','f1 score'], reduction="none")
+        metrics_function = ConfusionMatrixMetric(include_background=False, 
+                                                 metric_name=["recall",'precision','f1 score'], 
+                                                 reduction="none",
+                                                 )
 
         # Sample number of channels
         num_layers = trial.suggest_int("num_layers", 3, 6)
@@ -51,7 +52,6 @@ def objective(
 
         # Now use channels, strides, and num_res_units in your model definition
         Nclass = data_generator.Nclasses
-
         model_type = trial.suggest_categorical("model_type", ["UNet", "AttentionUnet"])
         model = create_model(model_type, Nclass, channels, strides_pattern, num_res_units, device)
 
@@ -66,16 +66,22 @@ def objective(
         train = trainer.unet(model, device, loss_function, metrics_function, optimizer)
 
         # Sample crop size in increments of 16
-        # Will sample from [64, 80, 96, 112, 128, 144, 160, 176, 192]
-        dim_in = trial.suggest_int("crop_size", 64, 192, step=16)  
-        
+        # Will sample from [64, 80, 96, 112, 128, 144]
+        dim_in = trial.suggest_int("crop_size", 64, 176, step=16)  
+        num_samples = trial.suggest_int("num_samples", 4, 16, step=4)        
+
         # Train the Model
-        score = train.mlflow_train(data_generator, 
-                                    crop_size = dim_in,
-                                    max_epochs = epochs,
-                                    val_interval = val_interval,
-                                    my_num_samples = num_samples,
-                                    verbose=False)[0]
+        try:
+            score = train.mlflow_train(data_generator, 
+                                        crop_size = dim_in,
+                                        max_epochs = epochs,
+                                        val_interval = val_interval,
+                                        my_num_samples = num_samples,
+                                        verbose=False)[0]
+        except torch.cuda.OutOfMemoryError:
+            print(f"[Trial Failed] Out of Memory for crop_size={dim_in} and num_samples={num_samples}")
+            trial.set_user_attr("out_of_memory", True)  # Optional: Log this for analysis
+            return float("inf")  # Indicate failure for this trial
         
         # Log training parameters.
         params = {
@@ -201,7 +207,6 @@ def create_model(model_type, n_classes, channels, strides_pattern, num_res_units
         num_res_units: Number of residual units (only used for UNet)
         device: torch device to place model on
     """
-    model_type = trial.suggest_categorical("model_type", ["UNet", "AttentionUnet"])
     
     if model_type == "UNet":
         model = UNet(

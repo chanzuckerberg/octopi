@@ -4,7 +4,11 @@ from monai.data import decollate_batch
 from monai.transforms import AsDiscrete
 import matplotlib.pyplot as plt
 from tqdm import tqdm 
+import warnings, re
 import torch, os
+
+# Not Ideal, but Necessary if Class is Missing From Dataset
+# warnings.filterwarnings("ignore", category=UserWarning)
 
 class unet:
 
@@ -117,7 +121,7 @@ class unet:
         best_metric_epoch = -1
 
         # Produce Dataloaders for the First Training Iteration
-        self.train_loader, self.val_loader = data_load_gen.create_train_dataloaders( crop_size = crop_size, num_samples = my_num_samples )                
+        self.train_loader, self.val_loader = data_load_gen.create_train_dataloaders( crop_size = crop_size, num_samples = my_num_samples )
 
         # Initialize tqdm around the epoch loop
         for epoch in tqdm(range(max_epochs), desc="Training Progress", unit="epoch"):
@@ -128,7 +132,7 @@ class unet:
 
             # Compute and log average epoch loss
             epoch_loss = self.train_update()
-            results['loss'].append((epoch + 1, epoch_loss))            
+            results['loss'].append((epoch + 1, epoch_loss))
             metrics.my_log_metric(f"train_loss", epoch_loss, epoch + 1, self.client, self.trial_run_id)
 
             if (epoch + 1) % val_interval == 0 or (epoch + 1) == max_epochs:

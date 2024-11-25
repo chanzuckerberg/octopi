@@ -226,10 +226,12 @@ def get_model_parameters(model):
 
     model_parameters = {
         'model_name': model.__class__.__name__, 
-        'channels': model.channels, 
-        'strides': model.strides,
-        'res_units': model.num_res_units        
+        'channels': model.channels,
+        'strides': model.strides
     }
+
+    if model.__class__.__name__ == 'UNet':
+        model_parameters['res_units'] = model.num_res_units
 
     return model_parameters
 

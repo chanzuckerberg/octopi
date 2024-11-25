@@ -215,7 +215,7 @@ def parse_args():
 
     parser.add_argument("--config", type=str, required=True, help="Path to the CoPick configuration file.")
     parser.add_argument("--target", type=utils.parse_target, action="append", default=None, help='Target specifications: "name,user_id,session_id".')
-    parser.add_argument("--seg-target", type=utils.parse_target, action="append", default=None, help='Segmentation targets: "name" or "name,user_id,session_id".')
+    parser.add_argument("--seg-target", type=utils.parse_target, action="append", default=[], help='Segmentation targets: "name" or "name,user_id,session_id".')
     parser.add_argument("--voxel-size", type=float, default=10, help="Voxel size for tomogram reconstruction.")
     parser.add_argument("--radius-scale", type=float, default=0.8, help="Scale factor for object radius.")
     parser.add_argument("--tomogram-algorithm", type=str, default="wbp", help="Tomogram reconstruction algorithm.")
