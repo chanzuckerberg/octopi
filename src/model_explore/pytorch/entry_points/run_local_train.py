@@ -2,7 +2,6 @@ from monai.losses import DiceLoss, FocalLoss, TverskyLoss
 from model_explore.pytorch.datasets import generators
 from model_explore.pytorch import io, trainer, utils
 from monai.metrics import ConfusionMatrixMetric
-from monai.networks.nets import UNet
 import torch, os, argparse
 from typing import List, Optional
 
@@ -19,11 +18,14 @@ def train_model(
     strides: List[int] = [2,2,1],
     res_units: int = 2,
     Nclass: int = 3,
+    model_type: str = 'UNet',
     model_save_path: str = 'results',
     model_weights: Optional[str] = None,
+    dim_in: int = 96,
     num_tomo_crops: int = 16,
     tomo_batch_size: int = 15,
     lr: float = 1e-3,
+    tversky_alpha: float = 0.5,
     num_epochs: int = 100,
     val_interval: int = 25,
     ):
@@ -46,19 +48,14 @@ def train_model(
     data_generator.get_reload_frequency(num_epochs)
 
     # Monai Functions
-    loss_function = TverskyLoss(include_background=True, to_onehot_y=True, softmax=True)  
+    alpha = tversky_alpha
+    beta = 1 - alpha
+    loss_function = TverskyLoss(include_background=True, to_onehot_y=True, softmax=True, alpha=alpha, beta=beta)  
     metrics_function = ConfusionMatrixMetric(include_background=False, metric_name=["recall",'precision','f1 score'], reduction="none")
 
     # Create UNet Model and Load Weights
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    model = UNet(
-        spatial_dims=3,
-        in_channels=1,
-        out_channels=Nclass,
-        channels=channels,
-        strides=strides,
-        num_res_units=res_units,
-    ).to(device)
+    model = utils.create_model(model_type, Nclass, channels, strides, res_units, device)
     if model_weights: 
         model.load_state_dict(torch.load(model_weights, weights_only=True))
 
@@ -71,6 +68,7 @@ def train_model(
     results = train.local_train(data_generator, 
                                 model_save_path, 
                                 max_epochs = num_epochs,
+                                crop_size = dim_in,
                                 my_num_samples = num_tomo_crops,
                                 val_interval = val_interval,
                                 verbose=True)
@@ -98,10 +96,12 @@ def cli():
     parser.add_argument("--strides", type=utils.parse_int_list, required=False, default = [2,2,1], help="List of stride sizes for each layer, e.g., 2,2,1 or [2,2,1].")
     parser.add_argument("--res-units", type=int, required=False, default = 2, help="Number of residual units in the UNet.")
     parser.add_argument("--Nclass", type=int, required=False, default = 3, help="Number of prediction classes in the model.")
+    parser.add_argument("--model-type", type=str, required=False, default = 'UNet', help="Type of model to use.")
     parser.add_argument("--model-save-path", type=str, required=False, default='results', help="Path to save the trained model and results.")
     parser.add_argument("--num-tomo-crops", type=int, required=False, default = 16, help="Number of tomogram crops to use.")
     parser.add_argument("--tomo-batch-size", type=int, required=False, default=15, help="Number of tomograms to load per epoch for training.")
     parser.add_argument("--lr", type=float, required=False, default = 1e-3, help="Learning rate for the optimizer.")
+    parser.add_argument("--tversky-alpha", type=float, required=False, default = 0.5, help="Alpha parameter for the Tversky loss.")
     parser.add_argument("--num-epochs", type=int, required=False, default = 100, help="Number of training epochs.")
     parser.add_argument("--val-interval", type=int, required=False, default=25, help="Interval for validation metric calculations.")
     parser.add_argument("--trainRunIDs", type=utils.parse_list, required=False, help="List of training run IDs, e.g., run1,run2,run3 or [run1,run2,run3].")
@@ -121,10 +121,13 @@ def cli():
         strides=args.strides,
         res_units=args.res_units,
         Nclass=args.Nclass,
+        model_type=args.model_type,
         model_save_path=args.model_save_path,
+        dim_in=args.dim_in,
         num_tomo_crops=args.num_tomo_crops,
         tomo_batch_size=args.tomo_batch_size,
         lr=args.lr,
+        tversky_alpha=args.tversky_alpha,
         num_epochs=args.num_epochs,
         val_interval=args.val_interval,
         trainRunIDs=args.trainRunIDs,

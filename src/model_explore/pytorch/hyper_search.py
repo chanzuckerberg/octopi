@@ -67,17 +67,17 @@ def objective(
 
         # Sample crop size in increments of 16
         # Will sample from [64, 80, 96, 112, 128, 144]
-        dim_in = trial.suggest_int("crop_size", 64, 176, step=16)  
-        num_samples = trial.suggest_int("num_samples", 4, 16, step=4)        
+        dim_in = trial.suggest_int("crop_size", 64, 144, step=16)  
+        num_samples = trial.suggest_int("num_samples", 4, 16, step=4)       
 
         # Train the Model
         try:
             score = train.mlflow_train(data_generator, 
-                                        crop_size = dim_in,
-                                        max_epochs = epochs,
-                                        val_interval = val_interval,
-                                        my_num_samples = num_samples,
-                                        verbose=False)[0]
+                                       crop_size = dim_in,
+                                       max_epochs = epochs,
+                                       val_interval = val_interval,
+                                       my_num_samples = num_samples,
+                                       verbose=False)[0]
         except torch.cuda.OutOfMemoryError:
             print(f"[Trial Failed] Out of Memory for crop_size={dim_in} and num_samples={num_samples}")
             trial.set_user_attr("out_of_memory", True)  # Optional: Log this for analysis
@@ -97,15 +97,14 @@ def objective(
 
 def multi_gpu_objective(parent_run_id,
                         trial,  
-                        n_classes,
-                        train_loader, 
-                        val_loader, 
-                        loss_function,
-                        metrics_function, 
                         epochs,
+                        data_generator,
                         random_seed = 42,
+                        val_interval: int = 5,
                         gpu_count = 1,):
     
+    utils.set_seed(random_seed)
+
     # Initialize MLflow client
     mlflow_client = MlflowClient()
 
@@ -126,8 +125,6 @@ def multi_gpu_objective(parent_run_id,
     target_run_id = trial_run.info.run_id
     print(f"Logging trial {trial.number} data to MLflow run: {target_run_id}")
 
-    utils.set_seed(random_seed)
-
     # Asign each trial to a specific GPU based on the trial number
     if gpu_count > 1:
         gpu_id = trial.number % gpu_count  # Cycle through available GPUs
@@ -135,14 +132,32 @@ def multi_gpu_objective(parent_run_id,
         torch.cuda.set_device(device)  # Set the current GPU for this trial
     else:
         device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+    # Suggest alpha between 0.0 and 1.0 - Calculate beta based on the constraint alpha + beta = 1.0
+    # alpha = trial.suggest_float("alpha", 0.15, 0.85)
+    # beta = 1.0 - alpha
+
+    alpha = 0.24
+    beta = 1.0 - alpha
+
+    # Monai Functions
+    loss_function = TverskyLoss(include_background=True, to_onehot_y=True, softmax=True, alpha=alpha, beta=beta)  
+    metrics_function = ConfusionMatrixMetric(include_background=False, 
+                                                metric_name=["recall",'precision','f1 score'], 
+                                                reduction="none",
+                                                )        
         
     # Sample number of channels
-    num_layers = trial.suggest_int("num_layers", 3, 6)
+    # num_layers = trial.suggest_int("num_layers", 3, 6)
     
-    # Generate increasing channels based on 16, 32, 64
-    base_channel = trial.suggest_categorical("base_channel", [8, 16, 32])
+    # # Generate increasing channels based on 16, 32, 64
+    # base_channel = trial.suggest_categorical("base_channel", [8, 16, 32])
+    # channels = [base_channel * (2 ** min(i, num_layers - 2)) for i in range(num_layers)]
+    
+    num_layers = 4
+    base_channel = 16
     channels = [base_channel * (2 ** min(i, num_layers - 2)) for i in range(num_layers)]
-    
+
     # Generate strides with exact control for num_downsampling_layers
     strides_pattern = []
     for i in range(len(channels)-1):
@@ -150,48 +165,58 @@ def multi_gpu_objective(parent_run_id,
         else:                              strides_pattern.append(1)
 
     # Number of residual units
-    num_res_units = trial.suggest_int("num_res_units", 1, 3)
+    # num_res_units = trial.suggest_int("num_res_units", 1, 3)
+    num_res_units = 2
 
-    # mlflow.log_params({
-    #     "channels": channels,
-    #     "num_res_units": num_res_units
-    # })
-
-    params = {
-        "channels": channels,
-        "strides_pattern": strides_pattern,
-        "num_res_units": num_res_units,
-    }
-
-    for param_key, param_value in params.items():
-        mlflow_client.log_param(run_id = target_run_id, key=param_key, value=param_value)
-        
     # Now use channels, strides, and num_res_units in your model definition
-    model = UNet(
-        spatial_dims=3,
-        in_channels=1,
-        out_channels=n_classes,
-        channels=channels,
-        strides=strides_pattern,
-        num_res_units=num_res_units,
-    ).to(device)
+    Nclass = data_generator.Nclasses
+    model_type = trial.suggest_categorical("model_type", ["UNet", "AttentionUnet"])
+    model = create_model(model_type, Nclass, channels, strides_pattern, num_res_units, device)
 
     # Define your loss and optimizer, and return the objective (e.g., validation loss)
     lr = 1e-3
     optimizer = torch.optim.Adam(model.parameters(), lr)
+    
+    # Create UNet-Trainer
+    train = trainer.unet(model, device, loss_function, metrics_function, optimizer)
 
-    score = train.mlflow_train(train_loader, val_loader, 
-                               model, device, loss_function, 
-                               metrics_function, 
-                               optimizer, max_epochs=epochs,
-                               client = mlflow_client,
-                               trial_run_id = target_run_id,
-                               my_device = device)
+    # Sample crop size in increments of 16
+    # Will sample from [64, 80, 96, 112, 128, 144, 160]
+    dim_in = trial.suggest_int("crop_size", 64, 160, step=16)  
+    num_samples = trial.suggest_int("num_samples", 4, 16, step=4)     
 
-    # Log the score (e.g., validation loss or F1 score) for each trial
-    my_metrics.my_log_metric('score', score, 0, mlflow_client, target_run_id)
+    # Train the Model
+    try:
+        score = train.mlflow_train(data_generator, 
+                                    crop_size = dim_in,
+                                    max_epochs = epochs,
+                                    val_interval = val_interval,
+                                    my_num_samples = num_samples,
+                                    verbose=True)[0]        
+    except torch.cuda.OutOfMemoryError:
+        print(f"[Trial Failed] Out of Memory for crop_size={dim_in} and num_samples={num_samples}")
+        trial.set_user_attr("out_of_memory", True)  # Optional: Log this for analysis
+        return float("inf")  # Indicate failure for this trial
+    
 
-    return objective
+    import pdb; pdb.set_trace() 
+
+    # Log training parameters.
+    params = {
+        'model': io.get_model_parameters(model),
+        'optimizer': io.get_optimizer_parameters(train)
+    }    
+    my_metrics.my_log_param(io.flatten_params(params), run_id = target_run_id,   )
+
+    import pdb; pdb.set_trace()    
+    
+    # for param_key, param_value in params.items():
+    #     mlflow_client.log_param(run_id = target_run_id, key=param_key, value=param_value)    
+
+    # # Log the score (e.g., validation loss or F1 score) for each trial
+    # my_metrics.my_log_metric('score', score, 0, mlflow_client, target_run_id)
+
+    return score
 
 ##############################################################################################################################
 

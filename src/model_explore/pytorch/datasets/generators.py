@@ -158,58 +158,6 @@ class TrainLoaderManager:
         train_batch_size = 1
         val_batch_size = 1
 
-        # Non-random transforms to be cached
-        non_random_transforms = Compose([
-            EnsureChannelFirstd(keys=["image", "label"], channel_dim="no_channel"),
-            NormalizeIntensityd(keys="image"),
-            Orientationd(keys=["image", "label"], axcodes="RAS")
-        ])
-
-        # Random transforms to be applied during training
-        random_transforms = Compose([
-            # Geometric Transforms
-            RandCropByLabelClassesd(
-                keys=["image", "label"],
-                label_key="label",
-                spatial_size=[crop_size, crop_size, crop_size],
-                num_classes=self.Nclasses,
-                num_samples=num_samples
-            ),
-            RandRotate90d(keys=["image", "label"], prob=0.5, spatial_axes=[0, 2]),
-            RandFlipd(keys=["image", "label"], prob=0.5, spatial_axis=0),    
-
-            # Intensity-based augmentations
-            RandScaleIntensityd(keys="image", factors=(0.9, 1.1), prob=0.5),
-            RandShiftIntensityd(keys="image", offsets=(-0.1, 0.1), prob=0.5),
-            RandAdjustContrastd(keys="image", prob=0.5, gamma=(0.9, 1.1)),            
-            RandGaussianNoised(keys="image", prob=0.5, mean=0.0, std=0.1),            
-        ])
-
-        # Validation transforms
-        val_transforms = Compose([
-            RandCropByLabelClassesd(
-                    keys=["image", "label"],
-                    label_key="label",
-                    spatial_size=[crop_size, crop_size, crop_size],
-                    num_classes=self.Nclasses,
-                    num_samples=num_samples, 
-            ),
-        ])
-
-        # Augmentations to Explore in the Future: 
-        # Intensity-based augmentations
-        # RandHistogramShiftd(keys="image", prob=0.5, num_control_points=(3, 5))
-        # RandGaussianSmoothd(keys="image", prob=0.5, sigma_x=(0.5, 1.5), sigma_y=(0.5, 1.5), sigma_z=(0.5, 1.5)),
-
-        # Geometric Transforms
-        # RandAffined(
-        #     keys=["image", "label"],
-        #     rotate_range=(0.1, 0.1, 0.1),  # Rotation angles (radians) for x, y, z axes
-        #     scale_range=(0.1, 0.1, 0.1),   # Scale range for isotropic/anisotropic scaling
-        #     prob=0.5,                      # Probability of applying the transform
-        #     padding_mode="border"          # Handle out-of-bounds values
-        # )
-
         # We Only Need to Reload the Training Dataset if the Total Number of Runs is larger than 
         # the tomo batch size
         if self.train_loader is None: 
@@ -221,10 +169,11 @@ class TrainLoaderManager:
                                                 progress_update=False)
 
             # Create the cached dataset with non-random transforms
-            train_ds = CacheDataset(data=train_files, transform=non_random_transforms, cache_rate=1.0)
+            train_ds = CacheDataset(data=train_files, transform=self._get_transforms(), cache_rate=1.0)
 
             # Wrap the cached dataset to apply random transforms during iteration
-            self.dynamic_train_dataset = dataset.DynamicDataset(data=train_ds, transform=random_transforms)
+            self.dynamic_train_dataset = dataset.DynamicDataset(data=train_ds, 
+                                                                transform=self._get_random_transforms(crop_size, num_samples))
 
             # DataLoader remains the same
             self.train_loader = DataLoader(
@@ -242,7 +191,7 @@ class TrainLoaderManager:
                                                 self.target_name, self.target_session_id, self.target_user_id, 
                                                 progress_update=False)
 
-            train_ds = CacheDataset(data=train_files, transform=non_random_transforms, cache_rate=1.0)
+            train_ds = CacheDataset(data=train_files, transform=self._get_transforms(), cache_rate=1.0)
             self.dynamic_train_dataset.update_data(train_ds)
 
         # We Only Need to Reload the Validation Dataset if the Total Number of Runs is larger than 
@@ -255,10 +204,10 @@ class TrainLoaderManager:
                                                 progress_update=False)    
 
             # Create validation dataset
-            val_ds = CacheDataset(data=val_files, transform=non_random_transforms, cache_rate=1.0)
+            val_ds = CacheDataset(data=val_files, transform=self._get_transforms(), cache_rate=1.0)
 
             # Wrap the cached dataset to apply random transforms during iteration
-            self.dynamic_validation_dataset = dataset.DynamicDataset(data=val_ds, transform=val_transforms)
+            self.dynamic_validation_dataset = dataset.DynamicDataset(data=val_ds, transform=self._get_random_transforms(crop_size, num_samples))
 
             # Create validation DataLoader
             self.val_loader  = DataLoader(
@@ -275,6 +224,88 @@ class TrainLoaderManager:
                                                 progress_update=False)  
 
         return self.train_loader, self.val_loader
+    
+    def _get_transforms(self):
+        """
+        Returns non-random transforms.
+        """
+        return Compose([
+            EnsureChannelFirstd(keys=["image", "label"], channel_dim="no_channel"),
+            NormalizeIntensityd(keys="image"),
+            Orientationd(keys=["image", "label"], axcodes="RAS")
+        ])
+
+    def _get_random_transforms(self, crop_size, num_samples):
+        """
+        Returns random transforms.
+        """
+        return Compose([
+            RandCropByLabelClassesd(
+                keys=["image", "label"],
+                label_key="label",
+                spatial_size=[crop_size, crop_size, crop_size],
+                num_classes=self.Nclasses,
+                num_samples=num_samples
+            ),
+            RandRotate90d(keys=["image", "label"], prob=0.5, spatial_axes=[0, 2]),
+            RandFlipd(keys=["image", "label"], prob=0.5, spatial_axis=0),
+            RandScaleIntensityd(keys="image", factors=(0.9, 1.1), prob=0.5),
+            RandShiftIntensityd(keys="image", offsets=(-0.1, 0.1), prob=0.5),
+            RandAdjustContrastd(keys="image", prob=0.5, gamma=(0.9, 1.1)),
+            RandGaussianNoised(keys="image", prob=0.5, mean=0.0, std=0.1),
+        ])    
+    
+        # Non-random transforms to be cached
+        # non_random_transforms = Compose([
+        #     EnsureChannelFirstd(keys=["image", "label"], channel_dim="no_channel"),
+        #     NormalizeIntensityd(keys="image"),
+        #     Orientationd(keys=["image", "label"], axcodes="RAS")
+        # ])
+
+        # Random transforms to be applied during training
+        # random_transforms = Compose([
+        #     # Geometric Transforms
+        #     RandCropByLabelClassesd(
+        #         keys=["image", "label"],
+        #         label_key="label",
+        #         spatial_size=[crop_size, crop_size, crop_size],
+        #         num_classes=self.Nclasses,
+        #         num_samples=num_samples
+        #     ),
+        #     RandRotate90d(keys=["image", "label"], prob=0.5, spatial_axes=[0, 2]),
+        #     RandFlipd(keys=["image", "label"], prob=0.5, spatial_axis=0),    
+
+        #     # Intensity-based augmentations
+        #     RandScaleIntensityd(keys="image", factors=(0.9, 1.1), prob=0.5),
+        #     RandShiftIntensityd(keys="image", offsets=(-0.1, 0.1), prob=0.5),
+        #     RandAdjustContrastd(keys="image", prob=0.5, gamma=(0.9, 1.1)),            
+        #     RandGaussianNoised(keys="image", prob=0.5, mean=0.0, std=0.1),            
+        # ])
+
+        # # Validation transforms
+        # val_transforms = Compose([
+        #     RandCropByLabelClassesd(
+        #             keys=["image", "label"],
+        #             label_key="label",
+        #             spatial_size=[crop_size, crop_size, crop_size],
+        #             num_classes=self.Nclasses,
+        #             num_samples=num_samples, 
+        #     ),
+        # ])
+    
+        # Augmentations to Explore in the Future: 
+        # Intensity-based augmentations
+        # RandHistogramShiftd(keys="image", prob=0.5, num_control_points=(3, 5))
+        # RandGaussianSmoothd(keys="image", prob=0.5, sigma_x=(0.5, 1.5), sigma_y=(0.5, 1.5), sigma_z=(0.5, 1.5)),
+
+        # Geometric Transforms
+        # RandAffined(
+        #     keys=["image", "label"],
+        #     rotate_range=(0.1, 0.1, 0.1),  # Rotation angles (radians) for x, y, z axes
+        #     scale_range=(0.1, 0.1, 0.1),   # Scale range for isotropic/anisotropic scaling
+        #     prob=0.5,                      # Probability of applying the transform
+        #     padding_mode="border"          # Handle out-of-bounds values
+        # )
     
     def get_reload_frequency(self, num_epochs: int):
         """

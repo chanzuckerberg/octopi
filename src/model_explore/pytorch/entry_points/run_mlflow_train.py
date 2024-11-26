@@ -19,11 +19,13 @@ def train_model_on_mflow(
     strides: List[int] = [2,2,1],
     res_units: int = 2,
     Nclass: int = 3,    
+    model_type: str = 'UNet',    
     model_save_path: str = None,
     model_weights: str = None, 
     num_tomo_crops: int = 16,
     tomo_batch_size: int = 20,
     lr: float = 1e-3,
+    tversky_alpha: float = 0.5,    
     num_epochs: int = 100,
     val_interval: int = 25,
     mlflow_tracking_uri: str = "http://mlflow.mlflow.svc.cluster.local:5000", 
@@ -48,19 +50,14 @@ def train_model_on_mflow(
     data_generator.get_reload_frequency(num_epochs)    
 
     # Monai Functions
-    loss_function = TverskyLoss(include_background=True, to_onehot_y=True, softmax=True)  
+    alpha = tversky_alpha
+    beta = 1 - alpha
+    loss_function = TverskyLoss(include_background=True, to_onehot_y=True, softmax=True, alpha=alpha, beta=beta)  
     metrics_function = ConfusionMatrixMetric(include_background=False, metric_name=["recall",'precision','f1 score'], reduction="none")
 
     # Create UNet Model and Load Weights
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    model = UNet(
-        spatial_dims=3,
-        in_channels=1,
-        out_channels=Nclass,
-        channels=channels,
-        strides=strides,
-        num_res_units=res_units,
-    ).to(device)
+    model = utils.create_model(model_type, Nclass, channels, strides, res_units, device)
     if model_weights:
         model.load_state_dict(torch.load(model_weights, weights_only=True))
 
@@ -111,6 +108,7 @@ def cli():
     parser.add_argument("--strides", type=utils.parse_int_list, default = [2,2,1], help="List of stride sizes for the UNet model, e.g., 2,2,1 or [2,2,1].")
     parser.add_argument("--res-units", type=int, required=False, default=2, help="Number of residual units in the UNet model.")
     parser.add_argument("--Nclass", type=int, required=False, default=3, help="Number of prediction classes in the model.")
+    parser.add_argument("--model-type", type=str, required=False, default = 'UNet', help="Type of model to use.")
     parser.add_argument("--model-save-path", type=str, required=False, default=None, help="Path to save the trained model.")
     parser.add_argument("--model-weights", type=str, required=False, default=None, help="Path to the pretrained model weights.")
     parser.add_argument("--target-name", type=str, required=True, help="Copick Name of the target segmentation for training.")
@@ -119,6 +117,7 @@ def cli():
     parser.add_argument("--num-tomo-crops", type=int, required=False, default = 16, help="Number of tomographic crops per training batch.")
     parser.add_argument("--tomo-batch-size", type=int, required=False, default = 25, help="Number of tomograms to load per epoch for training.")
     parser.add_argument("--lr", type=float, required=False, default=1e-3, help="Learning rate for training.")
+    parser.add_argument("--tversky-alpha", type=float, required=False, default = 0.5, help="Alpha parameter for the Tversky loss.")
     parser.add_argument("--num-epochs", type=int, required=False, default=100, help="Number of epochs for training.")
     parser.add_argument("--val-interval", type=int, required=False, default=15, help="Number of epochs to wait prior to measuring validation metrics.")    
     parser.add_argument("--mlflow-tracking-uri", type=str, required=False, default = "http://mlflow.mlflow.svc.cluster.local:5000", help="MLflow tracking URI.")
@@ -136,6 +135,7 @@ def cli():
         strides=args.strides,
         res_units=args.res_units,
         Nclass=args.Nclass,
+        model_type=args.model_type,        
         model_save_path=args.model_save_path,
         model_weights=args.model_weights,
         target_name=args.target_name,
@@ -144,6 +144,7 @@ def cli():
         num_tomo_crops=args.num_tomo_crops,
         tomo_batch_size=args.tomo_batch_size,
         lr=args.lr,
+        tversky_alpha=args.tversky_alpha,        
         num_epochs=args.num_epochs,
         mlflow_tracking_uri=args.mlflow_tracking_uri,
         mlflow_experiment_name=args.mlflow_experiment_name,

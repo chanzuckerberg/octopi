@@ -5,14 +5,16 @@ import torch, argparse
 def inference(
     copick_config_path: str,
     model_weights: str, 
+    model_type: str = 'UNet',
     segmentation_name: str = 'segment-predict',
     segmentation_user_id: str = 'monai',
     segmentation_session_id: str = '1',
     voxel_size: float = 10,
     tomo_algorithm: str = 'wbp',
     channels: List[int] = [32,64,128,128],
-    strides: List[int] = [2,2,1], 
+    strides: List[int] = [2,2,1],
     res_units: int = 2,
+    dim_in: int = 96,
     nclass: int = 3,    
     run_ids: List[str] = None,
     ):
@@ -41,10 +43,12 @@ def inference(
         predict = segmentation.MultiGPUPredictor(
             copick_config_path,
             model_weights,
+            model_type=model_type,
             my_channels=channels,
             my_strides=strides,
             my_num_res_units=res_units,
-            my_nclass=nclass
+            my_nclass=nclass,
+            dim_in=dim_in
         )
 
         # Run Multi-GPU inference
@@ -63,10 +67,12 @@ def inference(
         predict = segmentation.Predictor(
             copick_config_path,
             model_weights,
+            model_type=model_type,
             my_channels=channels,
             my_strides=strides,
             my_num_res_units=res_units,
-            my_nclass=nclass
+            my_nclass=nclass,
+            dim_in=dim_in
         )
 
         # Run batch prediction
@@ -101,7 +107,7 @@ def cli():
     parser.add_argument("--segmentation-user-id", type=str, default="monai", required=False, help="User ID associated with the segmentation. Default is 'monai'.")
     parser.add_argument("--segmentation-session-id", type=str, default="1", required=False, help="Session ID for the segmentation. Default is '1'.")
     parser.add_argument("--run-ids", type=utils.parse_list, default=None, required=False, help="List of run IDs for prediction, e.g., run1,run2 or [run1,run2]. If not provided, all available runs will be processed.")
-
+    parser.add_argument("--dim-in", type=int, default=96, required=False, help="Dimension of the input tomograms. Default is 96.")
     # Parse arguments
     args = parser.parse_args()
 
@@ -113,6 +119,7 @@ def cli():
         strides=args.strides,
         res_units=args.res_units,
         nclass=args.n_class,
+        dim_in=args.dim_in,
         voxel_size=args.voxel_size,
         tomo_algorithm=args.tomogram_algorithm,
         segmentation_name=args.segmentation_name,

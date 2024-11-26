@@ -7,8 +7,8 @@ from monai.transforms import (
     Activationsd,
     AsDiscreted
 )
+from model_explore.pytorch import io, utils
 from copick_utils.writers import write
-from model_explore.pytorch import io
 from typing import List, Optional
 import torch, copick
 from tqdm import tqdm
@@ -19,16 +19,18 @@ class Predictor:
     def __init__(self, 
                  config: str,
                  model_weights: str,
+                 model_type: str = 'UNet',
                  my_channels: List[int] = [48, 64, 80, 80],
                  my_strides: List[int] = [2, 2, 1],
                  my_num_res_units: int = 1, 
                  my_nclass: int = 3,
+                 dim_in: int = 96,
                  device: Optional[str] = None):
 
         self.config = config
         self.root = copick.from_file(config)
         self.Nclass = my_nclass     
-
+        self.dim_in = dim_in
         # Get the number of GPUs available
         num_gpus = torch.cuda.device_count()
         if num_gpus == 0:
@@ -41,14 +43,7 @@ class Predictor:
         print('Running Inference On: ', self.device)
 
         # Create UNet Model and Load Weights
-        self.model = UNet(
-            spatial_dims=3,
-            in_channels=1,
-            out_channels=self.Nclass,
-            channels=my_channels,
-            strides=my_strides,
-            num_res_units=my_num_res_units,
-        ).to(self.device)
+        self.model = utils.create_model(model_type, self.Nclass, my_channels, my_strides, my_num_res_units, self.device)
         self.model.load_state_dict(torch.load(model_weights, weights_only=True))
 
         self.post_transforms = Compose([
@@ -61,7 +56,7 @@ class Predictor:
         def _compute(input):
             return sliding_window_inference(
                 inputs=input,
-                roi_size=(96, 96, 96),
+                roi_size=(self.dim_in, self.dim_in, self.dim_in),
                 sw_batch_size=4,  # one window is proecessed at a time
                 predictor=self.model,
                 overlap=0.5,
@@ -136,8 +131,9 @@ class MultiGPUPredictor(Predictor):
                  channels: List[int] = [48, 64, 80, 80],
                  strides: List[int] = [2, 2, 1],
                  num_res_units: int = 1,
-                 nclass: int = 3):
-        super().__init__(config, model_weights, channels, strides, num_res_units, nclass)
+                 nclass: int = 3,
+                 dim_in: int = 96):
+        super().__init__(config, model_weights, channels, strides, num_res_units, nclass, dim_in)
         self.num_gpus = torch.cuda.device_count()
         if self.num_gpus < 2:
             raise RuntimeError("MultiGPUPredictor requires at least 2 GPUs.")

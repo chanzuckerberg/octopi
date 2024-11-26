@@ -1,6 +1,6 @@
 from model_explore.pytorch import io, hyper_search, utils
 from model_explore.pytorch.datasets import generators
-import torch, mlflow, os, copick, optuna, argparse
+import torch, mlflow, optuna, argparse
 from typing import List
 
 def model_search(
@@ -20,9 +20,28 @@ def model_search(
     trainRunIDs: List[str] = None,
     validateRunIDs: List[str] = None,   
     ):
+    """
+    Perform model architecture search using Optuna, MLflow, and a custom data generator.
 
-    # Split Experiment into Train and Validation Runs
-    # Nclass = io.get_num_classes(copick_config)
+    Parameters:
+    - copick_config (str): Path to CoPick configuration file.
+    - target_name (str): Name of the target for segmentation.
+    - target_user_id (str): Optional user ID for tracking (default: None).
+    - target_session_id (str): Optional session ID for tracking (default: None).
+    - tomo_algorithm (str): Tomogram algorithm to use (default: 'wbp').
+    - voxel_size (float): Voxel size for tomograms (default: 10).
+    - Nclass (int): Number of prediction classes (default: 3).
+    - mlflow_experiment_name (str): MLflow experiment name (default: 'model-search').
+    - mlflow_tracking_uri (str): URI for MLflow tracking server.
+    - random_seed (int): Seed for reproducibility (default: 42).
+    - num_epochs (int): Number of epochs per trial.
+    - num_trials (int): Number of trials for hyperparameter optimization.
+    - tomo_batch_size (int): Batch size for tomogram loading.
+    - trainRunIDs (List[str]): List of training run IDs.
+    - validateRunIDs (List[str]): List of validation run IDs.
+    """
+
+    # Initialize the data generator to manage training and validation datasets
     data_generator = generators.TrainLoaderManager(copick_config, 
                                                    target_name, 
                                                    target_session_id = target_session_id,
@@ -31,22 +50,20 @@ def model_search(
                                                    voxel_size = voxel_size,                                                    
                                                    Nclasses = Nclass,
                                                    tomo_batch_size = tomo_batch_size)
-    
+    # Split datasets into training and validation
     data_generator.get_data_splits(trainRunIDs = trainRunIDs,
                                    validateRunIDs = validateRunIDs)
 
     # Get the reload frequency
     data_generator.get_reload_frequency(num_epochs) 
 
-    # Determine Device to Run Optuna On
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-
+    # Define Optuna pruning strategy to stop unpromising trials
     pruning = True
     pruner: optuna.pruners.BasePruner = (
         optuna.pruners.MedianPruner() if pruning else optuna.pruners.NopPruner()
     )
 
-    # Option 1: TPE sampler
+    # Option 1: TPE sampler - Tree-structured Parzen Estimator (TPE) for hyperparameter sampling
     tpe_sampler = optuna.samplers.TPESampler(
         n_startup_trials=10,     # Number of initial random trials before TPE kicks in
         n_ei_candidates=24,      # Number of candidate samples for Expected Improvement
@@ -59,7 +76,7 @@ def model_search(
     #     multivariate=True        # Use multivariate TPE for correlated parameter sampling
     # )
 
-    # Set up ML-Flow - Start up with defaults for 
+    # Initialize MLflow for experiment tracking
     try:
         utils.mlflow_setup()
         mlflow.set_tracking_uri(mlflow_tracking_uri)
@@ -69,6 +86,19 @@ def model_search(
 
     print(f'Running Architecture Search Over 1 GPU\n')
     storage = "sqlite:///trials.db"
+
+    # Get available GPUs (for example, on an 4 GPU node) - Run the appropriate function based on the number of GPUs
+    gpu_count = torch.cuda.device_count()
+    if gpu_count > 1:
+        multi_gpu_optuna(storage, tpe_sampler, pruner, data_generator, num_epochs, random_seed, num_trials, gpu_count)
+    else:
+        single_gpu_optuna(storage, tpe_sampler, pruner, data_generator, num_epochs, random_seed, num_trials)
+    
+
+def single_gpu_optuna(storage, tpe_sampler, pruner, data_generator, num_epochs, random_seed, num_trials):
+    """
+    Run Optuna optimization on a single GPU.
+    """
     with mlflow.start_run():
 
         study = optuna.create_study(storage=storage,
@@ -80,12 +110,42 @@ def model_search(
         mlflow.log_params({"random_seed": random_seed})
         mlflow.log_params(data_generator.get_dataloader_parameters())
 
+        # Determine Device to Run Optuna On
+        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')        
+
         study.optimize(lambda trial: hyper_search.objective(trial, num_epochs, device, 
                                                             data_generator, random_seed = random_seed), 
                         n_trials=num_trials)
 
+        print(f"Best trial: {study.best_trial.value}")
+        print(f"Best params: {study.best_params}")
+    
+def multi_gpu_optuna(storage, tpe_sampler, pruner, data_generator, num_epochs, random_seed, num_trials, gpu_count):
+    """
+    Run Optuna optimization on multiple GPUs.
+    """     
+    with mlflow.start_run() as parent_run:
+
+        study = optuna.create_study(storage=storage,
+                                    direction="maximize",
+                                    sampler=tpe_sampler,
+                                    load_if_exists=True,
+                                    pruner=pruner)
+
+        mlflow.log_params({"random_seed": random_seed})
+        mlflow.log_params(data_generator.get_dataloader_parameters())
+        
+        parent_run_id = parent_run.info.run_id    
+        study.optimize(lambda trial: hyper_search.multi_gpu_objective(parent_run_id, trial, 
+                                                                      num_epochs,
+                                                                      data_generator, 
+                                                                      gpu_count = gpu_count), 
+                       n_trials=num_trials,
+                       n_jobs=gpu_count) # Run trials on multiple GPUs
+
     print(f"Best trial: {study.best_trial.value}")
     print(f"Best params: {study.best_params}")
+
 
 # Entry point with argparse
 def cli():

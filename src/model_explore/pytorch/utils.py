@@ -1,3 +1,4 @@
+from monai.networks.nets import UNet, AttentionUnet
 from typing import List, Tuple, Union
 from dotenv import load_dotenv
 import torch, random, os
@@ -132,3 +133,38 @@ def parse_seg_target(value: str) -> List[Tuple[str, Union[str, None], Union[str,
                 f"Invalid seg-target format: '{target}'. Expected 'name' or 'name,user_id,session_id'."
             )
     return targets
+
+##############################################################################################################################
+
+def create_model(model_type, n_classes, channels, strides_pattern, num_res_units, device):
+    """
+    Create either a UNet or AttentionUnet model based on trial parameters.
+    
+    Args:
+        trial: Optuna trial object
+        n_classes: Number of output classes
+        channels: List of channel sizes
+        strides_pattern: List of stride values
+        num_res_units: Number of residual units (only used for UNet)
+        device: torch device to place model on
+    """
+    
+    if model_type == "UNet":
+        model = UNet(
+            spatial_dims=3,
+            in_channels=1,
+            out_channels=n_classes,
+            channels=channels,
+            strides=strides_pattern,
+            num_res_units=num_res_units,
+        )
+    else:  # AttentionUnet
+        model = AttentionUnet(
+            spatial_dims=3,
+            in_channels=1,
+            out_channels=n_classes,
+            channels=channels,
+            strides=strides_pattern,
+        )
+    
+    return model.to(device)

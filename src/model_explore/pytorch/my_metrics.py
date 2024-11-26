@@ -167,15 +167,12 @@ def compute_confusion_matrix_metric(metric_name: str,
 
 ##############################################################################################################################
 
-def my_log_param(param_name, val, curr_step, client = None, trial_run_id = None):
+def my_log_param(params_dict, client = None, trial_run_id = None):
 
     if client is not None and trial_run_id is not None:
-        client.log_param(run_id = trial_run_id, 
-                          key = param_name,
-                          value = val, 
-                          step = curr_step)
+        client.log_params(run_id=trial_run_id, params=params_dict)
     else:
-        mlflow.log_param(param_name, val, step = curr_step)
+        mlflow.log_params(params_dict)
 
 
 ##############################################################################################################################
