@@ -1,7 +1,7 @@
+from model_explore.pytorch.datasets import generators, multi_config_generator
 from model_explore.pytorch import io, hyper_search, utils
-from model_explore.pytorch.datasets import generators
-import torch, mlflow, optuna, argparse
-from typing import List
+import torch, mlflow, optuna, argparse, json
+from typing import List, Optional
 
 def model_search(
     copick_config: str,
@@ -42,14 +42,30 @@ def model_search(
     """
 
     # Initialize the data generator to manage training and validation datasets
-    data_generator = generators.TrainLoaderManager(copick_config, 
-                                                   target_name, 
-                                                   target_session_id = target_session_id,
-                                                   target_user_id = target_user_id,
-                                                   tomo_algorithm = tomo_algorithm,
-                                                   voxel_size = voxel_size,                                                    
-                                                   Nclasses = Nclass,
-                                                   tomo_batch_size = tomo_batch_size)
+    print_input_configs(copick_config)
+    if isinstance(copick_config, dict):
+        # Multi-config training
+        data_generator = multi_config_generator.MultiConfigTrainLoaderManager(
+            copick_config, 
+            target_name, 
+            target_session_id = target_session_id,
+            target_user_id = target_user_id,
+            tomo_algorithm = tomo_algorithm,
+            voxel_size = voxel_size,
+            Nclasses = Nclass,
+            tomo_batch_size = tomo_batch_size )
+    else:
+        # Single-config training
+        data_generator = generators.TrainLoaderManager(
+            copick_config, 
+            target_name, 
+            target_session_id = target_session_id,
+            target_user_id = target_user_id,
+            tomo_algorithm = tomo_algorithm,
+            voxel_size = voxel_size,
+            Nclasses = Nclass,
+            tomo_batch_size = tomo_batch_size ) 
+
     # Split datasets into training and validation
     data_generator.get_data_splits(trainRunIDs = trainRunIDs,
                                    validateRunIDs = validateRunIDs)
@@ -146,6 +162,15 @@ def multi_gpu_optuna(storage, tpe_sampler, pruner, data_generator, num_epochs, r
     print(f"Best trial: {study.best_trial.value}")
     print(f"Best params: {study.best_params}")
 
+def print_input_configs(copick_config):
+
+    print(f'\nTraining with:')
+    if isinstance(copick_config, dict):
+        for session, config in copick_config.items():
+            print(f'  {session}: {config}')
+    else:
+        print(f'  {copick_config}')
+    print()
 
 # Entry point with argparse
 def cli():
@@ -155,7 +180,11 @@ def cli():
     parser = argparse.ArgumentParser(description="Perform model architecture search with Optuna and MLflow integration.")
 
     # Required arguments
-    parser.add_argument("--config", type=str, required=True, help="Path to the CoPick configuration file.")
+    # parser.add_argument("--config", type=str, required=True, help="Path to the CoPick configuration file.")
+    parser.add_argument("--config", type=str, required=True, action='append',
+                            help="Specify a single configuration path (/path/to/config.json) "
+                                 "or multiple entries in the format session_name,/path/to/config.json. "
+                                 "Use multiple --config entries for multiple sessions.")    
     parser.add_argument("--target-name", type=str, required=True, help="Name of the target to segment.")
 
     # Optional arguments
@@ -176,9 +205,16 @@ def cli():
     # Parse arguments
     args = parser.parse_args()
 
+    # Parse the CoPick configuration paths
+    if len(args.config) > 1:    copick_configs = utils.parse_copick_configs(args.config)
+    else:                       copick_configs = args.config[0]    
+
+    # Save JSON with Parameters
+    save_parameters_json(args, 'model_explore.json')
+
     # Call the function with parsed arguments
     model_search(
-        copick_config=args.config,
+        copick_config=copick_configs,
         target_name=args.target_name,
         target_user_id=args.target_user_id,
         target_session_id=args.target_session_id,
@@ -194,6 +230,42 @@ def cli():
         validateRunIDs=args.validateRunIDs, 
         tomo_batch_size=args.tomo_batch_size,
     )
+
+def save_parameters_json(args, output_path: str):
+    """
+    Save the Optuna search parameters to a JSON file.
+    Args:
+        args: Parsed arguments from argparse.
+        output_path: Path to save the JSON file.
+    """
+    # Organize parameters into categories
+    params = {
+        "input": {
+            "copick_config": args.config,
+            "target_name": args.target_name,
+            "target_user_id": args.target_user_id,
+            "target_session_id": args.target_session_id,
+            "tomo_algorithm": args.tomo_algorithm,
+            "voxel_size": args.voxel_size,
+            "Nclass": args.Nclass,            
+        },
+        "optimization": {
+            "mlflow_experiment_name": args.mlflow_experiment_name,
+            "mlflow_tracking_uri": args.mlflow_tracking_uri,
+            "random_seed": args.random_seed,
+            "num_trials": args.num_trials,
+        },
+        "training": {
+            "num_epochs": args.num_epochs,            
+            "tomo_batch_size": args.tomo_batch_size,
+            "trainRunIDs": args.trainRunIDs,
+            "validateRunIDs": args.validateRunIDs,
+        }
+    }
+
+    # Save to JSON file
+    with open(output_path, 'w') as f:
+        json.dump(params, f, indent=4)    
 
 if __name__ == "__main__":
     cli()

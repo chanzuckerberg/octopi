@@ -27,6 +27,15 @@ class evaluator:
         print(f'\nGround Truth Query: \nUserID: {ground_truth_user_id}, SessionID: {ground_truth_session_id}')
         print(f'\nSubmitted Picks: \nUserID: {prediction_user_id}, SessionID: {predict_session_id}\n')
 
+        # Save input parameters
+        self.input_params = {
+            "copick_config": copick_config,
+            "ground_truth_user_id": ground_truth_user_id,
+            "ground_truth_session_id": ground_truth_session_id,
+            "prediction_user_id": prediction_user_id,
+            "predict_session_id": predict_session_id,
+        }
+
         # Get objects that can be Picked
         if not object_names:
             print('No object names provided, using all pickable objects')
@@ -104,15 +113,25 @@ class evaluator:
                 }
 
         print('\nAverage Metrics Summary:')
-        self.print_metrics_summary(final_summary_metrics)                
+        self.print_metrics_summary(final_summary_metrics)            
 
+        # Save average and detailed metrics with parameters included        
         if save_path:
+            self.parameters = {
+                "distance_threshold_scale": distance_threshold_scale,
+                "runIDs": runIDs,
+            }    
+            
+            summary_metrics = { "input": self.input_params, "parameters": self.parameters, 
+                                     "summary_metrics": final_summary_metrics }
             with open(os.path.join(save_path, 'average_metrics.json'), 'w') as f:
-                json.dump(final_summary_metrics, f, indent=4)
+                json.dump(summary_metrics, f, indent=4)
             print(f'\nAverage Metrics saved to {os.path.join(save_path, "average_metrics.json")}')
-
+            
+            detailed_metrics = { "input": self.input_params, "parameters": self.parameters, 
+                                 "metrics": metrics }
             with open(os.path.join(save_path, 'metrics.json'), 'w') as f:
-                json.dump(metrics, f, indent=4)
+                json.dump(detailed_metrics, f, indent=4)
             print(f'Metrics saved to {os.path.join(save_path, "metrics.json")}')
 
 

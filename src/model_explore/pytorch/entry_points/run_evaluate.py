@@ -32,7 +32,7 @@ def cli():
     """
     parser = argparse.ArgumentParser(description='Run evaluation on pick and place predictions.')
     
-    parser.add_argument('--copick-config-path', type=str, required=True, help='Path to the copick configuration file')
+    parser.add_argument('--config', type=str, required=True, help='Path to the copick configuration file')
     parser.add_argument('--ground-truth-user-id', type=str, required=True, help='User ID for ground truth data')
     parser.add_argument('--ground-truth-session-id', type=str, required=False, default= None, help='Session ID for ground truth data')
     parser.add_argument('--prediction-user-id', type=str, required=True, help='User ID for prediction data')
@@ -46,7 +46,7 @@ def cli():
 
     # Call the evaluate function with parsed arguments
     my_evaluator(
-        copick_config_path=args.copick_config_path,
+        copick_config_path=args.config,
         ground_truth_user_id=args.ground_truth_user_id,
         ground_truth_session_id=args.ground_truth_session_id,
         prediction_user_id=args.prediction_user_id,

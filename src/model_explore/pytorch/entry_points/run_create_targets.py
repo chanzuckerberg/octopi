@@ -1,9 +1,10 @@
 from copick_utils.segmentation.segmentation_from_picks import from_picks
+from model_explore import create_targets_from_picks as create_targets
 from model_explore.pytorch import utils, io 
 import copick_utils.writers.write as write
 from collections import defaultdict
 from typing import List, Tuple, Union
-import argparse, copick
+import argparse, copick, json
 from tqdm import tqdm
 import numpy as np
 
@@ -41,9 +42,11 @@ def create_sub_train_targets(
     # Create dictionary for segmentation targets
     train_targets = add_segmentation_targets(root, seg_targets, train_targets)
 
-    generate_targets(root, train_targets, voxel_size, tomogram_algorithm, radius_scale,
-                     target_segmentation_name, target_user_id, 
-                     target_session_id, run_ids)
+    create_targets.generate_targets(
+        root, train_targets, voxel_size, tomogram_algorithm, radius_scale,
+        target_segmentation_name, target_user_id, 
+        target_session_id, run_ids
+    )
 
 
 def create_all_train_targets(
@@ -80,105 +83,11 @@ def create_all_train_targets(
     # Create dictionary for segmentation targets
     target_objects = add_segmentation_targets(root, seg_targets, target_objects)
 
-    generate_targets(root, target_objects, voxel_size, tomogram_algorithm, 
-                     radius_scale, target_segmentation_name, target_user_id, 
-                     target_session_id, run_ids )
-
-def generate_targets(
-    root,
-    train_targets: dict,
-    voxel_size: float = 10,
-    tomo_algorithm: str = 'wbp',
-    radius_scale: float = 0.8,    
-    target_segmentation_name: str = 'targets',
-    target_user_name: str = 'monai',
-    target_session_id: str = '1',
-    run_ids: List[str] = None,
-    ):
-    """
-    Generate segmentation targets from picks in CoPick configuration.
-
-    Args:
-        copick_config_path (str): Path to CoPick configuration file.
-        picks_user_id (str): User ID associated with picks.
-        picks_session_id (str): Session ID associated with picks.
-        target_segmentation_name (str): Name for the target segmentation.
-        target_user_name (str): User name associated with target segmentation.
-        target_session_id (str): Session ID for the target segmentation.
-        voxel_size (float): Voxel size for tomogram reconstruction.
-        tomo_algorithm (str): Tomogram reconstruction algorithm.
-        radius_scale (float): Scale factor for target object radius.
-    """
-
-    print('Creating Targets for the following objects:', ', '.join(train_targets.keys()))
-
-    # Get Target Names
-    target_names = list(train_targets.keys())
-
-    # If runIDs are not provided, load all runs
-    if run_ids is None:
-        run_ids = [run.name for run in root.runs]
-
-    # Iterate Over All Runs
-    for runID in tqdm(run_ids):
-
-        # Get Run
-        numPicks = 0
-        run = root.get_run(runID)
-
-        # Get Tomogram 
-        tomo = io.get_tomogram_array(run, voxel_size, tomo_algorithm)
-        
-        # Initialize Target Volume
-        target = np.zeros(tomo.shape, dtype=np.uint8)
-
-        # Generate Targets
-        # Applicable segmentations
-        query_seg = []
-        for target_name in target_names:
-            if not train_targets[target_name]["is_particle_target"]:            
-                query_seg += run.get_segmentations(
-                    name=target_name,
-                    user_id=train_targets[target_name]["user_id"],
-                    session_id=train_targets[target_name]["session_id"],
-                    voxel_size=voxel_size
-                )     
-
-        # Add Segmentations to Target
-        for seg in query_seg:
-            classLabel = root.get_object(seg.name).label
-            segvol = seg.numpy()
-            # Set all non-zero values to the class label
-            segvol[segvol > 0] = classLabel
-            target[:] = segvol 
-
-        # Applicable picks
-        query = []
-        for target_name in target_names:
-            if train_targets[target_name]["is_particle_target"]:
-                query += run.get_picks(
-                    object_name=target_name,
-                    user_id=train_targets[target_name]["user_id"],
-                    session_id=train_targets[target_name]["session_id"],
-                )
-
-        # Add Picks to Target  
-        for pick in query:
-            numPicks += len(pick.points)
-            target = from_picks(pick, 
-                                target, 
-                                train_targets[pick.pickable_object_name]['radius'] * radius_scale,
-                                train_targets[pick.pickable_object_name]['label'],
-                                voxel_size
-                                )
-
-        # Write Segmentation for non-empty targets
-        if target.max() > 0 and numPicks > 0:
-            tqdm.write(f'Annotating {numPicks} picks in {runID}...')    
-            write.segmentation(run, target, target_user_name, 
-                               name = target_segmentation_name, session_id= target_session_id, 
-                               voxel_size = voxel_size)
-    print('Creation of targets complete!')
+    create_targets.generate_targets(
+        root, target_objects, voxel_size, tomogram_algorithm, 
+        radius_scale, target_segmentation_name, target_user_id, 
+        target_session_id, run_ids 
+    )
 
 def add_segmentation_targets(
     root,
@@ -207,8 +116,7 @@ def add_segmentation_targets(
         except:
             print(f'Warning - Skipping Segmentation Name: "{obj_name}", as it is not a valid object in the Copick project.')
 
-    return train_targets
-
+    return train_targets    
 
 def parse_args():
     """
@@ -231,13 +139,17 @@ def parse_args():
 
     return parser.parse_args()
 
-def main():
-    args = parse_args() 
+def cli():
+    args = parse_args()
+
+    # Save JSON with Parameters
+    output_json = f'create-targets_{args.target_user_id}_{args.target_session_id}_{args.target_segmentation_name}.json'
+    save_parameters_json(args, output_json)      
 
     if args.target:
         # If at least one --target is provided, call create_sub_train_targets
         create_sub_train_targets(
-            config=args.config, 
+            config=args.config,
             pick_targets=args.target,
             seg_targets=args.seg_target,
             voxel_size=args.voxel_size,
@@ -263,6 +175,57 @@ def main():
             target_session_id=args.target_session_id,
             run_ids=args.run_ids,
         )
+
+def save_parameters_json(args, output_path: str):
+    """
+    Save parameters to a JSON file with subgroups for input, output, and parameters.
+    Append to the file if it already exists.
+
+    Args:
+        args: Parsed arguments from argparse.
+        output_path: Path to save the JSON file.
+    """
+    # Organize parameters into subgroups
+    new_entry = {
+        "input": {
+            "config": args.config,
+            "target": args.target,
+            "seg_target": args.seg_target,
+            "picks_session_id": args.picks_session_id,
+            "picks_user_id": args.picks_user_id
+        },
+        "output": {
+            "target_segmentation_name": args.target_segmentation_name,
+            "target_user_id": args.target_user_id,
+            "target_session_id": args.target_session_id,
+        },
+        "parameters": {
+            "radius_scale": args.radius_scale,
+            "tomogram_algorithm": args.tomogram_algorithm,
+            "voxel_size": args.voxel_size,            
+        }
+    }
+
+    # Check if the JSON file already exists
+    if os.path.exists(output_path):
+        # Load the existing content
+        with open(output_path, 'r') as f:
+            try:
+                existing_data = json.load(f)
+                # Ensure it's a list to append to
+                if not isinstance(existing_data, list):
+                    raise ValueError("Existing JSON data is not a list. Cannot append.")
+            except json.JSONDecodeError:
+                existing_data = []  # Treat as empty if the file is malformed
+    else:
+        existing_data = []  # No file, start with an empty list
+
+    # Append the new entry
+    existing_data.append(new_entry)
+
+    # Save back to the JSON file
+    with open(output_path, 'w') as f:
+        json.dump(existing_data, f, indent=4)
 
 if __name__ == "__main__":
     main()

@@ -8,6 +8,7 @@ from typing import List, Optional
 import scipy.ndimage as ndi
 from tqdm import tqdm
 import numpy as np
+import math
 
 def processs_localization(run,  
                           objects, 
@@ -26,10 +27,13 @@ def processs_localization(run,
     if method not in ['watershed', 'com']:
         raise ValueError(f"Invalid method '{method}'. Expected 'watershed' or 'com'.")
 
-    seg = run.get_segmentations(name=seg_name, 
-                                user_id=seg_user_id, 
-                                session_id=seg_session_id,
-                                voxel_size=voxel_size)[0].numpy()
+    # Get Segmentation
+    seg = io.get_segmentation_array(run, 
+                                    voxel_size, 
+                                    seg_name, 
+                                    seg_user_id, 
+                                    seg_session_id)
+    
     for obj in objects:
 
         # Extract Particle Radius from Root
@@ -55,7 +59,6 @@ def processs_localization(run,
         orientations[:,3,3] = 1
 
         picks.from_numpy( points, orientations )
-
 
 def extract_particle_centroids_via_watershed(
         segmentation, 
@@ -167,4 +170,4 @@ def remove_repeated_picks(coordinates, distanceThreshold, pixelSize = 1):
     for i in range(1, max(clusters) + 1):
         unique_coordinates[i-1] = np.mean(coordinates[clusters == i], axis=0)
 
-    return unique_coordinates    
+    return unique_coordinates

@@ -1,7 +1,7 @@
 from model_explore.pytorch import localize, utils
+import copick, argparse, json
 import multiprocess as mp
 from typing import List
-import copick, argparse
 from tqdm import tqdm
 
 def pick_particles(
@@ -31,10 +31,10 @@ def pick_particles(
         if len(obj) < 3 or not isinstance(obj[2], (float, int)):
             raise ValueError(f"Invalid object format: {obj}. Expected a tuple with (name, label, radius).")
 
-    # Option 2: Either Specify Input RunIDs or Run on All RunIDs
+    # Either Specify Input RunIDs or Run on All RunIDs
+    if runIDs:  print('Running Localization on the Following RunIDs: ', runIDs)
     run_ids = runIDs if runIDs else [run.name for run in root.runs]
     n_run_ids = len(run_ids)
-    print('Running Localization on the Following RunIDs: ', run_ids)
 
     # Determine the number of processes to use
     if n_procs is None:
@@ -90,7 +90,7 @@ def pick_particles(
 # Entry point with argparse
 def cli():
     parser = argparse.ArgumentParser(description="Localized particles in tomograms using multiprocessing.")
-    parser.add_argument("--copick-config", type=str, required=True, help="Path to the CoPick configuration file.")
+    parser.add_argument("--config", type=str, required=True, help="Path to the CoPick configuration file.")
     parser.add_argument("--method", type=str, choices=['watershed', 'com'], default='watershed', required=False, help="Localization method to use.")
     parser.add_argument("--seg-name", type=str, default='segment-predict', required=False, help="Name of the segmentation.")
     parser.add_argument("--seg-user-id", type=str, default=None,  required=False, help="User ID for the segmentation.")
@@ -106,11 +106,15 @@ def cli():
 
     args = parser.parse_args()
 
+    # Save JSON with Parameters
+    output_json = f'localize_{args.pick_user_id}_{args.pick_session_id}.json'    
+    save_parameters_json(args, output_json)    
+
     # Set multiprocessing start method
     mp.set_start_method("spawn")
     
     pick_particles(
-        copick_config=args.copick_config,
+        copick_config_path=args.config,
         method=args.method,
         seg_name=args.seg_name,
         seg_user_id=args.seg_user_id,
@@ -124,6 +128,35 @@ def cli():
         runIDs=args.runIDs,
         n_procs=args.n_procs,
     )
+
+def save_parameters_json(args: argparse.Namespace, 
+                         output_path: str):
+
+    # Organize parameters into categories
+    params = {
+        "input": {
+            "config": args.config,
+            "seg_name": args.seg_name,
+            "seg_user_id": args.seg_user_id,
+            "seg_session_id": args.seg_session_id,
+            "voxel_size": args.voxel_size
+        },
+        "output": {
+            "pick_session_id": args.pick_session_id,
+            "pick_user_id": args.pick_user_id
+        },
+        "parameters": {
+            "method": args.method,
+            "radius_min_scale": args.radius_min_scale,
+            "radius_max_scale": args.radius_max_scale,
+            "filter_size": args.filter_size,
+            "runIDs": args.runIDs
+        }
+    }
+    
+    # Save to JSON file
+    with open(output_path, 'w') as f:
+        json.dump(params, f, indent=4)                         
 
 if __name__ == "__main__":
     cli()

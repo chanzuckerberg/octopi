@@ -92,6 +92,21 @@ def parse_int_list(value: str) -> List[int]:
 
 ###############################################################################################################################
 
+def string2bool(value: str):
+    """
+    Custom function to convert string values to boolean.
+    """
+    if isinstance(value, bool):
+        return value
+    if value.lower() in {'true', 't', '1', 'yes'}:
+        return True
+    elif value.lower() in {'false', 'f', '0', 'no'}:
+        return False
+    else:
+        raise argparse.ArgumentTypeError(f"Invalid boolean value: {value}")
+
+###############################################################################################################################
+
 def parse_target(value: str) -> Tuple[str, Union[str, None], Union[str, None]]:
     """
     Parse a single target string.
@@ -134,6 +149,37 @@ def parse_seg_target(value: str) -> List[Tuple[str, Union[str, None], Union[str,
             )
     return targets
 
+def parse_copick_configs(config_entries: List[str]):
+    """
+    Parse a string representing a list of CoPick configuration file paths.
+    """
+    # Process the --config arguments into a dictionary
+    copick_configs = {}
+
+    # import pdb; pdb.set_trace()
+
+    for config_entry in config_entries:
+        if ',' in config_entry:
+            # Entry has a session name and a config path
+            try:
+                session_name, config_path = config_entry.split(',', 1)
+                copick_configs[session_name] = config_path
+            except ValueError:
+                raise argparse.ArgumentTypeError(
+                    f"Invalid format for --config entry: '{config_entry}'. Expected 'session_name,/path/to/config.json'."
+                )
+        else:
+            # Single configuration path without a session name
+            # if "default" in copick_configs:
+            #     raise argparse.ArgumentTypeError(
+            #         f"Only one single-path --config entry is allowed when using default configurations. "
+            #         f"Detected duplicate: {config_entry}"
+            #     )
+            # copick_configs["default"] = config_entry
+            copick_configs = config_entry
+
+    return copick_configs
+
 ##############################################################################################################################
 
 def create_model(model_type, n_classes, channels, strides_pattern, num_res_units, device):
@@ -149,7 +195,7 @@ def create_model(model_type, n_classes, channels, strides_pattern, num_res_units
         device: torch device to place model on
     """
     
-    if model_type == "UNet":
+    if model_type == "Unet":
         model = UNet(
             spatial_dims=3,
             in_channels=1,
@@ -158,7 +204,7 @@ def create_model(model_type, n_classes, channels, strides_pattern, num_res_units
             strides=strides_pattern,
             num_res_units=num_res_units,
         )
-    else:  # AttentionUnet
+    elif model_type == "AttentionUnet":  # AttentionUnet
         model = AttentionUnet(
             spatial_dims=3,
             in_channels=1,
@@ -166,5 +212,7 @@ def create_model(model_type, n_classes, channels, strides_pattern, num_res_units
             channels=channels,
             strides=strides_pattern,
         )
+    else:
+        raise ValueError(f"Unsupported model type: {model_type}")
     
     return model.to(device)

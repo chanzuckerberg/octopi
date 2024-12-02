@@ -51,6 +51,29 @@ class TrainLoaderManager:
         self.val_loader = None
         self.train_loader = None
 
+    def get_available_runIDs(self):
+        """
+        Identify and return a list of run IDs that have segmentations available for the target.
+        
+        - Iterates through all runs in the project to check for segmentations that match 
+        the specified target name, session ID, and user ID.
+        - Only includes runs that have at least one matching segmentation.
+
+        Returns:
+            available_runIDs (list): List of run IDs with available segmentations.
+        """        
+        available_runIDs = []
+        runIDs = [run.name for run in self.root.runs]
+        for run in runIDs:
+            run = self.root.get_run(run)
+            seg = run.get_segmentations(name=self.target_name, 
+                                        session_id=self.target_session_id, 
+                                        user_id=self.target_user_id,
+                                        voxel_size=self.voxel_size)
+            if len(seg) > 0:
+                available_runIDs.append(run.name)
+        return available_runIDs
+
     def get_data_splits(self,
                         trainRunIDs: str = None,
                         validateRunIDs: str = None,
@@ -58,6 +81,20 @@ class TrainLoaderManager:
                         val_ratio: float = 0.1,
                         test_ratio: float = 0.1,
                         create_test_dataset: bool = True):
+        """
+        Split the available data into training, validation, and testing sets based on input parameters.
+
+        Args:
+            trainRunIDs (str): Predefined list of run IDs for training. If provided, it overrides splitting logic.
+            validateRunIDs (str): Predefined list of run IDs for validation. If provided with trainRunIDs, no splitting occurs.
+            train_ratio (float): Proportion of available data to allocate to the training set.
+            val_ratio (float): Proportion of available data to allocate to the validation set.
+            test_ratio (float): Proportion of available data to allocate to the test set.
+            create_test_dataset (bool): Whether to create a test dataset or leave it empty.
+
+        Returns:
+            myRunIDs (dict): Dictionary containing run IDs for training, validation, and testing.
+        """                        
 
         # Option 1: Only TrainRunIDs are Provided, Split into Train, Validate and Test (Optional)
         if trainRunIDs is not None and validateRunIDs is None:
@@ -68,7 +105,7 @@ class TrainLoaderManager:
             testRunIDs = None
         # Option 3: Use the Entire Copick Project, Split into Train, Validate and Test
         else:
-            runIDs = [run.name for run in self.root.runs]
+            runIDs = self.get_available_runIDs()
             trainRunIDs, validateRunIDs, testRunIDs = io.split_datasets(runIDs, train_ratio, val_ratio, 
                                                                         test_ratio, create_test_dataset)
 
@@ -76,19 +113,21 @@ class TrainLoaderManager:
         if len(testRunIDs) > len(validateRunIDs):
             testRunIDs, validateRunIDs = validateRunIDs, testRunIDs
 
-        # Determine if All Tomograms Fit in Memory, Or if Future Tomograms will
-        # Need to be Loaded
+        # Determine if datasets fit entirely in memory based on the batch size
+        # If the validation set is smaller than the batch size, avoid reloading
         if len(validateRunIDs) < self.tomo_batch_size:
             self.reload_validation_dataset  = False
 
+        # If the training set is smaller than the batch size, avoid reloading
         if len(trainRunIDs) < self.tomo_batch_size:
             self.reload_training_dataset = False
 
-        # Save the Runs for DataSplits into a Dictionary    
-        self.myRunIDs = {}
-        self.myRunIDs['train'] = trainRunIDs
-        self.myRunIDs['validate'] = validateRunIDs
-        self.myRunIDs['test'] = testRunIDs
+        # Store the split run IDs into a dictionary for easy access
+        self.myRunIDs = {
+            'train': trainRunIDs,
+            'validate': validateRunIDs,
+            'test': testRunIDs
+        }
 
         print(f"Number of training samples: {len(trainRunIDs)}")
         print(f"Number of validation samples: {len(validateRunIDs)}")
@@ -98,6 +137,7 @@ class TrainLoaderManager:
         self.train_batch_size = self.tomo_batch_size
         self.val_batch_size = min( len(self.myRunIDs['validate']), self.tomo_batch_size)
 
+        # Initialize data iterators for training and validation
         self._initialize_val_iterators()
         self._initialize_train_iterators()
 
@@ -207,7 +247,7 @@ class TrainLoaderManager:
             val_ds = CacheDataset(data=val_files, transform=self._get_transforms(), cache_rate=1.0)
 
             # Wrap the cached dataset to apply random transforms during iteration
-            self.dynamic_validation_dataset = dataset.DynamicDataset(data=val_ds, transform=self._get_random_transforms(crop_size, num_samples))
+            self.dynamic_validation_dataset = dataset.DynamicDataset(data=val_ds, transform=self._get_validation_transforms(crop_size, num_samples))
 
             # Create validation DataLoader
             self.val_loader  = DataLoader(
@@ -255,43 +295,19 @@ class TrainLoaderManager:
             RandGaussianNoised(keys="image", prob=0.5, mean=0.0, std=0.1),
         ])    
     
-        # Non-random transforms to be cached
-        # non_random_transforms = Compose([
-        #     EnsureChannelFirstd(keys=["image", "label"], channel_dim="no_channel"),
-        #     NormalizeIntensityd(keys="image"),
-        #     Orientationd(keys=["image", "label"], axcodes="RAS")
-        # ])
-
-        # Random transforms to be applied during training
-        # random_transforms = Compose([
-        #     # Geometric Transforms
-        #     RandCropByLabelClassesd(
-        #         keys=["image", "label"],
-        #         label_key="label",
-        #         spatial_size=[crop_size, crop_size, crop_size],
-        #         num_classes=self.Nclasses,
-        #         num_samples=num_samples
-        #     ),
-        #     RandRotate90d(keys=["image", "label"], prob=0.5, spatial_axes=[0, 2]),
-        #     RandFlipd(keys=["image", "label"], prob=0.5, spatial_axis=0),    
-
-        #     # Intensity-based augmentations
-        #     RandScaleIntensityd(keys="image", factors=(0.9, 1.1), prob=0.5),
-        #     RandShiftIntensityd(keys="image", offsets=(-0.1, 0.1), prob=0.5),
-        #     RandAdjustContrastd(keys="image", prob=0.5, gamma=(0.9, 1.1)),            
-        #     RandGaussianNoised(keys="image", prob=0.5, mean=0.0, std=0.1),            
-        # ])
-
-        # # Validation transforms
-        # val_transforms = Compose([
-        #     RandCropByLabelClassesd(
-        #             keys=["image", "label"],
-        #             label_key="label",
-        #             spatial_size=[crop_size, crop_size, crop_size],
-        #             num_classes=self.Nclasses,
-        #             num_samples=num_samples, 
-        #     ),
-        # ])
+    def _get_validation_transforms(self, crop_size, num_samples):
+        """
+        Returns validation transforms.
+        """
+        return Compose([
+            RandCropByLabelClassesd(
+                    keys=["image", "label"],
+                    label_key="label",
+                    spatial_size=[crop_size, crop_size, crop_size],
+                    num_classes=self.Nclasses,
+                    num_samples=num_samples, 
+            ),
+        ])
     
         # Augmentations to Explore in the Future: 
         # Intensity-based augmentations
@@ -325,6 +341,8 @@ class TrainLoaderManager:
 
             # Calculate reload frequency to distribute reloading evenly over epochs
             self.reload_frequency = max(num_epochs // num_segments, 1)
+
+            print(f"\nReloading {self.tomo_batch_size} tomograms every {self.reload_frequency} epochs")
 
             # Warn if the number of epochs is insufficient for full dataset coverage
             if num_epochs < num_segments:

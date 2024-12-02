@@ -55,29 +55,27 @@ def objective(
         model_type = trial.suggest_categorical("model_type", ["UNet", "AttentionUnet"])
         model = create_model(model_type, Nclass, channels, strides_pattern, num_res_units, device)
 
-        # # Sample learning rate using Optuna
-        # learning_rate = trial.suggest_loguniform("learning_rate", 1e-5, 1e-2)
-
         # Define your loss and optimizer, and return the objective (e.g., validation loss)
         lr = 1e-3
+        # lr = trial.suggest_loguniform("learning_rate", 1e-5, 1e-2)        
         optimizer = torch.optim.Adam(model.parameters(), lr)
 
         # Create UNet-Trainer
         train = trainer.unet(model, device, loss_function, metrics_function, optimizer)
 
         # Sample crop size in increments of 16
-        # Will sample from [64, 80, 96, 112, 128, 144]
-        dim_in = trial.suggest_int("crop_size", 64, 144, step=16)  
-        num_samples = trial.suggest_int("num_samples", 4, 16, step=4)       
+        # Will sample from [64, 80, 96, 112, 128, 144, 160]
+        dim_in = trial.suggest_int("crop_size", 64, 160, step=16)  
+        num_samples = trial.suggest_int("num_samples", 4, 24, step=4)       
 
         # Train the Model
         try:
-            score = train.mlflow_train(data_generator, 
-                                       crop_size = dim_in,
-                                       max_epochs = epochs,
-                                       val_interval = val_interval,
-                                       my_num_samples = num_samples,
-                                       verbose=False)[0]
+            score = train.train(data_generator, 
+                                crop_size = dim_in,
+                                max_epochs = epochs,
+                                val_interval = val_interval,
+                                my_num_samples = num_samples,
+                                use_mlflow = True, verbose=False)[0]
         except torch.cuda.OutOfMemoryError:
             print(f"[Trial Failed] Out of Memory for crop_size={dim_in} and num_samples={num_samples}")
             trial.set_user_attr("out_of_memory", True)  # Optional: Log this for analysis
