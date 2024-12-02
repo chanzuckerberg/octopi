@@ -94,6 +94,7 @@ def train_model(
                            num_tomo_crops, val_interval, dim_in)
 
 def run_training_local(model_trainer, model, data_generator, model_save_path, num_epochs, num_tomo_crops, val_interval, dim_in):
+
     results = model_trainer.train(
         data_generator, model_save_path, max_epochs=num_epochs,
         crop_size=dim_in, my_num_samples=num_tomo_crops,
@@ -102,7 +103,7 @@ def run_training_local(model_trainer, model, data_generator, model_save_path, nu
 
     # Save parameters and results
     parameters_save_name = os.path.join(model_save_path, "training_parameters.json")
-    io.save_parameters_to_json(model, train, data_generator, parameters_save_name)
+    io.save_parameters_to_json(model, model_trainer, data_generator, parameters_save_name)
 
     results_save_name = os.path.join(model_save_path, "results.json")
     io.save_results_to_json(results, results_save_name)
@@ -125,7 +126,7 @@ def run_training_with_mlflow(model_trainer, model, data_generator, model_save_pa
         # Log parameters and metrics
         params = {
             "model": io.get_model_parameters(model),
-            "optimizer": io.get_optimizer_parameters(train),
+            "optimizer": io.get_optimizer_parameters(model_trainer),
             "dataloader": data_generator.get_dataloader_parameters()
         }
         mlflow.log_params(io.flatten_params(params))

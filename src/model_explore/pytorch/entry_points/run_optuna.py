@@ -1,6 +1,6 @@
 from model_explore.pytorch.datasets import generators, multi_config_generator
 from model_explore.pytorch import io, hyper_search, utils
-import torch, mlflow, optuna, argparse, json
+import torch, mlflow, optuna, argparse, json, os
 from typing import List, Optional
 
 def model_search(
@@ -73,6 +73,9 @@ def model_search(
     # Get the reload frequency
     data_generator.get_reload_frequency(num_epochs) 
 
+    # Temporary....
+    data_generator.reload_frequency = -1
+
     # Define Optuna pruning strategy to stop unpromising trials
     pruning = True
     pruner: optuna.pruners.BasePruner = (
@@ -91,6 +94,9 @@ def model_search(
     #     n_startup_trials=10,     # Number of initial random trials before TPE kicks in
     #     multivariate=True        # Use multivariate TPE for correlated parameter sampling
     # )
+
+    # Create Save Folder if It Doesn't Exist
+    os.makedirs('model_exploration', exist_ok=True)      
 
     # Initialize MLflow for experiment tracking
     try:

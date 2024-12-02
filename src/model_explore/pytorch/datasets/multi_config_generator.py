@@ -25,7 +25,7 @@ class MultiConfigTrainLoaderManager(TrainLoaderManager):
         """
 
         # Initialize shared attributes manually (skip super().__init__ to avoid invalid config handling)
-        self.configs = configs
+        self.config = configs
         self.roots = {name: io.load_copick_config(path) for name, path in configs.items()}
 
         # Target and algorithm parameters

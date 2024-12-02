@@ -119,7 +119,7 @@ class unet:
         self.use_mlflow = use_mlflow
 
         # Create Save Folder if It Doesn't Exist
-        if model_save_path is not None and not os.path.exists(model_save_path):
+        if model_save_path is not None:
             os.makedirs(model_save_path, exist_ok=True)  
 
         Nclass = data_load_gen.Nclasses
@@ -180,7 +180,8 @@ class unet:
                 if self.results['avg_f1'][-1][1] > self.results["best_metric"]:
                     self.results["best_metric"] = self.results['avg_f1'][-1][1]
                     self.results["best_metric_epoch"] = epoch + 1
-                    torch.save(self.model.state_dict(), os.path.join(model_save_path, "best_metric_model.pth"))    
+                    if model_save_path is not None: 
+                        torch.save(self.model.state_dict(), os.path.join(model_save_path, "best_metric_model.pth"))    
 
                 # Save plot if Local Training Call
                 if not self.use_mlflow:

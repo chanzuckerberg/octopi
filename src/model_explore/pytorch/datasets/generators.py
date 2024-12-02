@@ -12,6 +12,7 @@ from monai.transforms import (
     RandAdjustContrastd,
     RandGaussianNoised,
     ScaleIntensityRanged,  
+    RandomOrder,
 )
 from model_explore.pytorch.datasets import dataset
 from model_explore.pytorch import io
@@ -31,7 +32,7 @@ class TrainLoaderManager:
                  Nclasses: int = 3): # Number of Objects + Background
 
         # Read Copick Projectdd
-        self.copick_config = config
+        self.config = config
         self.root = io.load_copick_config(config)
 
         # Copick Query for Target
@@ -287,13 +288,29 @@ class TrainLoaderManager:
                 num_classes=self.Nclasses,
                 num_samples=num_samples
             ),
-            RandRotate90d(keys=["image", "label"], prob=0.5, spatial_axes=[0, 2]),
-            RandFlipd(keys=["image", "label"], prob=0.5, spatial_axis=0),
-            RandScaleIntensityd(keys="image", factors=(0.9, 1.1), prob=0.5),
-            RandShiftIntensityd(keys="image", offsets=(-0.1, 0.1), prob=0.5),
-            RandAdjustContrastd(keys="image", prob=0.5, gamma=(0.9, 1.1)),
-            RandGaussianNoised(keys="image", prob=0.5, mean=0.0, std=0.1),
-        ])    
+            RandomOrder([
+                RandRotate90d(keys=["image", "label"], prob=0.5, spatial_axes=[0, 2]),
+                RandFlipd(keys=["image", "label"], prob=0.5, spatial_axis=0),
+                RandScaleIntensityd(keys="image", factors=(0.9, 1.1), prob=0.5),
+                RandShiftIntensityd(keys="image", offsets=(-0.1, 0.1), prob=0.5),
+                RandAdjustContrastd(keys="image", prob=0.5, gamma=(0.9, 1.1)),
+                RandGaussianNoised(keys="image", prob=0.5, mean=0.0, std=0.1),
+            ])
+        ])   
+
+        # Augmentations to Explore in the Future: 
+        # Intensity-based augmentations
+        # RandHistogramShiftd(keys="image", prob=0.5, num_control_points=(3, 5))
+        # RandGaussianSmoothd(keys="image", prob=0.5, sigma_x=(0.5, 1.5), sigma_y=(0.5, 1.5), sigma_z=(0.5, 1.5)),
+
+        # Geometric Transforms
+        # RandAffined(
+        #     keys=["image", "label"],
+        #     rotate_range=(0.1, 0.1, 0.1),  # Rotation angles (radians) for x, y, z axes
+        #     scale_range=(0.1, 0.1, 0.1),   # Scale range for isotropic/anisotropic scaling
+        #     prob=0.5,                      # Probability of applying the transform
+        #     padding_mode="border"          # Handle out-of-bounds values
+        # )         
     
     def _get_validation_transforms(self, crop_size, num_samples):
         """
@@ -308,20 +325,6 @@ class TrainLoaderManager:
                     num_samples=num_samples, 
             ),
         ])
-    
-        # Augmentations to Explore in the Future: 
-        # Intensity-based augmentations
-        # RandHistogramShiftd(keys="image", prob=0.5, num_control_points=(3, 5))
-        # RandGaussianSmoothd(keys="image", prob=0.5, sigma_x=(0.5, 1.5), sigma_y=(0.5, 1.5), sigma_z=(0.5, 1.5)),
-
-        # Geometric Transforms
-        # RandAffined(
-        #     keys=["image", "label"],
-        #     rotate_range=(0.1, 0.1, 0.1),  # Rotation angles (radians) for x, y, z axes
-        #     scale_range=(0.1, 0.1, 0.1),   # Scale range for isotropic/anisotropic scaling
-        #     prob=0.5,                      # Probability of applying the transform
-        #     padding_mode="border"          # Handle out-of-bounds values
-        # )
     
     def get_reload_frequency(self, num_epochs: int):
         """
@@ -342,20 +345,20 @@ class TrainLoaderManager:
             # Calculate reload frequency to distribute reloading evenly over epochs
             self.reload_frequency = max(num_epochs // num_segments, 1)
 
-            print(f"\nReloading {self.tomo_batch_size} tomograms every {self.reload_frequency} epochs")
+            print(f"\nReloading {self.tomo_batch_size} tomograms every {self.reload_frequency} epochs\n")
 
             # Warn if the number of epochs is insufficient for full dataset coverage
             if num_epochs < num_segments:
                 print(
                     f"Warning: Chosen number of epochs ({num_epochs}) may not be sufficient "
                     f"to train over all training samples. Consider increasing the number of epochs "
-                    f"to at least {num_segments}."
+                    f"to at least {num_segments}\n."
                 )
 
     def get_dataloader_parameters(self):
 
         parameters = {
-            'config': self.copick_config,
+            'config': self.config,
             'target_name': self.target_name,
             'target_session_id': self.target_session_id,
             'target_user_id': self.target_user_id,

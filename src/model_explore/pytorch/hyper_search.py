@@ -11,6 +11,7 @@ def objective(
     epochs,
     device,
     data_generator,
+    best_metric: str = 'avg_f1',
     random_seed: int = 42,
     val_interval: int = 15):
 
@@ -61,7 +62,7 @@ def objective(
         optimizer = torch.optim.Adam(model.parameters(), lr)
 
         # Create UNet-Trainer
-        train = trainer.unet(model, device, loss_function, metrics_function, optimizer)
+        model_trainer = trainer.unet(model, device, loss_function, metrics_function, optimizer)
 
         # Sample crop size in increments of 16
         # Will sample from [64, 80, 96, 112, 128, 144, 160]
@@ -70,21 +71,33 @@ def objective(
 
         # Train the Model
         try:
-            score = train.train(data_generator, 
-                                crop_size = dim_in,
-                                max_epochs = epochs,
-                                val_interval = val_interval,
-                                my_num_samples = num_samples,
-                                use_mlflow = True, verbose=False)[0]
+            results = model_trainer.train(
+                data_generator, 
+                model_save_path = None,
+                crop_size = dim_in,
+                max_epochs = epochs,
+                val_interval = val_interval,
+                my_num_samples = num_samples,
+                use_mlflow = True, verbose=False )
+            score = results['best_metric']
         except torch.cuda.OutOfMemoryError:
             print(f"[Trial Failed] Out of Memory for crop_size={dim_in} and num_samples={num_samples}")
             trial.set_user_attr("out_of_memory", True)  # Optional: Log this for analysis
             return float("inf")  # Indicate failure for this trial
+
+        # Optional: Save Model if Best Score
+        try: 
+            if score > trial.study.best_value:
+                torch.save( model_trainer.model.state_dict('model_exploration/best_metric_model.pth') )
+                model_trainer.plot_results(save_plot='model_exploration/net_train_history.png')
+        except:
+            # We need to have a score available to measure performance
+            pass
         
         # Log training parameters.
         params = {
             'model': io.get_model_parameters(model),
-            'optimizer': io.get_optimizer_parameters(train)
+            'optimizer': io.get_optimizer_parameters(model_trainer)
         }
         mlflow.log_params(io.flatten_params(params))
 
