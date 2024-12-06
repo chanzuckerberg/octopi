@@ -2,6 +2,7 @@ from model_explore.pytorch.datasets.generators import TrainLoaderManager
 from monai.data import DataLoader, CacheDataset, Dataset
 from model_explore.pytorch.datasets import dataset
 from model_explore.pytorch import io
+import multiprocess as mp
 from tqdm import tqdm
 import torch, random
 
@@ -119,15 +120,6 @@ class MultiConfigTrainLoaderManager(TrainLoaderManager):
                 progress_update=False ))
         return data
 
-    def tmp_return_datasets(self):
-        trainRunIDs = self._extract_run_ids('train_data_iter', self._initialize_train_iterators)
-        train_files = self._load_data(trainRunIDs)   
-
-        validateRunIDs = self._extract_run_ids('val_data_iter', self._initialize_val_iterators)
-        val_files = self._load_data(validateRunIDs)
-
-        return train_files, val_files
-
     def create_train_dataloaders(self, *args, **kwargs):
         """
         Override data loading to fetch from multiple projects.
@@ -136,7 +128,14 @@ class MultiConfigTrainLoaderManager(TrainLoaderManager):
         my_num_samples = kwargs.get("num_samples", 16)
 
         train_batch_size = 1
-        val_batch_size = 1        
+        val_batch_size = 1  
+
+        # If reloads are disabled and loaders already exist, reuse them
+        if self.reload_frequency < 0 and (self.train_loader is not None) and (self.val_loader is not None):
+            return self.train_loader, self.val_loader        
+
+        # Estimate Max Number of Threads with mp.cpu_count
+        n_procs = min(mp.cpu_count(), 4)               
 
         if self.train_loader is None: 
             # Fetch the next batch of run IDs
@@ -150,13 +149,13 @@ class MultiConfigTrainLoaderManager(TrainLoaderManager):
             self.dynamic_train_dataset = dataset.DynamicDataset(
                 data=train_ds, 
                 transform=self._get_random_transforms(my_crop_size, my_num_samples)
-            )
+            )           
 
             self.train_loader = DataLoader(
                 self.dynamic_train_dataset,
                 batch_size=1,
                 shuffle=True,
-                num_workers=4,
+                num_workers=n_procs,
                 pin_memory=torch.cuda.is_available()
             )
 
@@ -170,7 +169,7 @@ class MultiConfigTrainLoaderManager(TrainLoaderManager):
 
         # We Only Need to Reload the Validation Dataset if the Total Number of Runs is larger than 
         # the tomo batch size
-        if self.reload_validation_dataset or self.val_loader is None: 
+        if self.val_loader is None: 
 
             validateRunIDs = self._extract_run_ids('val_data_iter', self._initialize_val_iterators)             
             val_files  = self._load_data(validateRunIDs)    
@@ -188,7 +187,7 @@ class MultiConfigTrainLoaderManager(TrainLoaderManager):
             self.val_loader  = DataLoader(
                 self.dynamic_validation_dataset,
                 batch_size=val_batch_size,
-                num_workers=4,
+                num_workers=n_procs,
                 pin_memory=torch.cuda.is_available(),
                 shuffle=False,  # Ensure the data order remains consistent
             )
@@ -200,3 +199,13 @@ class MultiConfigTrainLoaderManager(TrainLoaderManager):
             self.dynamic_validation_dataset.update_data(val_ds)
             
         return self.train_loader, self.val_loader
+
+
+    def tmp_return_datasets(self):
+        trainRunIDs = self._extract_run_ids('train_data_iter', self._initialize_train_iterators)
+        train_files = self._load_data(trainRunIDs)   
+
+        validateRunIDs = self._extract_run_ids('val_data_iter', self._initialize_val_iterators)
+        val_files = self._load_data(validateRunIDs)
+
+        return train_files, val_files        

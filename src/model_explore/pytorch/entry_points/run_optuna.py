@@ -73,9 +73,6 @@ def model_search(
     # Get the reload frequency
     data_generator.get_reload_frequency(num_epochs) 
 
-    # Temporary....
-    data_generator.reload_frequency = -1
-
     # Define Optuna pruning strategy to stop unpromising trials
     pruning = True
     pruner: optuna.pruners.BasePruner = (

@@ -2,6 +2,7 @@ from skimage.morphology import binary_erosion, binary_dilation, ball
 from scipy.cluster.hierarchy import fcluster, linkage
 from skimage.segmentation import watershed
 from skimage.measure import regionprops
+from model_explore.pytorch import io
 from scipy.spatial import distance
 from dataclasses import dataclass
 from typing import List, Optional
@@ -31,9 +32,10 @@ def processs_localization(run,
     seg = io.get_segmentation_array(run, 
                                     voxel_size, 
                                     seg_name, 
-                                    seg_user_id, 
-                                    seg_session_id)
+                                    user_id=seg_user_id, 
+                                    session_id=seg_session_id)
     
+    # Iterate through all user pickable objects
     for obj in objects:
 
         # Extract Particle Radius from Root
@@ -45,20 +47,26 @@ def processs_localization(run,
         elif method == 'com': 
             points = extract_particle_centroids_via_com(seg, obj[1], min_radius, max_radius)
         points = np.array(points)
-        points = points[:,[2,1,0]] 
 
-        # Convert the Picks back to Angstrom
-        points *= voxel_size
+        # Save Coordinates if any 3D points are provided
+        if points.size > 2:
+            points = points[:,[2,1,0]] 
 
-        # Save Picks
-        picks = run.new_picks(object_name = obj[0], session_id = pick_session_id, user_id=pick_user_id)
+            # Convert the Picks back to Angstrom
+            points *= voxel_size
 
-        # Assign Identity As Orientation
-        orientations = np.zeros([points.shape[0], 4, 4])
-        orientations[:,:3,:3] = np.identity(3)
-        orientations[:,3,3] = 1
+            # Save Picks
+            picks = run.new_picks(object_name = obj[0], session_id = pick_session_id, user_id=pick_user_id)
 
-        picks.from_numpy( points, orientations )
+            # Assign Identity As Orientation
+            orientations = np.zeros([points.shape[0], 4, 4])
+            orientations[:,:3,:3] = np.identity(3)
+            orientations[:,3,3] = 1
+
+            picks.from_numpy( points, orientations )
+        else:
+            print(f"{run.name} didn't have any available picks for {obj[0]}!")
+
 
 def extract_particle_centroids_via_watershed(
         segmentation, 

@@ -140,7 +140,7 @@ def closest_organelle_points(mask, coords, max_distance=float('inf'), return_lab
                                    or -1 if the point is outside the specified range.
                                    Only returned if `return_labels_array=True`.
     """
-    min_distance = 0
+    min_distance = 1
 
     unique_labels = np.unique(mask)
     unique_labels = unique_labels[unique_labels > 0]  # Ignore background (label 0)

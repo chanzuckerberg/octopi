@@ -10,7 +10,7 @@ def train_model(
     target_name: str,
     target_user_id: str = None,
     target_session_id: str = None,
-    tomo_algorithm: str = 'wbp',
+    tomo_algorithms: List[str] = ['wbp'],
     voxel_size: float = 10,
     trainRunIDs: List[str] = None,
     validateRunIDs: List[str] = None,    
@@ -32,6 +32,9 @@ def train_model(
     mlflow_tracking_uri: str = "http://mlflow.mlflow.svc.cluster.local:5000", 
     mlflow_experiment_name: str = "model-train"    
     ):
+
+    if len(tomo_algorithms) == 1:
+        tomo_algorithm = tomo_algorithms[0]
 
     # Initialize the data generator to manage training and validation datasets
     print(f'Training with {copick_config_path}\n')
@@ -147,7 +150,7 @@ def cli():
     parser.add_argument("--target-name", type=str, required=True, help="Name of the target segmentation.")
     parser.add_argument("--target-user-id", type=str, required=False, default=None, help="User ID for the target segmentation.")
     parser.add_argument("--target-session-id", type=str, required=False, default=None, help="Session ID for the target segmentation.")
-    parser.add_argument("--tomo-algorithm", type=str, required=False, default = 'wbp', help="Tomogram algorithm to use.")
+    parser.add_argument("--tomo-algorithms", type=utils.parse_list, required=False, default = 'wbp', help="Tomogram algorithms to use for training.")
     parser.add_argument("--voxel-size", type=float, required=False, default = 10, help="Voxel size for the tomograms.")
     parser.add_argument("--channels", type=utils.parse_int_list, required=False, default = [32,64,128,128], help="List of channel sizes for each layer, e.g., 32,64,128,128 or [32,64,128,128].")
     parser.add_argument("--strides", type=utils.parse_int_list, required=False, default = [2,2,1], help="List of stride sizes for each layer, e.g., 2,2,1 or [2,2,1].")
@@ -181,7 +184,7 @@ def cli():
         target_name=args.target_name,
         target_user_id=args.target_user_id,
         target_session_id=args.target_session_id,        
-        tomo_algorithm=args.tomo_algorithm,
+        tomo_algorithms=args.tomo_algorithms,
         voxel_size=args.voxel_size,
         channels=args.channels,
         strides=args.strides,

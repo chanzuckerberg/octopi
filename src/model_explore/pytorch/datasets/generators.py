@@ -17,6 +17,7 @@ from monai.transforms import (
 from model_explore.pytorch.datasets import dataset
 from model_explore.pytorch import io
 from typing import List, Optional
+import multiprocess as mp
 import torch, os, random
 
 class TrainLoaderManager:
@@ -135,8 +136,8 @@ class TrainLoaderManager:
         print(f'Number of test samples: {len(testRunIDs)}')    
 
         # Define separate batch sizes
-        self.train_batch_size = self.tomo_batch_size
-        self.val_batch_size = min( len(self.myRunIDs['validate']), self.tomo_batch_size)
+        self.train_batch_size = min( len(self.myRunIDs['train']), self.tomo_batch_size)
+        self.val_batch_size   = min( len(self.myRunIDs['validate']), self.tomo_batch_size)
 
         # Initialize data iterators for training and validation
         self._initialize_val_iterators()
@@ -199,6 +200,10 @@ class TrainLoaderManager:
         train_batch_size = 1
         val_batch_size = 1
 
+        # If reloads are disabled and loaders already exist, reuse them
+        if self.reload_frequency < 0 and (self.train_loader is not None) and (self.val_loader is not None):
+            return self.train_loader, self.val_loader         
+
         # We Only Need to Reload the Training Dataset if the Total Number of Runs is larger than 
         # the tomo batch size
         if self.train_loader is None: 
@@ -213,15 +218,21 @@ class TrainLoaderManager:
             train_ds = CacheDataset(data=train_files, transform=self._get_transforms(), cache_rate=1.0)
 
             # Wrap the cached dataset to apply random transforms during iteration
-            self.dynamic_train_dataset = dataset.DynamicDataset(data=train_ds, 
-                                                                transform=self._get_random_transforms(crop_size, num_samples))
+            self.dynamic_train_dataset = dataset.DynamicDataset(
+                data=train_ds, 
+                transform=self._get_random_transforms(crop_size, num_samples)
+            )
+
+            n_procs = min(mp.cpu_count(), 4)
+            # dataset_size = len(self.dynamic_train_dataset)
+            # n_procs = min(mp.cpu_count(), max(1, dataset_size // 1000))  # Adjust threshold as needed
 
             # DataLoader remains the same
             self.train_loader = DataLoader(
                 self.dynamic_train_dataset,
                 batch_size=train_batch_size,
                 shuffle=True,
-                num_workers=4,
+                num_workers=n_procs,
                 pin_memory=torch.cuda.is_available()
             )
 
@@ -237,7 +248,7 @@ class TrainLoaderManager:
 
         # We Only Need to Reload the Validation Dataset if the Total Number of Runs is larger than 
         # the tomo batch size
-        if self.reload_validation_dataset or self.val_loader is None: 
+        if self.val_loader is None: 
 
             validateRunIDs = self._extract_run_ids('val_data_iter', self._initialize_val_iterators)             
             val_files   = io.load_training_data(self.root, validateRunIDs, self.voxel_size, self.tomo_algorithm, 
@@ -250,11 +261,15 @@ class TrainLoaderManager:
             # Wrap the cached dataset to apply random transforms during iteration
             self.dynamic_validation_dataset = dataset.DynamicDataset(data=val_ds, transform=self._get_validation_transforms(crop_size, num_samples))
 
+            dataset_size = len(self.dynamic_validation_dataset)
+            n_procs = min(mp.cpu_count(), 8)
+            # n_procs = min(mp.cpu_count(), max(1, dataset_size // 1000))  # Adjust threshold as needed
+
             # Create validation DataLoader
             self.val_loader  = DataLoader(
                 self.dynamic_validation_dataset,
                 batch_size=val_batch_size,
-                num_workers=4,
+                num_workers=n_procs,
                 pin_memory=torch.cuda.is_available(),
                 shuffle=False,  # Ensure the data order remains consistent
             )

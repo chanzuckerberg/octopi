@@ -67,7 +67,8 @@ def objective(
         # Sample crop size in increments of 16
         # Will sample from [64, 80, 96, 112, 128, 144, 160]
         dim_in = trial.suggest_int("crop_size", 64, 160, step=16)  
-        num_samples = trial.suggest_int("num_samples", 4, 24, step=4)       
+        # num_samples = trial.suggest_int("num_samples", 4, 24, step=4)       
+        num_samples = 8
 
         # Train the Model
         try:

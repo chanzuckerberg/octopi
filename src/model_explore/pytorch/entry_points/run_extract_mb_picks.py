@@ -37,7 +37,7 @@ def extract_membrane_bound_picks(
     print(f"Using {n_procs} processes to parallelize across {n_run_ids} run IDs.")    
 
     # Initialize tqdm progress bar
-    with tqdm(total=n_run_ids, desc="Localization", unit="run") as pbar:
+    with tqdm(total=n_run_ids, desc="Membrane-Protein Isolation", unit="run") as pbar:
         for _iz in range(0, n_run_ids, n_procs):
 
             start_idx = _iz

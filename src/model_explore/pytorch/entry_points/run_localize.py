@@ -16,6 +16,7 @@ def pick_particles(
     radius_min_scale: float = 0.5,
     radius_max_scale: float = 1.5,
     filter_size: float = 10,
+    pick_objects: List[str] = None,
     runIDs: List[str] = None,
     n_procs: int = None,
     ):
@@ -31,8 +32,14 @@ def pick_particles(
         if len(obj) < 3 or not isinstance(obj[2], (float, int)):
             raise ValueError(f"Invalid object format: {obj}. Expected a tuple with (name, label, radius).")
 
+    # Filter elements
+    objects = [obj for obj in objects if obj[0] in pick_objects]
+
+    print(f'Running Localization on the Following Objects: ')
+    print(', '.join([f'{obj[0]} (Label: {obj[1]})' for obj in objects]) + '\n')
+
     # Either Specify Input RunIDs or Run on All RunIDs
-    if runIDs:  print('Running Localization on the Following RunIDs: ', runIDs)
+    if runIDs:  print('Running Localization on the Following RunIDs: ' + ', '.join(runIDs) + '\n')
     run_ids = runIDs if runIDs else [run.name for run in root.runs]
     n_run_ids = len(run_ids)
 
@@ -101,6 +108,7 @@ def cli():
     parser.add_argument("--radius-min-scale", type=float, default=0.5, required=False, help="Minimum radius scale for particles.")
     parser.add_argument("--radius-max-scale", type=float, default=1.5, required=False, help="Maximum radius scale for particles.")
     parser.add_argument("--filter-size", type=float, default=10, required=False, help="Filter size for localization.")
+    parser.add_argument("--pick-objects", type=utils.parse_list, default=None, required=False, help="Specific Objects to Find Picks for.")
     parser.add_argument("--runIDs", type=utils.parse_list, default = None, required=False, help="List of runIDs to run inference on, e.g., run1,run2,run3 or [run1,run2,run3].")
     parser.add_argument("--n-procs", type=int, default=None, required=False, help="Number of CPU processes to parallelize runs across. Defaults to the max number of cores available or available runs.")
 
@@ -126,6 +134,7 @@ def cli():
         radius_max_scale=args.radius_max_scale,
         filter_size=args.filter_size,
         runIDs=args.runIDs,
+        pick_objects=args.pick_objects,
         n_procs=args.n_procs,
     )
 

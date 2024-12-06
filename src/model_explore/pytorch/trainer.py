@@ -62,13 +62,21 @@ class unet:
         return epoch_loss
 
     def validate_update(self):
+    """
+    Perform validation and compute metrics, including validation loss.
+    """        
 
         self.model.eval()
+        val_loss = 0
         with torch.no_grad():
             for val_data in self.val_loader:
                 val_inputs = val_data["image"].to(self.device)
                 val_labels = val_data["label"].to(self.device)
                 val_outputs = self.model(val_inputs)
+
+                # Compute the loss for this batch
+                loss = self.loss_function(val_outputs, val_labels)  # Assuming self.loss_function is defined
+                val_loss += loss.item()  # Accumulate the loss                
                 
                 # Decollate batches into lists
                 val_outputs_list = decollate_batch(val_outputs)
@@ -93,6 +101,10 @@ class unet:
             for metric_name in self.metrics_function.metric_name:
                 metric = metrics.compute_confusion_matrix_metric(metric_name, f_local)
                 metric_values.append(metric.cpu())
+
+        # Compute average validation loss and add to metrics dictionary
+        val_loss /= len(self.val_loader)
+        metric_values["val_loss"] = val_loss            
 
         return metric_values
 
@@ -209,7 +221,7 @@ class unet:
         elif type == "reduce":
             mode = "min"
             patience = 5
-            factor = 0.5
+            factor = 0.8
             self.lr_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
                 self.optimizer, mode=mode, patience=patience, factor=factor )
         else:
@@ -246,6 +258,7 @@ class unet:
 
         self.results = {
             'loss': [],
+            'val_loss': [],
             'avg_f1': [],
             'avg_recall': [],
             'avg_precision': [],
