@@ -1,21 +1,18 @@
 from scipy.spatial.transform import Rotation as R
 from model_explore.pytorch import utils, io
 import scipy.ndimage as ndi
+from typing import Tuple
 import numpy as np
 import math
 
 def process_membrane_bound_extract(run,
                                    voxel_size: float,
-                                   segmentation_name: str,
-                                   segmentation_user_id: str,
-                                   segmentation_session_id: str,
-                                   picks_name: str,
-                                   picks_user_id: str,
-                                   picks_session_id: str,
+                                   picks_info: Tuple[str, str, str],
+                                   membrane_info: Tuple[str, str, str],
+                                   organelle_info: Tuple[str, str, str],
                                    save_user_id: str,
                                    save_session_id: str,
-                                   distance_threshold: float,
-                                   organelle_seg: bool = False):
+                                   distance_threshold: float):
 
     """
     Process membrane-bound particles and extract their coordinates and orientations.
@@ -38,33 +35,67 @@ def process_membrane_bound_extract(run,
     # Increment session ID for the second class
     new_session_id = str(int(save_session_id) + 1)  # Convert to string after increment                                  
 
-    # Get Segmentation
-    seg = io.get_segmentation_array(run, 
-                                    voxel_size, 
-                                    segmentation_name, 
-                                    user_id=segmentation_user_id, 
-                                    session_id=segmentation_session_id)
-
     # Need Better Error Handing for Missing Picks
     coordinates = io.get_copick_coordinates(
         run, 
-        picks_name, picks_user_id, picks_session_id,
+        picks_info[0], picks_info[1], picks_info[2],
         voxel_size
     )
     nPoints = len(coordinates)
 
+    # Determine which Segmentation to Use for Filtering
+    if membrane_info is None:
+        # Flag to distinguish between organelle and membrane segmentation
+        membranes_provided = False
+        seg = io.get_segmentation_array(run, 
+                                    voxel_size, 
+                                    organelle_info[0],
+                                    user_id=organelle_info[1], 
+                                    session_id=organelle_info[2],
+                                    raise_error=False)
+        # If No Segmentation is Found, Return
+        if seg is None: return     
+        elif nPoints == 0 or np.unique(seg).max() == 0:
+            print(f'[Warning] RunID: {run.name} - Seg Unique Values: {np.unique(seg)}, nPoints: {nPoints}')
+            return                                            
+    else:
+        # Read both Organelle and Membrane Segmentations
+        membranes_provided = True
+        seg = io.get_segmentation_array(
+            run, 
+            voxel_size, 
+            membrane_info[0],
+            user_id=membrane_info[1], 
+            session_id=membrane_info[2],
+            raise_error=False)
+
+        organelle_seg = io.get_segmentation_array(
+            run, 
+            voxel_size, 
+            organelle_info[0],
+            user_id=organelle_info[1], 
+            session_id=organelle_info[2],
+            raise_error=False)
+        # If No Segmentation is Found, Return
+        if seg is None or organelle_seg is None: return
+        elif nPoints == 0 or np.unique(organelle_seg).max() == 0:
+            print(f'[Warning] RunID: {run.name} - Organelle Seg Unique Values: {np.unique(organelle_seg)}, nPoints: {nPoints}')
+            return            
+
     if nPoints > 0:
 
-        # Step 1: Get Organelle Centers (Optional if an organelle segmentation is provided)
-        if organelle_seg: organelle_centers = organelle_points(seg)
-
-        # Step 2: Find Closest Organelle Points
+        # Step 1: Find Closest Points to Segmentation of Interest
         points, closest_labels = closest_organelle_points(
             seg, 
             coordinates, 
             max_distance=distance_threshold, 
             return_labels_array=True
-        )                                                                          
+        )
+
+        # # Optional break
+        # if points is None or len(points) == 0:
+        #     print(f"[Warning] RunID: {run.name} doesn't have any points close to membranes/organelles.")
+        #     return
 
         # Identify close and far indices
         close_indices = np.where(closest_labels != -1)[0]
@@ -72,7 +103,11 @@ def process_membrane_bound_extract(run,
 
         # Initialize orientations array
         orientations = np.zeros([nPoints, 4, 4])
-        orientations[:,3,3] = 1               
+        orientations[:,3,3] = 1 
+
+        # Step 2: Get Organelle Centers (Optional if an organelle segmentation is provided)
+        if membranes_provided: organelle_centers = organelle_points(organelle_seg)
+        else:                  organelle_centers = organelle_points(seg)
 
         # Step 3: Get All the Rotation Matrices from Euler Angles Based on Normal Vector
         if len(close_indices) > 0:
@@ -93,14 +128,14 @@ def process_membrane_bound_extract(run,
         
         if len(close_indices) > 0:
             # Save the close points in CoPick project
-            close_picks = run.new_picks(object_name=picks_name, user_id=save_user_id, session_id=save_session_id)
+            close_picks = run.new_picks(object_name=picks_info[0], user_id=save_user_id, session_id=save_session_id)
             close_picks.from_numpy(coordinates[close_indices], orientations[close_indices])
 
         # Save the far points Coordiantes
         if len(far_indices) > 0:                        
 
             # Save as another CoPick pick
-            far_picks = run.new_picks(object_name=picks_name, user_id=save_user_id, session_id=new_session_id)
+            far_picks = run.new_picks(object_name=picks_info[0], user_id=save_user_id, session_id=new_session_id)
 
             # Assume We Don't Know The Orientation for Anything Far From Membranes
             empty_orientations =  np.zeros(orientations[far_indices].shape)
@@ -122,13 +157,14 @@ def organelle_points(mask, xyz_order=False):
         # coordinates[str(label)] = ndimage.center_of_mass(mask == label)
     return coordinates     
 
-def closest_organelle_points(mask, coords, max_distance=float('inf'), return_labels_array=False):
+def closest_organelle_points(mask, coords, min_distance = 0, max_distance=float('inf'), return_labels_array=False):
     """
     Filter points in `coords` based on their proximity to the lysosome membrane.
 
     Args:
         mask (numpy.ndarray): 3D segmentation mask with integer labels.
         coords (numpy.ndarray): Array of shape (N, 3) with 3D coordinates.
+        min_distance (float): Minimum distance threshold for a point to be considered.
         max_distance (float): Maximum distance threshold for a point to be considered.
         return_labels_array (bool): Whether to return the labels array matching the
                                     original order of coords.
@@ -140,7 +176,6 @@ def closest_organelle_points(mask, coords, max_distance=float('inf'), return_lab
                                    or -1 if the point is outside the specified range.
                                    Only returned if `return_labels_array=True`.
     """
-    min_distance = 1
 
     unique_labels = np.unique(mask)
     unique_labels = unique_labels[unique_labels > 0]  # Ignore background (label 0)
@@ -156,6 +191,13 @@ def closest_organelle_points(mask, coords, max_distance=float('inf'), return_lab
     # Combine all mask points and labels into arrays
     all_mask_points = np.vstack(all_mask_points)
     all_labels = np.array(all_labels)
+
+    # Handle empty mask case
+    # if len(all_mask_points) == 0:
+    #     if return_labels_array:
+    #         return {}, np.full(len(coords), -1, dtype=int)
+    #     else:
+    #         return np.array([])    
 
     # Initialize a dictionary to store filtered points for each label
     label_to_filtered_points = {label: [] for label in unique_labels}

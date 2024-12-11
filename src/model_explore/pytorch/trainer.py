@@ -62,9 +62,9 @@ class unet:
         return epoch_loss
 
     def validate_update(self):
-    """
-    Perform validation and compute metrics, including validation loss.
-    """        
+        """
+        Perform validation and compute metrics, including validation loss.
+        """        
 
         self.model.eval()
         val_loss = 0
@@ -104,7 +104,7 @@ class unet:
 
         # Compute average validation loss and add to metrics dictionary
         val_loss /= len(self.val_loader)
-        metric_values["val_loss"] = val_loss            
+        metric_values.append(val_loss)
 
         return metric_values
 
@@ -281,8 +281,9 @@ class unet:
         # If metrics_dict contains multiple elements (e.g., recall, precision, f1), process them
         if len(metrics_dict) > 1:
 
-            # Extract individual metrics (assume metrics_dict contains recall, precision, f1 in sequence)
-            recall, precision, f1 = metrics_dict[0], metrics_dict[1], metrics_dict[2]
+            # Extract individual metrics 
+            # (assume metrics_dict contains recall, precision, f1, val_loss in sequence)
+            recall, precision, f1, val_loss = metrics_dict[0], metrics_dict[1], metrics_dict[2], metrics_dict[3]
 
             # Log per-class metrics
             metrics_to_log = {}
@@ -295,6 +296,7 @@ class unet:
             metrics_to_log["avg_recall"] = recall.mean().cpu().item()
             metrics_to_log["avg_precision"] = precision.mean().cpu().item()
             metrics_to_log["avg_f1"] = f1.mean().cpu().item()
+            metrics_to_log['val_loss'] = val_loss
 
             # Update metrics_dict for further logging
             metrics_dict = metrics_to_log
@@ -343,9 +345,12 @@ class unet:
         # Unpack the data for loss (logged every epoch)
         epochs_loss = [epoch for epoch, _ in self.results['loss']]
         loss = [value for _, value in self.results['loss']]
+        val_epochs_loss = [epoch for epoch, _ in self.results['val_loss']]
+        val_loss = [value for _,value in self.results['val_loss']]
 
         # Plot Training Loss in the top-left
         axs[0, 0].plot(epochs_loss, loss, label="Training Loss")
+        axs[0, 0].plot(val_epochs_loss, val_loss, label='Validation Loss')
         axs[0, 0].set_xlabel("Epochs")
         axs[0, 0].set_ylabel("Loss")
         axs[0, 0].set_title("Training Loss")

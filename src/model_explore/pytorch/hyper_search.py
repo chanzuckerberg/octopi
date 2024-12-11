@@ -80,7 +80,7 @@ def objective(
                 val_interval = val_interval,
                 my_num_samples = num_samples,
                 use_mlflow = True, verbose=False )
-            score = results['best_metric']
+            score = results[best_metric]
         except torch.cuda.OutOfMemoryError:
             print(f"[Trial Failed] Out of Memory for crop_size={dim_in} and num_samples={num_samples}")
             trial.set_user_attr("out_of_memory", True)  # Optional: Log this for analysis
@@ -111,8 +111,9 @@ def multi_gpu_objective(parent_run_id,
                         trial,  
                         epochs,
                         data_generator,
-                        random_seed = 42,
+                        random_seed: int = 42,
                         val_interval: int = 5,
+                        best_metric: str = 'avg_f1',
                         gpu_count = 1,):
     
     utils.set_seed(random_seed)

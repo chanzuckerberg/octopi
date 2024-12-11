@@ -1,11 +1,11 @@
 from skimage.morphology import binary_erosion, binary_dilation, ball
 from scipy.cluster.hierarchy import fcluster, linkage
 from skimage.segmentation import watershed
+from typing import List, Optional, Tuple
 from skimage.measure import regionprops
 from model_explore.pytorch import io
 from scipy.spatial import distance
 from dataclasses import dataclass
-from typing import List, Optional
 import scipy.ndimage as ndi
 from tqdm import tqdm
 import numpy as np
@@ -13,9 +13,7 @@ import math
 
 def processs_localization(run,  
                           objects, 
-                          seg_name: str,
-                          seg_user_id: str = None,
-                          seg_session_id: str = None,
+                          seg_info: Tuple[str, str, str],
                           method: str = 'com', 
                           voxel_size: float = 10,
                           filter_size: float = None,
@@ -31,9 +29,14 @@ def processs_localization(run,
     # Get Segmentation
     seg = io.get_segmentation_array(run, 
                                     voxel_size, 
-                                    seg_name, 
-                                    user_id=seg_user_id, 
-                                    session_id=seg_session_id)
+                                    seg_info[0], 
+                                    user_id=seg_info[1], 
+                                    session_id=seg_info[2],
+                                    raise_error=False)
+
+    # If No Segmentation is Found, Return
+    if seg is None:
+        return
     
     # Iterate through all user pickable objects
     for obj in objects:

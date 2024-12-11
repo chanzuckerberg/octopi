@@ -25,12 +25,15 @@ class Predictor:
                  my_num_res_units: int = 1, 
                  my_nclass: int = 3,
                  dim_in: int = 96,
+                 tomo_batch_size: int = 48,
                  device: Optional[str] = None):
 
         self.config = config
         self.root = copick.from_file(config)
         self.Nclass = my_nclass     
         self.dim_in = dim_in
+        self.tomo_batch_size = tomo_batch_size
+        
         # Get the number of GPUs available
         num_gpus = torch.cuda.device_count()
         if num_gpus == 0:

@@ -84,7 +84,8 @@ def create_predict_dataloader(
 
 def get_tomogram_array(run, 
                        voxel_size: float = 10, 
-                       tomo_type: str = 'wbp'):
+                       tomo_type: str = 'wbp',
+                       raise_error: bool = True):
     
     voxel_spacing_obj = run.get_voxel_spacing(voxel_size)
 
@@ -92,19 +93,28 @@ def get_tomogram_array(run,
         # Query Avaiable Voxel Spacings
         availableVoxelSpacings = [tomo.voxel_size for tomo in run.voxel_spacings]
 
-        # Report to the user which spacings they can use 
-        raise ValueError(f"Voxel Spacings of '{voxel_size}' was not found. "
-                         f"Available spacings are: {', '.join(map(str, availableVoxelSpacings))}")
+        if raise_error:
+            # Report to the user which spacings they can use 
+            raise ValueError(f"Voxel Spacings of '{voxel_size}' in {run.name} was not found. "
+                             f"Available spacings are: {', '.join(map(str, availableVoxelSpacings))}")
+        else:
+            print(f"[Warning] No tomogram found for {run.name} with voxel size {voxel_size} and tomogram type {tomo_type}")
+            print(f"Available spacings are: {', '.join(map(str, availableVoxelSpacings))}")
+            return None
     
     tomogram = voxel_spacing_obj.get_tomogram(tomo_type)
     if tomogram is None:
         # Get available algorithms
         availableAlgorithms = [tomo.tomo_type for tomo in run.get_voxel_spacing(voxel_size).tomograms]
         
-        # Report to the user
-        raise ValueError(f"The tomogram with the algorithm '{tomo_type}' was not found. "
-                         f"Available algorithms are: {', '.join(availableAlgorithms)}")
-
+        if raise_error:
+            # Report to the user
+            raise ValueError(f"The tomogram with the algorithm '{tomo_type}' in {run.name} was not found. "
+                             f"Available algorithms are: {', '.join(availableAlgorithms)}")
+        else:
+            print(f"[Warning] No tomogram found for {run.name} with voxel size {voxel_size} and tomogram type {tomo_type}")
+            print(f"Available algorithms are: {', '.join(availableAlgorithms)}")
+            return None
 
     return tomogram.numpy()
 
@@ -114,7 +124,8 @@ def get_segmentation_array(run,
                            voxel_spacing: float,
                            segmentation_name: str, 
                            session_id=None,
-                           user_id=None):
+                           user_id=None,
+                           raise_error: bool = True):
 
     seg = run.get_segmentations(name=segmentation_name, 
                                 session_id = session_id,
@@ -131,10 +142,16 @@ def get_segmentation_array(run,
         seg_details = [f"(name: {name}, user_id: {uid}, session_id: {sid})" 
                       for name, uid, sid in seg_info]
         
-        raise ValueError(f'\nNo segmentation found matching:\n'
-                        f'  name: {segmentation_name}, user_id: {user_id}, session_id: {session_id}\n'
-                        f'Available segmentations are:\n  ' + 
-                        '\n  '.join(seg_details))
+        if raise_error:
+            raise ValueError(f'\nNo segmentation found matching:\n'
+                            f'  name: {segmentation_name}, user_id: {user_id}, session_id: {session_id}\n'
+                            f'Available segmentations in {run.name} are:\n  ' + 
+                            '\n  '.join(seg_details))
+        else:
+            print(f"[Warning] No segmentation found for {run.name} with voxel size {voxel_spacing},")
+            print(f'name: {segmentation_name}, user_id: {user_id}, session_id: {session_id}')
+            print(f"Available segmentations are:\n  " + '\n  '.join(seg_details))
+            return None
 
     # No Segmentations Are Available, Result in Error
     if len(seg) > 1:
@@ -151,8 +168,8 @@ def get_copick_coordinates(run,                    # CoPick run object containin
                            name: str,              # Name of the object or protein for which coordinates are being extracted
                            user_id: str,           # Identifier of the user that generated the picks
                            session_id: str = None, # Identifier of the session that generated the picks
-                           voxel_size: float = 10  # Voxel size of the tomogram, used for scaling the coordinates
-                           ):
+                           voxel_size: float = 10,  # Voxel size of the tomogram, used for scaling the coordinates
+                           raise_error: bool = True):
                            
     # Retrieve the pick points associated with the specified object and user ID
     picks = run.get_picks(object_name=name, user_id=user_id, session_id=session_id)
@@ -167,10 +184,15 @@ def get_copick_coordinates(run,                    # CoPick run object containin
         picks_details = [f"(name: {name}, user_id: {uid}, session_id: {sid})" 
                       for name, uid, sid in picks_info]
         
-        raise ValueError(f'\nNo picks found matching:\n'
-                         f'  name: {name}, user_id: {user_id}, session_id: {session_id}\n'
-                         f'Available segmentations are:\n  ' + 
-                         '\n  '.join(picks_details))
+        message = ( f'\nNo picks found matching:\n'
+                    f'  name: {name}, user_id: {user_id}, session_id: {session_id}\n'
+                    f'Available segmentations are:\n  '  
+                    + '\n  '.join(picks_details) )
+        if raise_error:
+            raise ValueError(message)
+        else:
+            print(message)
+            return None
     elif len(picks) > 1:
         # Format pick information for display
         picks_info = [(p.pickable_object_name, p.user_id, p.session_id) for p in picks]
@@ -192,9 +214,10 @@ def get_copick_coordinates(run,                    # CoPick run object containin
         coordinates[ii,] = [points[ii].location.z / voxel_size,   # Scale z-coordinate by voxel size
                             points[ii].location.y / voxel_size,   # Scale y-coordinate by voxel size
                             points[ii].location.x / voxel_size]   # Scale x-coordinate by voxel size
-    
+
     # Return the array of coordinates
     return coordinates
+    
 
 ##############################################################################################################################
 

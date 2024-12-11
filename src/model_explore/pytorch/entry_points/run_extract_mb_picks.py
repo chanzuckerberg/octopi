@@ -1,22 +1,18 @@
 from model_explore.pytorch import utils, io, extract
 import copick, subprocess, glob, os, click, json
-from typing import List, Optional
+from typing import List, Tuple, Optional
+import argparse, json, pprint
 import multiprocess as mp
 from tqdm import tqdm
-import argparse, json
 import numpy as np
 
 def extract_membrane_bound_picks(
     config: str,
     voxel_size: float,
     distance_threshold: float,
-    organelle_seg: bool,
-    picks_name: str,
-    picks_user_id: str,
-    picks_session_id: str,
-    segmentation_name: str,
-    segmentation_user_id: str,
-    segmentation_session_id: str,
+    picks_info: Tuple[str, str, str],
+    organelle_info: Tuple[str, str, str],
+    membrane_info: Tuple[str, str, str],
     save_user_id: str,
     save_session_id: str,
     runIDs: List[str],
@@ -34,7 +30,7 @@ def extract_membrane_bound_picks(
     # Determine the number of processes to use
     if n_procs is None:
         n_procs = min(mp.cpu_count(), n_run_ids)
-    print(f"Using {n_procs} processes to parallelize across {n_run_ids} run IDs.")    
+    print(f"Using {n_procs} processes to parallelize across {n_run_ids} run IDs.")   
 
     # Initialize tqdm progress bar
     with tqdm(total=n_run_ids, desc="Membrane-Protein Isolation", unit="run") as pbar:
@@ -55,16 +51,12 @@ def extract_membrane_bound_picks(
                     target=extract.process_membrane_bound_extract,
                     args=(run,  
                           voxel_size, 
-                          segmentation_name,
-                          segmentation_user_id,
-                          segmentation_session_id,
-                          picks_name, 
-                          picks_user_id,
-                          picks_session_id,
+                          picks_info, 
+                          membrane_info,
+                          organelle_info,
                           save_user_id, 
                           save_session_id,
-                          distance_threshold,
-                          organelle_seg),
+                          distance_threshold),
                 )
                 processes.append(p)
 
@@ -87,13 +79,9 @@ def cli():
     parser.add_argument('--config', type=str, required=True, help='Path to the configuration file.')
     parser.add_argument('--voxel-size', type=float, required=False, default=10, help='Voxel size.')
     parser.add_argument('--distance-threshold', type=float, required=False, default=10, help='Distance threshold.')
-    parser.add_argument('--organelle-seg', type=bool, required=False, default=True, help='Whether the segmentation is an organelle segmentation.')
-    parser.add_argument('--picks-name', type=str, required=True, help='Name of the picks.')
-    parser.add_argument('--picks-user-id', type=str, required=False, default=None, help='User ID for the picks.')
-    parser.add_argument('--picks-session-id', type=str, required=False, default=None, help='Session ID for the picks.')
-    parser.add_argument('--segmentation-name', type=str, required=True, help='Name of the segmentation.')
-    parser.add_argument('--segmentation-user-id', type=str, required=False, default=None, help='User ID for the segmentation.')
-    parser.add_argument('--segmentation-session-id', type=str, required=False, default=None, help='Session ID for the segmentation.')
+    parser.add_argument('--picks-info', type=utils.parse_target, required=True, help='Query for the picks (e.g., "name" or "name,user_id,session_id".).')
+    parser.add_argument('--membrane-info', type=utils.parse_target, required=False, help='Query for the membrane segmentation (e.g., "name" or "name,user_id,session_id".).')
+    parser.add_argument('--organelle-info', type=utils.parse_target, required=False, help='Query for the organelles segmentations (e.g., "name" or "name,user_id,session_id".).')
     parser.add_argument('--save-user-id', type=str, required=False, default=None, help='User ID to save the new picks.')
     parser.add_argument('--save-session-id', type=str, required=True, help='Session ID to save the new picks.')
     parser.add_argument('--runIDs', type=utils.parse_list, required=False, help='List of run IDs to process.')
@@ -113,13 +101,9 @@ def cli():
         config=args.config,
         voxel_size=args.voxel_size,
         distance_threshold=args.distance_threshold,
-        organelle_seg=args.organelle_seg,
-        picks_name=args.picks_name,
-        picks_user_id=args.picks_user_id,
-        picks_session_id=args.picks_session_id,
-        segmentation_name=args.segmentation_name,
-        segmentation_user_id=args.segmentation_user_id,
-        segmentation_session_id=args.segmentation_session_id,
+        picks_info=args.picks_info,
+        membrane_info=args.membrane_info,
+        organelle_info=args.organelle_info,
         save_user_id=args.save_user_id,
         save_session_id=args.save_session_id,
         runIDs=args.runIDs,
@@ -132,18 +116,21 @@ def save_parameters_json(args: argparse.Namespace,
     params_dict = {
         "input": {
             k: getattr(args, k) for k in [
-                "config", "voxel_size", "picks_name", "picks_user_id", 
-                "picks_session_id", "segmentation_name", "segmentation_user_id", 
-                "segmentation_session_id"
+                "config", "voxel_size", "picks_info", 
+                "membrane_info", "organelle_info"
             ]
         },
         "output": {
             k: getattr(args, k) for k in ["save_user_id", "save_session_id"]
         },
         "parameters": {
-            k: getattr(args, k) for k in ["distance_threshold", "organelle_seg", "runIDs"]
+            k: getattr(args, k) for k in ["distance_threshold", "runIDs"]
         }
     }
+
+    # Print the parameters
+    print("Parameters for Extraction of Membrane-Bound Picks:")
+    pprint.pprint(params_dict)
 
     with open(output_path, 'w') as f:
         json.dump(params_dict, f, indent=4)    

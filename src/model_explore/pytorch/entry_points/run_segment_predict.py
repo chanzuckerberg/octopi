@@ -1,22 +1,21 @@
 from model_explore.pytorch import segmentation, utils
-import torch, argparse, json
-from typing import List
+import torch, argparse, json, pprint
+from typing import List, Tuple
 
 def inference(
     copick_config_path: str,
     model_weights: str, 
-    model_type: str = 'Unet',
-    segmentation_name: str = 'segment-predict',
-    segmentation_user_id: str = 'monai',
-    segmentation_session_id: str = '1',
-    voxel_size: float = 10,
-    tomo_algorithm: str = 'wbp',
-    channels: List[int] = [32,64,128,128],
-    strides: List[int] = [2,2,1],
-    res_units: int = 2,
-    dim_in: int = 96,
-    nclass: int = 3,    
-    run_ids: List[str] = None,
+    model_type: str,
+    seg_info: Tuple[str,str,str],
+    voxel_size: float,
+    tomo_algorithm: str,
+    channels: List[int],
+    strides: List[int],
+    res_units: int,
+    dim_in: int,
+    nclass: int,    
+    tomo_batch_size: int,
+    run_ids: List[str],
     ):
     """
     Perform segmentation inference using a model on provided tomograms.
@@ -56,9 +55,9 @@ def inference(
             runIDs=run_ids,
             tomo_algorithm=tomo_algorithm,
             voxel_spacing=voxel_size,
-            segmentation_name=segmentation_name,
-            segmentation_user_id=segmentation_user_id,
-            segmentation_session_id=segmentation_session_id,
+            segmentation_name=seg_info[0],
+            segmentation_user_id=seg_info[1],
+            segmentation_session_id=seg_info[2],
             save=True
         )
 
@@ -78,11 +77,12 @@ def inference(
         # Run batch prediction
         predict.batch_predict(
             runIDs=run_ids,
+            num_tomos_per_batch=tomo_batch_size,
             tomo_algorithm=tomo_algorithm,
             voxel_spacing=voxel_size,
-            segmentation_name=segmentation_name,
-            segmentation_user_id=segmentation_user_id,
-            segmentation_session_id=segmentation_session_id
+            segmentation_name=seg_info[0],
+            segmentation_user_id=seg_info[1],
+            segmentation_session_id=seg_info[2]
         )
 
     print("Inference completed successfully.")
@@ -105,13 +105,18 @@ def cli():
     parser.add_argument("--dim-in", type=int, default=96, required=False, help="Dimension of the input tomograms. Default is 96.")
     parser.add_argument("--voxel-size", type=float, default=10.0, required=False, help="Voxel size for tomogram reconstruction. Default is 10.0.")
     parser.add_argument("--tomogram-algorithm", type=str, default="wbp", required=False, help="Tomogram reconstruction algorithm. Default is 'wbp'.")
-    parser.add_argument("--segmentation-name", type=str, default="segment-predict", required=False, help="Name for the segmentation output. Default is 'segment-predict'.")
-    parser.add_argument("--segmentation-user-id", type=str, default="monai", required=False, help="User ID associated with the segmentation. Default is 'monai'.")
-    parser.add_argument("--segmentation-session-id", type=str, default="1", required=False, help="Session ID for the segmentation. Default is '1'.")
+    parser.add_argument("--seg-info", type=utils.parse_list, default=None, required=True, help='Information Query to save Segmentation predictions under, e.g., (e.g., "name" or "name,user_id,session_id".')
+    parser.add_argument("--tomo-batch-size", type=int, default=50, required=False, help="Batch size for tomogram processing. Default is 48.")
     parser.add_argument("--run-ids", type=utils.parse_list, default=None, required=False, help="List of run IDs for prediction, e.g., run1,run2 or [run1,run2]. If not provided, all available runs will be processed.")
     
     # Parse arguments
     args = parser.parse_args()
+
+    if args.seg_info[1] is None:
+        args.seg_info[1] = "monai"
+
+    if args.seg_info[2] is None:
+        args.seg_info[2] = "1"
 
     # Save JSON with Parameters
     output_json = f'segment-predict_{args.segmentation_user_id}_{args.segmentation_session_id}_{args.segmentation_name}.json'
@@ -129,9 +134,8 @@ def cli():
         dim_in=args.dim_in,
         voxel_size=args.voxel_size,
         tomo_algorithm=args.tomogram_algorithm,
-        segmentation_name=args.segmentation_name,
-        segmentation_user_id=args.segmentation_user_id,
-        segmentation_session_id=args.segmentation_session_id,
+        seg_info=args.seg_info,
+        tomo_batch_size=args.tomo_batch_size,
         run_ids=args.run_ids,
     )
 
@@ -147,9 +151,9 @@ def save_parameters_json(args: argparse.Namespace,
             "voxel_size": args.voxel_size
         },
         "outputs": {
-            "segmentation_name": args.segmentation_name,
-            "segmentation_user_id": args.segmentation_user_id,
-            "segmentation_session_id": args.segmentation_session_id
+            "segmentation_name": args.seg_info[0],
+            "segmentation_user_id": args.seg_info[1],
+            "segmentation_session_id": args.seg_info[2]
         },
         "model": {
             "model_type": args.model_type,
@@ -160,7 +164,11 @@ def save_parameters_json(args: argparse.Namespace,
             "dim_in": args.dim_in,
             "run_ids": args.run_ids
         }
-    }                         
+    }            
+
+    # Print the parameters
+    print("Parameters for Inference (Segment Prediction):")
+    pprint.pprint(params)
 
     # Save to JSON file
     with open(output_path, 'w') as f:

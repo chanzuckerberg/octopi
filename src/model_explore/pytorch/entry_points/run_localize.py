@@ -1,24 +1,22 @@
 from model_explore.pytorch import localize, utils
-import copick, argparse, json
+import copick, argparse, json, pprint
+from typing import List, Tuple
 import multiprocess as mp
-from typing import List
 from tqdm import tqdm
 
 def pick_particles(
     copick_config_path: str,
-    method: str = 'watershed',
-    seg_name: str = 'segment-predict',
-    seg_user_id: str = None,
-    seg_session_id: str = None,
-    voxel_size: str = 10,
-    pick_session_id: str = '1',
-    pick_user_id: str = 'monai',
-    radius_min_scale: float = 0.5,
-    radius_max_scale: float = 1.5,
-    filter_size: float = 10,
-    pick_objects: List[str] = None,
-    runIDs: List[str] = None,
-    n_procs: int = None,
+    method: str,
+    seg_info: Tuple[str, str, str],
+    voxel_size: str,
+    pick_session_id: str,
+    pick_user_id: str,
+    radius_min_scale: float,
+    radius_max_scale: float,
+    filter_size: float,
+    pick_objects: List[str],
+    runIDs: List[str],
+    n_procs: int,
     ):
 
     # Load the Copick Project
@@ -67,9 +65,7 @@ def pick_particles(
                     target=localize.processs_localization,
                     args=(run,  
                           objects, 
-                          seg_name,
-                          seg_user_id,
-                          seg_session_id,
+                          seg_info,
                           method, 
                           voxel_size,
                           filter_size,
@@ -99,9 +95,7 @@ def cli():
     parser = argparse.ArgumentParser(description="Localized particles in tomograms using multiprocessing.")
     parser.add_argument("--config", type=str, required=True, help="Path to the CoPick configuration file.")
     parser.add_argument("--method", type=str, choices=['watershed', 'com'], default='watershed', required=False, help="Localization method to use.")
-    parser.add_argument("--seg-name", type=str, default='segment-predict', required=False, help="Name of the segmentation.")
-    parser.add_argument("--seg-user-id", type=str, default=None,  required=False, help="User ID for the segmentation.")
-    parser.add_argument("--seg-session-id", type=str, default=None, required=False, help="Session ID for the segmentation.")
+    parser.add_argument('--seg-info', type=utils.parse_target, required=True, help='Query for the organelles segmentations (e.g., "name" or "name,user_id,session_id".).')
     parser.add_argument("--voxel-size", type=float, default=10, required=False, help="Voxel size for localization.")
     parser.add_argument("--pick-session-id", type=str, default='1', required=False, help="Session ID for the particle picks.")
     parser.add_argument("--pick-user-id", type=str, default='monai', required=False, help="User ID for the particle picks.")
@@ -124,9 +118,7 @@ def cli():
     pick_particles(
         copick_config_path=args.config,
         method=args.method,
-        seg_name=args.seg_name,
-        seg_user_id=args.seg_user_id,
-        seg_session_id=args.seg_session_id,
+        seg_info=args.seg_info,
         voxel_size=args.voxel_size,
         pick_session_id=args.pick_session_id,
         pick_user_id=args.pick_user_id,
@@ -145,9 +137,9 @@ def save_parameters_json(args: argparse.Namespace,
     params = {
         "input": {
             "config": args.config,
-            "seg_name": args.seg_name,
-            "seg_user_id": args.seg_user_id,
-            "seg_session_id": args.seg_session_id,
+            "seg_name": args.seg_info[0],
+            "seg_user_id": args.seg_info[1],
+            "seg_session_id": args.seg_info[2],
             "voxel_size": args.voxel_size
         },
         "output": {
@@ -162,7 +154,11 @@ def save_parameters_json(args: argparse.Namespace,
             "runIDs": args.runIDs
         }
     }
-    
+
+    # Print the parameters
+    print("Parameters for Localization:")
+    pprint.pprint(params)
+
     # Save to JSON file
     with open(output_path, 'w') as f:
         json.dump(params, f, indent=4)                         

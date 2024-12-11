@@ -1,24 +1,25 @@
 from model_explore.pytorch.datasets import generators, multi_config_generator
 from model_explore.pytorch import io, hyper_search, utils
-import torch, mlflow, optuna, argparse, json, os
+import torch, mlflow, optuna, argparse, json, os, pprint
 from typing import List, Optional
 
 def model_search(
     copick_config: str,
     target_name: str,
-    target_user_id: str = None,
-    target_session_id: str = None,
-    tomo_algorithm: str = 'wbp',
-    voxel_size: float = 10,    
-    Nclass: int = 3,
-    mlflow_experiment_name: str = 'model-search',
-    mlflow_tracking_uri: str = "http://mlflow.mlflow.svc.cluster.local:5000", 
-    random_seed: int = 42,
-    num_epochs: int = 100,
-    num_trials: int = 20,
-    tomo_batch_size: int = 20,
-    trainRunIDs: List[str] = None,
-    validateRunIDs: List[str] = None,   
+    target_user_id: str,
+    target_session_id: str,
+    tomo_algorithm: str,
+    voxel_size: float,    
+    Nclass: int,
+    mlflow_experiment_name: str,
+    mlflow_tracking_uri: str, 
+    random_seed: int,
+    num_epochs: int,
+    num_trials: int,
+    tomo_batch_size: int,
+    best_metric: str,
+    trainRunIDs: List[str],
+    validateRunIDs: List[str],   
     ):
     """
     Perform model architecture search using Optuna, MLflow, and a custom data generator.
@@ -40,6 +41,9 @@ def model_search(
     - trainRunIDs (List[str]): List of training run IDs.
     - validateRunIDs (List[str]): List of validation run IDs.
     """
+
+    # Random Seed
+    utils.set_seed(random_seed)
 
     # Initialize the data generator to manage training and validation datasets
     print_input_configs(copick_config)
@@ -69,6 +73,8 @@ def model_search(
     # Split datasets into training and validation
     data_generator.get_data_splits(trainRunIDs = trainRunIDs,
                                    validateRunIDs = validateRunIDs)
+
+    import pdb; podb.set_trace()
 
     # Get the reload frequency
     data_generator.get_reload_frequency(num_epochs) 
@@ -109,12 +115,14 @@ def model_search(
     # Get available GPUs (for example, on an 4 GPU node) - Run the appropriate function based on the number of GPUs
     gpu_count = torch.cuda.device_count()
     if gpu_count > 1:
-        multi_gpu_optuna(storage, tpe_sampler, pruner, data_generator, num_epochs, random_seed, num_trials, gpu_count)
+        multi_gpu_optuna(storage, tpe_sampler, pruner, data_generator, num_epochs, 
+                         random_seed, num_trials, best_metric, gpu_count)
     else:
-        single_gpu_optuna(storage, tpe_sampler, pruner, data_generator, num_epochs, random_seed, num_trials)
+        single_gpu_optuna(storage, tpe_sampler, pruner, data_generator, num_epochs, 
+                          random_seed, num_trials, best_metric)
     
 
-def single_gpu_optuna(storage, tpe_sampler, pruner, data_generator, num_epochs, random_seed, num_trials):
+def single_gpu_optuna(storage, tpe_sampler, pruner, data_generator, num_epochs, random_seed, num_trials, best_metric):
     """
     Run Optuna optimization on a single GPU.
     """
@@ -133,13 +141,14 @@ def single_gpu_optuna(storage, tpe_sampler, pruner, data_generator, num_epochs, 
         device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')        
 
         study.optimize(lambda trial: hyper_search.objective(trial, num_epochs, device, 
-                                                            data_generator, random_seed = random_seed), 
+                                                            data_generator, random_seed = random_seed, 
+                                                            best_metric = best_metric), 
                         n_trials=num_trials)
 
         print(f"Best trial: {study.best_trial.value}")
         print(f"Best params: {study.best_params}")
     
-def multi_gpu_optuna(storage, tpe_sampler, pruner, data_generator, num_epochs, random_seed, num_trials, gpu_count):
+def multi_gpu_optuna(storage, tpe_sampler, pruner, data_generator, num_epochs, random_seed, num_trials, best_metric, gpu_count):
     """
     Run Optuna optimization on multiple GPUs.
     """     
@@ -158,6 +167,7 @@ def multi_gpu_optuna(storage, tpe_sampler, pruner, data_generator, num_epochs, r
         study.optimize(lambda trial: hyper_search.multi_gpu_objective(parent_run_id, trial, 
                                                                       num_epochs,
                                                                       data_generator, 
+                                                                      best_metric = best_metric,
                                                                       gpu_count = gpu_count), 
                        n_trials=num_trials,
                        n_jobs=gpu_count) # Run trials on multiple GPUs
@@ -202,6 +212,7 @@ def cli():
     parser.add_argument("--num-epochs", type=int, default=100, required=False, help="Number of epochs per trial (default: 100).")
     parser.add_argument("--num-trials", type=int, default=10, required=False, help="Number of trials for architecture search (default: 10).")
     parser.add_argument("--tomo-batch-size", type=int, default=20, required=False, help="Batch size for tomograms (default: 20).")
+    parser.add_argument("--best-metric", type=str, default='avg_f1', required=False, help="Metric to Monitor for Optimization")
     parser.add_argument("--trainRunIDs", type=utils.parse_list, default=None, required=False, help="List of training run IDs, e.g., run1,run2 or [run1,run2].")
     parser.add_argument("--validateRunIDs", type=utils.parse_list, default=None, required=False, help="List of validation run IDs, e.g., run3,run4 or [run3,run4].")
     
@@ -232,6 +243,7 @@ def cli():
         trainRunIDs=args.trainRunIDs,
         validateRunIDs=args.validateRunIDs, 
         tomo_batch_size=args.tomo_batch_size,
+        best_metric=args.best_metric
     )
 
 def save_parameters_json(args, output_path: str):
@@ -257,6 +269,7 @@ def save_parameters_json(args, output_path: str):
             "mlflow_tracking_uri": args.mlflow_tracking_uri,
             "random_seed": args.random_seed,
             "num_trials": args.num_trials,
+            "best_metric": args.best_metric
         },
         "training": {
             "num_epochs": args.num_epochs,            
@@ -265,6 +278,10 @@ def save_parameters_json(args, output_path: str):
             "validateRunIDs": args.validateRunIDs,
         }
     }
+
+    # Print the parameters
+    print("Parameters for Model ArchitectureSearch:")
+    pprint.pprint(params)
 
     # Save to JSON file
     with open(output_path, 'w') as f:
