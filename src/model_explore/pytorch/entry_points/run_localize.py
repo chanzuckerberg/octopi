@@ -156,8 +156,8 @@ def save_parameters_json(args: argparse.Namespace,
     }
 
     # Print the parameters
-    print("Parameters for Localization:")
-    pprint.pprint(params)
+    print(f"\nParameters for Localization:")
+    pprint.pprint(params); print()
 
     # Save to JSON file
     with open(output_path, 'w') as f:

@@ -56,7 +56,7 @@ def process_membrane_bound_extract(run,
         # If No Segmentation is Found, Return
         if seg is None: return     
         elif nPoints == 0 or np.unique(seg).max() == 0:
-            print(f'[Warning] RunID: {run.name} - Seg Unique Values: {np.unique(seg)}, nPoints: {nPoints}')
+            print(f'[Warning] RunID: {run.name} - Organelle-Seg Unique Values: {np.unique(seg)}, nPoints: {nPoints}')
             return                                            
     else:
         # Read both Organelle and Membrane Segmentations
@@ -76,26 +76,25 @@ def process_membrane_bound_extract(run,
             user_id=organelle_info[1], 
             session_id=organelle_info[2],
             raise_error=False)
+        
         # If No Segmentation is Found, Return
-        if seg is None or organelle_seg is None: return
-        elif nPoints == 0 or np.unique(organelle_seg).max() == 0:
-            print(f'[Warning] RunID: {run.name} - Organelle Seg Unique Values: {np.unique(organelle_seg)}, nPoints: {nPoints}')
-            return            
+        if seg is None or seg is None: return
+        elif nPoints == 0 or np.unique(seg).max() == 0:
+            print(f'[Warning] RunID: {run.name} - Organelle-Seg Unique Values: {np.unique(seg)}, nPoints: {nPoints}')
+            return
+        
+        # Tempory Solution to Ensure Labels are the Same:
+        seg[seg > 0] += 1
 
     if nPoints > 0:
 
         # Step 1: Find Closest Points to Segmentation of Interest
         points, closest_labels = closest_organelle_points(
-            seg, 
+            organelle_seg, 
             coordinates, 
             max_distance=distance_threshold, 
             return_labels_array=True
         )
-
-        # # Optional break
-        # if points is None or len(points) == 0:
-        #     print(f"[Warning] RunID: {run.name} doesn't have any points close to membranes/organelles.")
-        #     return
 
         # Identify close and far indices
         close_indices = np.where(closest_labels != -1)[0]
@@ -106,8 +105,7 @@ def process_membrane_bound_extract(run,
         orientations[:,3,3] = 1 
 
         # Step 2: Get Organelle Centers (Optional if an organelle segmentation is provided)
-        if membranes_provided: organelle_centers = organelle_points(organelle_seg)
-        else:                  organelle_centers = organelle_points(seg)
+        organelle_centers = organelle_points(organelle_seg)
 
         # Step 3: Get All the Rotation Matrices from Euler Angles Based on Normal Vector
         if len(close_indices) > 0:
@@ -190,14 +188,7 @@ def closest_organelle_points(mask, coords, min_distance = 0, max_distance=float(
 
     # Combine all mask points and labels into arrays
     all_mask_points = np.vstack(all_mask_points)
-    all_labels = np.array(all_labels)
-
-    # Handle empty mask case
-    # if len(all_mask_points) == 0:
-    #     if return_labels_array:
-    #         return {}, np.full(len(coords), -1, dtype=int)
-    #     else:
-    #         return np.array([])    
+    all_labels = np.array(all_labels)    
 
     # Initialize a dictionary to store filtered points for each label
     label_to_filtered_points = {label: [] for label in unique_labels}

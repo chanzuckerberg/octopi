@@ -1,4 +1,4 @@
-from model_explore.pytorch import utils, io, extract
+from model_explore.pytorch import midpoint_extract, utils
 import copick, subprocess, glob, os, click, json
 from typing import List, Tuple, Optional
 import argparse, json, pprint
@@ -6,13 +6,14 @@ import multiprocess as mp
 from tqdm import tqdm
 import numpy as np
 
-def extract_membrane_bound_picks(
+def extract_midpoint(
     config: str,
     voxel_size: float,
-    distance_threshold: float,
     picks_info: Tuple[str, str, str],
     organelle_info: Tuple[str, str, str],
-    membrane_info: Tuple[str, str, str],
+    distance_min: float,
+    distance_max: float,
+    distance_threshold: float,
     save_user_id: str,
     save_session_id: str,
     runIDs: List[str],
@@ -23,9 +24,9 @@ def extract_membrane_bound_picks(
     root = copick.from_file( config ) 
     
     # Either Specify Input RunIDs or Run on All RunIDs
-    if runIDs:  print('Extracting Membrane Bound Proteins on the Following RunIDs: ', runIDs)
+    if runIDs:  print('Extracting Midpoints on the Following RunIDs: ', runIDs)
     run_ids = runIDs if runIDs else [run.name for run in root.runs]
-    n_run_ids = len(run_ids)    
+    n_run_ids = len(run_ids)   
 
     # Determine the number of processes to use
     if n_procs is None:
@@ -33,7 +34,7 @@ def extract_membrane_bound_picks(
     print(f"Using {n_procs} processes to parallelize across {n_run_ids} run IDs.")   
 
     # Initialize tqdm progress bar
-    with tqdm(total=n_run_ids, desc="Membrane-Protein Isolation", unit="run") as pbar:
+    with tqdm(total=n_run_ids, desc="Mid-Point SuperComplex Extraction", unit="run") as pbar:
         for _iz in range(0, n_run_ids, n_procs):
 
             start_idx = _iz
@@ -48,15 +49,16 @@ def extract_membrane_bound_picks(
                 run_id = run_ids[_iz_this]
                 run = root.get_run(run_id)
                 p = mp.Process(
-                    target=extract.process_membrane_bound_extract,
+                    target=midpoint_extract.process_midpoint_extract,
                     args=(run,  
                           voxel_size, 
                           picks_info, 
-                          membrane_info,
                           organelle_info,
+                          distance_min,
+                          distance_max,
+                          distance_threshold,
                           save_user_id, 
-                          save_session_id,
-                          distance_threshold),
+                          save_session_id)
                 )
                 processes.append(p)
 
@@ -72,16 +74,17 @@ def extract_membrane_bound_picks(
             # Update tqdm progress bar
             pbar.update(len(processes))
 
-    print('Extraction of Membrane-Bound Proteins Complete!')
+    print('Extraction of Midpoints Complete!')        
 
 def cli():
     parser = argparse.ArgumentParser(description='Extract membrane-bound picks based on proximity to segmentation.')
     parser.add_argument('--config', type=str, required=True, help='Path to the configuration file.')
     parser.add_argument('--voxel-size', type=float, required=False, default=10, help='Voxel size.')
-    parser.add_argument('--distance-threshold', type=float, required=False, default=10, help='Distance threshold.')
     parser.add_argument('--picks-info', type=utils.parse_target, required=True, help='Query for the picks (e.g., "name" or "name,user_id,session_id".).')
-    parser.add_argument('--membrane-info', type=utils.parse_target, required=False, help='Query for the membrane segmentation (e.g., "name" or "name,user_id,session_id".).')
     parser.add_argument('--organelle-info', type=utils.parse_target, required=False, help='Query for the organelles segmentations (e.g., "name" or "name,user_id,session_id".).')
+    parser.add_argument('--distance-min', type=float, required=False, default=10, help='Minimum distance for valid nearest neighbors.') 
+    parser.add_argument('--distance-max', type=float, required=False, default=70, help='Maximum distance for valid nearest neighbors.')
+    parser.add_argument('--distance-threshold', type=float, required=False, default=25, help='Distance threshold for picks to associated organelles.')
     parser.add_argument('--save-user-id', type=str, required=False, default=None, help='User ID to save the new picks.')
     parser.add_argument('--save-session-id', type=str, required=True, help='Session ID to save the new picks.')
     parser.add_argument('--runIDs', type=utils.parse_list, required=False, help='List of run IDs to process.')
@@ -94,16 +97,17 @@ def cli():
         args.save_user_id = args.picks_user_id
 
     # Save JSON with Parameters
-    output_json = f'membrane-extract_{args.save_user_id}_{args.save_session_id}.json'        
+    output_json = f'midpoint-extract_{args.save_user_id}_{args.save_session_id}.json'        
     save_parameters_json(args, output_json)
 
-    extract_membrane_bound_picks(
+    extract_midpoint(
         config=args.config,
         voxel_size=args.voxel_size,
-        distance_threshold=args.distance_threshold,
         picks_info=args.picks_info,
-        membrane_info=args.membrane_info,
         organelle_info=args.organelle_info,
+        distance_min=args.distance_min,
+        distance_max=args.distance_max,
+        distance_threshold=args.distance_threshold,
         save_user_id=args.save_user_id,
         save_session_id=args.save_session_id,
         runIDs=args.runIDs,
@@ -117,14 +121,14 @@ def save_parameters_json(args: argparse.Namespace,
         "input": {
             k: getattr(args, k) for k in [
                 "config", "voxel_size", "picks_info", 
-                "membrane_info", "organelle_info"
+                "organelle_info"
             ]
         },
         "output": {
             k: getattr(args, k) for k in ["save_user_id", "save_session_id"]
         },
         "parameters": {
-            k: getattr(args, k) for k in ["distance_threshold", "runIDs"]
+            k: getattr(args, k) for k in ["distance_min", "distance_max", "distance_threshold", "runIDs"]
         }
     }
 

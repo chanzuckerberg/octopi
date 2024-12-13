@@ -280,8 +280,8 @@ def save_parameters_json(args, output_path: str):
     }
 
     # Print the parameters
-    print("Parameters for Model ArchitectureSearch:")
-    pprint.pprint(params)
+    print(f"\nParameters for Model ArchitectureSearch:")
+    pprint.pprint(params); print()
 
     # Save to JSON file
     with open(output_path, 'w') as f:

@@ -36,6 +36,7 @@ model-explore = "model_explore.pytorch.entry_points.run_optuna:cli"
 inference = "model_explore.pytorch.entry_points.run_segment_predict:cli"
 localize = "model_explore.pytorch.entry_points.run_localize:cli"
 extract-membrane-picks = "model_explore.pytorch.entry_points.run_extract_mb_picks:cli"
+extract-midpoint-picks = "model_explore.pytorch.entry_points.run_extract_midpoint:cli"
 evaluate = "model_explore.pytorch.entry_points.run_evaluate:cli"
 
 [build-system]

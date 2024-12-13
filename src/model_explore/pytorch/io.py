@@ -93,13 +93,13 @@ def get_tomogram_array(run,
         # Query Avaiable Voxel Spacings
         availableVoxelSpacings = [tomo.voxel_size for tomo in run.voxel_spacings]
 
+        # Report to the user which voxel spacings they can use 
+        message = (f"[Warning] No tomogram found for {run.name} with voxel size {voxel_size} and tomogram type {tomo_type}"
+                   f"Available spacings are: {', '.join(map(str, availableVoxelSpacings))}" ) 
         if raise_error:
-            # Report to the user which spacings they can use 
-            raise ValueError(f"Voxel Spacings of '{voxel_size}' in {run.name} was not found. "
-                             f"Available spacings are: {', '.join(map(str, availableVoxelSpacings))}")
+            raise ValueError(message)
         else:
-            print(f"[Warning] No tomogram found for {run.name} with voxel size {voxel_size} and tomogram type {tomo_type}")
-            print(f"Available spacings are: {', '.join(map(str, availableVoxelSpacings))}")
+            print(message)
             return None
     
     tomogram = voxel_spacing_obj.get_tomogram(tomo_type)
@@ -107,13 +107,13 @@ def get_tomogram_array(run,
         # Get available algorithms
         availableAlgorithms = [tomo.tomo_type for tomo in run.get_voxel_spacing(voxel_size).tomograms]
         
+        # Report to the user which algorithms are available
+        message = (f"[Warning] No tomogram found for {run.name} with voxel size {voxel_size} and tomogram type {tomo_type}"
+                   f"Available algorithms are: {', '.join(availableAlgorithms)}")
         if raise_error:
-            # Report to the user
-            raise ValueError(f"The tomogram with the algorithm '{tomo_type}' in {run.name} was not found. "
-                             f"Available algorithms are: {', '.join(availableAlgorithms)}")
+            raise ValueError(message)
         else:
-            print(f"[Warning] No tomogram found for {run.name} with voxel size {voxel_size} and tomogram type {tomo_type}")
-            print(f"Available algorithms are: {', '.join(availableAlgorithms)}")
+            print(message)
             return None
 
     return tomogram.numpy()
@@ -142,15 +142,14 @@ def get_segmentation_array(run,
         seg_details = [f"(name: {name}, user_id: {uid}, session_id: {sid})" 
                       for name, uid, sid in seg_info]
         
+        message = ( f'\nNo segmentation found matching:\n'
+                    f'  name: {segmentation_name}, user_id: {user_id}, session_id: {session_id}\n'
+                    f'Available segmentations in {run.name} are:\n  ' + 
+                    '\n  '.join(seg_details) )
         if raise_error:
-            raise ValueError(f'\nNo segmentation found matching:\n'
-                            f'  name: {segmentation_name}, user_id: {user_id}, session_id: {session_id}\n'
-                            f'Available segmentations in {run.name} are:\n  ' + 
-                            '\n  '.join(seg_details))
+            raise ValueError(message)
         else:
-            print(f"[Warning] No segmentation found for {run.name} with voxel size {voxel_spacing},")
-            print(f'name: {segmentation_name}, user_id: {user_id}, session_id: {session_id}')
-            print(f"Available segmentations are:\n  " + '\n  '.join(seg_details))
+            print(message)
             return None
 
     # No Segmentations Are Available, Result in Error

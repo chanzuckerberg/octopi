@@ -119,8 +119,8 @@ def cli():
         args.seg_info[2] = "1"
 
     # Save JSON with Parameters
-    output_json = f'segment-predict_{args.segmentation_user_id}_{args.segmentation_session_id}_{args.segmentation_name}.json'
-    save_parameters_json(args, output_json)       
+    output_json = f'segment-predict_{args.seg_info[1]}_{args.seg_info[2]}_{args.seg_info[0]}.json'
+    save_parameters_json(args, output_json)
 
     # Call the inference function with parsed arguments
     inference(
@@ -167,8 +167,8 @@ def save_parameters_json(args: argparse.Namespace,
     }            
 
     # Print the parameters
-    print("Parameters for Inference (Segment Prediction):")
-    pprint.pprint(params)
+    print(f"\nParameters for Inference (Segment Prediction):")
+    pprint.pprint(params); print()
 
     # Save to JSON file
     with open(output_path, 'w') as f:
