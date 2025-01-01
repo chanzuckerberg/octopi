@@ -5,8 +5,9 @@ from monai.transforms import (
     EnsureChannelFirstd,  
 )
 from sklearn.model_selection import train_test_split
+import copick, torch, os, json, random
 from typing import List, Dict, Any
-import copick, torch, os, json
+from collections import defaultdict
 from tqdm import tqdm
 import numpy as np
 
@@ -225,48 +226,76 @@ def get_num_classes(copick_config_path: str):
     root = copick.from_file(copick_config_path)
     return len(root.pickable_objects) + 1
 
-##############################################################################################################################
-
-def split_datasets(runIDs, 
-                   train_ratio: float = 0.7, 
-                   val_ratio: float = 0.15, 
-                   test_ratio: float = 0.15, 
-                   return_test_dataset: bool = True,
-                   random_state: int = 42):
+def split_multiclass_dataset(runIDs, 
+                             train_ratio: float = 0.7, 
+                             val_ratio: float = 0.15, 
+                             test_ratio: float = 0.15, 
+                             return_test_dataset: bool = True,
+                             random_state: int = 42):
     """
-    Splits a given dataset into three subsets: training, validation, and testing. The proportions
-    of each subset are determined by the provided ratios, ensuring that they add up to 1. The
-    function uses a fixed random state for reproducibility.
+    Splits a given dataset into three subsets: training, validation, and testing. If the dataset
+    has categories (as tuples), splits are balanced across all categories. If the dataset is a 1D
+    list, it is split without categorization.
 
     Parameters:
-    - runIDs: The complete dataset that needs to be split.
-    - train_ratio: The proportion of the dataset to be used for training.
-    - val_ratio: The proportion of the dataset to be used for validation.
-    - test_ratio: The proportion of the dataset to be used for testing.
+    - runIDs: A list of items to split. It can be a 1D list or a list of tuples (category, value).
+    - train_ratio: Proportion of the dataset for training.
+    - val_ratio: Proportion of the dataset for validation.
+    - test_ratio: Proportion of the dataset for testing.
+    - return_test_dataset: Whether to return the test dataset.
+    - random_state: Random state for reproducibility.
 
     Returns:
-    - trainRunIDs: The subset of the dataset used for training.
-    - valRunIDs: The subset of the dataset used for validation.
-    - testRunIDs: The subset of the dataset used for testing.
+    - trainRunIDs: Training subset.
+    - valRunIDs: Validation subset.
+    - testRunIDs: Testing subset (if return_test_dataset is True, otherwise None).
     """
 
     # Ensure the ratios add up to 1
     assert train_ratio + val_ratio + test_ratio == 1.0, "Ratios must add up to 1.0"
 
-    # First, split into train and remaining (30%)
-    trainRunIDs, valRunIDs = train_test_split(runIDs, test_size=(1 - train_ratio), random_state=random_state)
+    # Check if the dataset has categories
+    if isinstance(runIDs[0], tuple) and len(runIDs[0]) == 2:
+        # Group by category
+        grouped = defaultdict(list)
+        for item in runIDs:
+            grouped[item[0]].append(item)
 
-    # (Optional) split the remaining into validation and test
-    if return_test_dataset: 
-        valRunIDs, testRunIDs = train_test_split(
-            valRunIDs,
-            test_size=(test_ratio / (val_ratio + test_ratio)),
-            random_state=random_state,
-        )
+        # Split each category
+        trainRunIDs, valRunIDs, testRunIDs = [], [], []
+        for category, items in grouped.items():
+            # Shuffle for randomness
+            random.shuffle(items)
+            # Split into train and remaining
+            train_items, remaining = train_test_split(items, test_size=(1 - train_ratio), random_state=random_state)
+            trainRunIDs.extend(train_items)
+
+            if return_test_dataset:
+                # Split remaining into validation and test
+                val_items, test_items = train_test_split(
+                    remaining,
+                    test_size=(test_ratio / (val_ratio + test_ratio)),
+                    random_state=random_state,
+                )
+                valRunIDs.extend(val_items)
+                testRunIDs.extend(test_items)
+            else:
+                valRunIDs.extend(remaining)
+                testRunIDs = None
     else:
-        testRunIDs = None
+        # If no categories, split as a 1D list
+        trainRunIDs, remaining = train_test_split(runIDs, test_size=(1 - train_ratio), random_state=random_state)
+        if return_test_dataset:
+            valRunIDs, testRunIDs = train_test_split(
+                remaining,
+                test_size=(test_ratio / (val_ratio + test_ratio)),
+                random_state=random_state,
+            )
+        else:
+            valRunIDs = remaining
+            testRunIDs = None
 
-    return trainRunIDs, valRunIDs, testRunIDs
+    return trainRunIDs, valRunIDs, testRunIDs    
 
 ##############################################################################################################################
 
@@ -366,3 +395,46 @@ def save_results_to_json(results, filename: str):
     with open(os.path.join(filename), "w") as json_file:
         json.dump( results, json_file, indent=4 )
     print(f"Training Results saved to {filename}")
+
+##############################################################################################################################
+
+# def split_datasets(runIDs, 
+#                    train_ratio: float = 0.7, 
+#                    val_ratio: float = 0.15, 
+#                    test_ratio: float = 0.15, 
+#                    return_test_dataset: bool = True,
+#                    random_state: int = 42):
+#     """
+#     Splits a given dataset into three subsets: training, validation, and testing. The proportions
+#     of each subset are determined by the provided ratios, ensuring that they add up to 1. The
+#     function uses a fixed random state for reproducibility.
+
+#     Parameters:
+#     - runIDs: The complete dataset that needs to be split.
+#     - train_ratio: The proportion of the dataset to be used for training.
+#     - val_ratio: The proportion of the dataset to be used for validation.
+#     - test_ratio: The proportion of the dataset to be used for testing.
+
+#     Returns:
+#     - trainRunIDs: The subset of the dataset used for training.
+#     - valRunIDs: The subset of the dataset used for validation.
+#     - testRunIDs: The subset of the dataset used for testing.
+#     """
+
+#     # Ensure the ratios add up to 1
+#     assert train_ratio + val_ratio + test_ratio == 1.0, "Ratios must add up to 1.0"
+
+#     # First, split into train and remaining (30%)
+#     trainRunIDs, valRunIDs = train_test_split(runIDs, test_size=(1 - train_ratio), random_state=random_state)
+
+#     # (Optional) split the remaining into validation and test
+#     if return_test_dataset: 
+#         valRunIDs, testRunIDs = train_test_split(
+#             valRunIDs,
+#             test_size=(test_ratio / (val_ratio + test_ratio)),
+#             random_state=random_state,
+#         )
+#     else:
+#         testRunIDs = None
+
+#     return trainRunIDs, valRunIDs, testRunIDs

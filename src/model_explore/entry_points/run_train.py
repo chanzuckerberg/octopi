@@ -1,6 +1,7 @@
-from model_explore.pytorch.datasets import generators, multi_config_generator
+from model_explore.datasets import generators, multi_config_generator
 from monai.losses import DiceLoss, FocalLoss, TverskyLoss
-from model_explore.pytorch import io, trainer, utils
+from model_explore.pytorch import trainer 
+from model_explore import io, utils
 from monai.metrics import ConfusionMatrixMetric
 import torch, mlflow, os, argparse, json
 from typing import List, Optional

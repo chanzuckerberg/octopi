@@ -1,10 +1,10 @@
-from model_explore.pytorch.datasets.generators import TrainLoaderManager
+from model_explore.datasets.generators import TrainLoaderManager
 from monai.data import DataLoader, CacheDataset, Dataset
-from model_explore.pytorch.datasets import dataset
-from model_explore.pytorch import io
+from model_explore.datasets import dataset, augment
+from model_explore import io
 import multiprocess as mp
 from tqdm import tqdm
-import torch, random
+import torch
 
 class MultiConfigTrainLoaderManager(TrainLoaderManager):
 
@@ -68,6 +68,17 @@ class MultiConfigTrainLoaderManager(TrainLoaderManager):
                 )
                 if len(seg) > 0:
                     available_runIDs.append((name, run.name))  # Include session name for disambiguation
+        
+        # If No Segmentations are Found, Inform the User
+        if len(available_runIDs) == 0:
+            print(
+                f"[Error] No segmentations found for the target query:\n"
+                f"TargetName: {self.target_name}, UserID: {self.target_user_id}, "
+                f"SessionID: {self.target_session_id}\n"
+                f"Please check the target name, user ID, and session ID.\n"
+            )
+            exit()
+
         return available_runIDs        
 
     def get_data_splits(self, 
@@ -118,6 +129,7 @@ class MultiConfigTrainLoaderManager(TrainLoaderManager):
                 root, [run_name], self.voxel_size, self.tomo_algorithm, 
                 self.target_name, self.target_session_id, self.target_user_id, 
                 progress_update=False ))
+        self._check_max_label_value(data)
         return data
 
     def create_train_dataloaders(self, *args, **kwargs):
@@ -140,15 +152,15 @@ class MultiConfigTrainLoaderManager(TrainLoaderManager):
         if self.train_loader is None: 
             # Fetch the next batch of run IDs
             trainRunIDs = self._extract_run_ids('train_data_iter', self._initialize_train_iterators)
-            train_files = self._load_data(trainRunIDs)            
+            train_files = self._load_data(trainRunIDs)
 
             # Create the cached dataset with non-random transforms
-            train_ds = CacheDataset(data=train_files, transform=self._get_transforms(), cache_rate=1.0)
+            train_ds = CacheDataset(data=train_files, transform=augment.get_transforms(), cache_rate=1.0)
 
             # Wrap the cached dataset to apply random transforms during iteration
             self.dynamic_train_dataset = dataset.DynamicDataset(
                 data=train_ds, 
-                transform=self._get_random_transforms(my_crop_size, my_num_samples)
+                transform=augment.get_random_transforms(my_crop_size, my_num_samples, self.Nclasses)
             )           
 
             self.train_loader = DataLoader(
@@ -163,8 +175,7 @@ class MultiConfigTrainLoaderManager(TrainLoaderManager):
             # Fetch the next batch of run IDs
             trainRunIDs = self._extract_run_ids('train_data_iter', self._initialize_train_iterators)
             train_files = self._load_data(trainRunIDs)
-
-            train_ds = CacheDataset(data=train_files, transform=self._get_transforms(), cache_rate=1.0)
+            train_ds = CacheDataset(data=train_files, transform=augment.get_transforms(), cache_rate=1.0)
             self.dynamic_train_dataset.update_data(train_ds)
 
         # We Only Need to Reload the Validation Dataset if the Total Number of Runs is larger than 
@@ -175,12 +186,12 @@ class MultiConfigTrainLoaderManager(TrainLoaderManager):
             val_files  = self._load_data(validateRunIDs)    
 
             # Create validation dataset
-            val_ds = CacheDataset(data=val_files, transform=self._get_transforms(), cache_rate=1.0)
+            val_ds = CacheDataset(data=val_files, transform=augment.get_transforms(), cache_rate=1.0)
 
             # Wrap the cached dataset to apply random transforms during iteration
             self.dynamic_validation_dataset = dataset.DynamicDataset(
                 data=val_ds, 
-                transform=self._get_validation_transforms(my_crop_size, my_num_samples) 
+                transform=augment.get_validation_transforms(my_crop_size, my_num_samples, self.Nclasses) 
             )
 
             # Create validation DataLoader
@@ -195,7 +206,7 @@ class MultiConfigTrainLoaderManager(TrainLoaderManager):
             validateRunIDs = self._extract_run_ids('val_data_iter', self._initialize_val_iterators)             
             val_files   = self._load_data(validateRunIDs)
 
-            val_ds = CacheDataset(data=val_files, transform=self._get_transforms(), cache_rate=1.0)
+            val_ds = CacheDataset(data=val_files, transform=augment.get_transforms(), cache_rate=1.0)
             self.dynamic_validation_dataset.update_data(val_ds)
             
         return self.train_loader, self.val_loader

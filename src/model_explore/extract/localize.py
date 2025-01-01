@@ -3,9 +3,9 @@ from scipy.cluster.hierarchy import fcluster, linkage
 from skimage.segmentation import watershed
 from typing import List, Optional, Tuple
 from skimage.measure import regionprops
-from model_explore.pytorch import io
 from scipy.spatial import distance
 from dataclasses import dataclass
+from model_explore import io
 import scipy.ndimage as ndi
 from tqdm import tqdm
 import numpy as np

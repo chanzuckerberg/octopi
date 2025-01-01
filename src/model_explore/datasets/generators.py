@@ -1,22 +1,7 @@
 from monai.data import DataLoader, CacheDataset, Dataset
-from monai.transforms import (
-    Compose, 
-    RandFlipd, 
-    Orientationd, 
-    RandRotate90d, 
-    NormalizeIntensityd,
-    EnsureChannelFirstd, 
-    RandCropByLabelClassesd,
-    RandScaleIntensityd,
-    RandShiftIntensityd,
-    RandAdjustContrastd,
-    RandGaussianNoised,
-    ScaleIntensityRanged,  
-    RandomOrder,
-)
-from model_explore.pytorch.datasets import dataset
-from model_explore.pytorch import io
+from model_explore.datasets import dataset, augment
 from typing import List, Optional
+from model_explore import io
 import multiprocess as mp
 import torch, os, random
 
@@ -74,6 +59,17 @@ class TrainLoaderManager:
                                         voxel_size=self.voxel_size)
             if len(seg) > 0:
                 available_runIDs.append(run.name)
+
+        # If No Segmentations are Found, Inform the User
+        if len(available_runIDs) == 0:
+            print(
+                f"[Error] No segmentations found for the target query:\n"
+                f"TargetName: {self.target_name}, UserID: {self.target_user_id}, "
+                f"SessionID: {self.target_session_id}\n"
+                f"Please check the target name, user ID, and session ID.\n"
+            )
+            exit()
+
         return available_runIDs
 
     def get_data_splits(self,
@@ -96,20 +92,22 @@ class TrainLoaderManager:
 
         Returns:
             myRunIDs (dict): Dictionary containing run IDs for training, validation, and testing.
-        """                        
+        """          
 
         # Option 1: Only TrainRunIDs are Provided, Split into Train, Validate and Test (Optional)
         if trainRunIDs is not None and validateRunIDs is None:
-            trainRunIDs, validateRunIDs, testRunIDs = io.split_datasets(trainRunIDs, train_ratio, val_ratio, 
-                                                                        test_ratio, create_test_dataset)
+            trainRunIDs, validateRunIDs, testRunIDs = io.split_multiclass_dataset(
+                trainRunIDs, train_ratio, val_ratio, test_ratio, create_test_dataset
+            )
         # Option 2: TrainRunIDs and ValidateRunIDs are Provided, No Need to Split
         elif trainRunIDs is not None and validateRunIDs is not None:
             testRunIDs = None
         # Option 3: Use the Entire Copick Project, Split into Train, Validate and Test
         else:
-            runIDs = self.get_available_runIDs()
-            trainRunIDs, validateRunIDs, testRunIDs = io.split_datasets(runIDs, train_ratio, val_ratio, 
-                                                                        test_ratio, create_test_dataset)
+            runIDs = self.get_available_runIDs()          
+            trainRunIDs, validateRunIDs, testRunIDs = io.split_multiclass_dataset(
+                runIDs, train_ratio, val_ratio, test_ratio, create_test_dataset
+            )
 
         # Swap if Test Runs is Larger than Validation Runs
         if len(testRunIDs) > len(validateRunIDs):
@@ -213,19 +211,19 @@ class TrainLoaderManager:
             train_files = io.load_training_data(self.root, trainRunIDs, self.voxel_size, self.tomo_algorithm, 
                                                 self.target_name, self.target_session_id, self.target_user_id, 
                                                 progress_update=False)
+            self._check_max_label_value(train_files)
 
             # Create the cached dataset with non-random transforms
-            train_ds = CacheDataset(data=train_files, transform=self._get_transforms(), cache_rate=1.0)
+            train_ds = CacheDataset(data=train_files, transform=augment.get_transforms(), cache_rate=1.0)
 
             # Wrap the cached dataset to apply random transforms during iteration
             self.dynamic_train_dataset = dataset.DynamicDataset(
                 data=train_ds, 
-                transform=self._get_random_transforms(crop_size, num_samples)
+                transform=augment.get_random_transforms(crop_size, num_samples, self.Nclasses)
             )
 
+            # Define the number of processes for the DataLoader
             n_procs = min(mp.cpu_count(), 4)
-            # dataset_size = len(self.dynamic_train_dataset)
-            # n_procs = min(mp.cpu_count(), max(1, dataset_size // 1000))  # Adjust threshold as needed
 
             # DataLoader remains the same
             self.train_loader = DataLoader(
@@ -242,8 +240,9 @@ class TrainLoaderManager:
             train_files = io.load_training_data(self.root, trainRunIDs, self.voxel_size, self.tomo_algorithm, 
                                                 self.target_name, self.target_session_id, self.target_user_id, 
                                                 progress_update=False)
+            self._check_max_label_value(train_files)
 
-            train_ds = CacheDataset(data=train_files, transform=self._get_transforms(), cache_rate=1.0)
+            train_ds = CacheDataset(data=train_files, transform=augment.get_transforms(), cache_rate=1.0)
             self.dynamic_train_dataset.update_data(train_ds)
 
         # We Only Need to Reload the Validation Dataset if the Total Number of Runs is larger than 
@@ -253,13 +252,16 @@ class TrainLoaderManager:
             validateRunIDs = self._extract_run_ids('val_data_iter', self._initialize_val_iterators)             
             val_files   = io.load_training_data(self.root, validateRunIDs, self.voxel_size, self.tomo_algorithm, 
                                                 self.target_name, self.target_session_id, self.target_user_id,
-                                                progress_update=False)    
+                                                progress_update=False) 
+            self._check_max_label_value(val_files)
 
             # Create validation dataset
-            val_ds = CacheDataset(data=val_files, transform=self._get_transforms(), cache_rate=1.0)
+            val_ds = CacheDataset(data=val_files, transform=augment.get_transforms(), cache_rate=1.0)
 
             # Wrap the cached dataset to apply random transforms during iteration
-            self.dynamic_validation_dataset = dataset.DynamicDataset(data=val_ds, transform=self._get_validation_transforms(crop_size, num_samples))
+            self.dynamic_validation_dataset = dataset.DynamicDataset(
+                data=val_ds, transform=augment.get_validation_transforms(crop_size, num_samples, self.Nclasses)
+            )
 
             dataset_size = len(self.dynamic_validation_dataset)
             n_procs = min(mp.cpu_count(), 8)
@@ -278,68 +280,9 @@ class TrainLoaderManager:
             val_files   = io.load_training_data(self.root, validateRunIDs, self.voxel_size, self.tomo_algorithm, 
                                                 self.target_name, self.target_session_id, self.target_user_id,
                                                 progress_update=False)  
+            self._check_max_label_value(val_files)
 
         return self.train_loader, self.val_loader
-    
-    def _get_transforms(self):
-        """
-        Returns non-random transforms.
-        """
-        return Compose([
-            EnsureChannelFirstd(keys=["image", "label"], channel_dim="no_channel"),
-            NormalizeIntensityd(keys="image"),
-            Orientationd(keys=["image", "label"], axcodes="RAS")
-        ])
-
-    def _get_random_transforms(self, crop_size, num_samples):
-        """
-        Returns random transforms.
-        """
-        return Compose([
-            RandCropByLabelClassesd(
-                keys=["image", "label"],
-                label_key="label",
-                spatial_size=[crop_size, crop_size, crop_size],
-                num_classes=self.Nclasses,
-                num_samples=num_samples
-            ),
-            RandomOrder([
-                RandRotate90d(keys=["image", "label"], prob=0.5, spatial_axes=[0, 2]),
-                RandFlipd(keys=["image", "label"], prob=0.5, spatial_axis=0),
-                RandScaleIntensityd(keys="image", factors=(0.9, 1.1), prob=0.5),
-                RandShiftIntensityd(keys="image", offsets=(-0.1, 0.1), prob=0.5),
-                RandAdjustContrastd(keys="image", prob=0.5, gamma=(0.9, 1.1)),
-                RandGaussianNoised(keys="image", prob=0.5, mean=0.0, std=0.1),
-            ])
-        ])   
-
-        # Augmentations to Explore in the Future: 
-        # Intensity-based augmentations
-        # RandHistogramShiftd(keys="image", prob=0.5, num_control_points=(3, 5))
-        # RandGaussianSmoothd(keys="image", prob=0.5, sigma_x=(0.5, 1.5), sigma_y=(0.5, 1.5), sigma_z=(0.5, 1.5)),
-
-        # Geometric Transforms
-        # RandAffined(
-        #     keys=["image", "label"],
-        #     rotate_range=(0.1, 0.1, 0.1),  # Rotation angles (radians) for x, y, z axes
-        #     scale_range=(0.1, 0.1, 0.1),   # Scale range for isotropic/anisotropic scaling
-        #     prob=0.5,                      # Probability of applying the transform
-        #     padding_mode="border"          # Handle out-of-bounds values
-        # )         
-    
-    def _get_validation_transforms(self, crop_size, num_samples):
-        """
-        Returns validation transforms.
-        """
-        return Compose([
-            RandCropByLabelClassesd(
-                    keys=["image", "label"],
-                    label_key="label",
-                    spatial_size=[crop_size, crop_size, crop_size],
-                    num_classes=self.Nclasses,
-                    num_samples=num_samples, 
-            ),
-        ])
     
     def get_reload_frequency(self, num_epochs: int):
         """
@@ -369,6 +312,13 @@ class TrainLoaderManager:
                     f"to train over all training samples. Consider increasing the number of epochs "
                     f"to at least {num_segments}\n."
                 )
+
+    def _check_max_label_value(self, train_files):
+        max_label_value = max(file['label'].max() for file in train_files)
+        if max_label_value > self.Nclasses:
+            print(f"Warning: Maximum class label value {max_label_value} exceeds the number of classes {self.Nclasses}.")
+            print("This may cause issues with the model's output layer.")
+            print("Consider adjusting the number of classes or the label values in your data.\n")
 
     def get_dataloader_parameters(self):
 
@@ -415,18 +365,12 @@ class PredictLoaderManager:
         tomo_algorithm: str,       
         runIDs: str = None):
 
-        # define pre transforms
-        pre_transforms = Compose(
-            [   EnsureChannelFirstd(keys=["image"], channel_dim="no_channel"),
-                NormalizeIntensityd(keys=["image"]),
-        ])
-
         # Split trainRunIDs, validateRunIDs, testRunIDs
         if runIDs is None:
             runIDs = [run.name for run in self.root.runs]
         test_files = io.load_predict_data(self.root, runIDs, voxel_spacing, tomo_algorithm)  
 
-        test_ds = CacheDataset(data=test_files, transform=pre_transforms)
+        test_ds = CacheDataset(data=test_files, transform=augment.get_predict_transforms())
         test_loader = DataLoader(test_ds, 
                                 batch_size=4, 
                                 shuffle=False, 

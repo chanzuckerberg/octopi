@@ -1,4 +1,5 @@
-from model_explore.pytorch import segmentation, utils
+from model_explore.pytorch import segmentation
+from model_explore import utils
 import torch, argparse, json, pprint
 from typing import List, Tuple
 

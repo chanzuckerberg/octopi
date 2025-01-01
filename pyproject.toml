@@ -30,14 +30,15 @@ pre-commit = "^3.8.0"
 ruff = "^0.6.4"
 
 [tool.poetry.scripts]
-create-targets = "model_explore.pytorch.entry_points.run_create_targets:cli"
-train-model = "model_explore.pytorch.entry_points.run_train:cli"
-model-explore = "model_explore.pytorch.entry_points.run_optuna:cli"
-inference = "model_explore.pytorch.entry_points.run_segment_predict:cli"
-localize = "model_explore.pytorch.entry_points.run_localize:cli"
-extract-membrane-picks = "model_explore.pytorch.entry_points.run_extract_mb_picks:cli"
-extract-midpoint-picks = "model_explore.pytorch.entry_points.run_extract_midpoint:cli"
-evaluate = "model_explore.pytorch.entry_points.run_evaluate:cli"
+create-targets = "model_explore.entry_points.run_create_targets:cli"
+create-shellsubmit = "model_explore.entry_points.run_create_shellsubmit:cli"
+train-model = "model_explore.entry_points.run_train:cli"
+model-explore = "model_explore.entry_points.run_optuna:cli"
+inference = "model_explore.entry_points.run_segment_predict:cli"
+localize = "model_explore.entry_points.run_localize:cli"
+extract-membrane-picks = "model_explore.entry_points.run_extract_mb_picks:cli"
+extract-midpoint-picks = "model_explore.entry_points.run_extract_midpoint:cli"
+evaluate = "model_explore.entry_points.run_evaluate:cli"
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]

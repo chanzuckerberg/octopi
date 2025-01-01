@@ -1,5 +1,5 @@
 from scipy.spatial.transform import Rotation as R
-from model_explore.pytorch import utils, io
+from model_explore import utils, io
 import scipy.ndimage as ndi
 from typing import Tuple
 import numpy as np

@@ -1,5 +1,5 @@
-import model_explore.pytorch.my_metrics as metrics
 from typing import Dict, List, Optional, Tuple
+import model_explore.my_metrics as metrics
 from monai.data import decollate_batch
 from monai.transforms import AsDiscrete
 import matplotlib.pyplot as plt
@@ -7,7 +7,8 @@ import torch, os, mlflow
 from tqdm import tqdm 
 
 # Not Ideal, but Necessary if Class is Missing From Dataset
-# warnings.filterwarnings("ignore", category=UserWarning)
+import warnings
+warnings.filterwarnings("ignore", category=UserWarning)
 
 class unet:
 
@@ -23,9 +24,6 @@ class unet:
         self.loss_function = loss_function
         self.metrics_function = metrics_function
         self.optimizer = optimizer
-
-        # Save the original learning rate
-        original_lr = optimizer.param_groups[0]['lr']        
 
         self.parallel_mlflow = False
         self.client = None
@@ -49,7 +47,7 @@ class unet:
             inputs = batch_data["image"].to(self.device)  # Shape: [B, C, H, W, D]
             labels = batch_data["label"].to(self.device)  # Shape: [B, C, H, W, D]            
             self.optimizer.zero_grad()
-            outputs = self.model(inputs)    # Output shape: [B, num_classes, H, W, D]
+            outputs = self.model(inputs)    # Output shape: [B, num_classes, H, W, D]          
             loss = self.loss_function(outputs, labels)
             loss.backward()
             self.optimizer.step()
@@ -89,18 +87,8 @@ class unet:
                 # Compute metrics
                 self.metrics_function(y_pred=metric_val_outputs, y=metric_val_labels)
 
-        # Contains recall, precision, and f1 for each class
-        if self.parallel_mlflow == False:
-            metric_values = self.metrics_function.aggregate(reduction='mean_batch')
-        else:
-            # Metrics Function is a list with length of [nGPU x nClass]
-            f_local, _ = metrics.do_metric_reduction(self.metrics_function._buffers[0], 
-                                                     reduction="mean_batch", 
-                                                     target_device = self.device )
-            metric_values = []                    
-            for metric_name in self.metrics_function.metric_name:
-                metric = metrics.compute_confusion_matrix_metric(metric_name, f_local)
-                metric_values.append(metric.cpu())
+        # # Contains recall, precision, and f1 for each class
+        metric_values = self.metrics_function.aggregate(reduction='mean_batch')
 
         # Compute average validation loss and add to metrics dictionary
         val_loss /= len(self.val_loader)
@@ -156,7 +144,7 @@ class unet:
                 for param_group in self.optimizer.param_groups:
                     param_group['lr'] = original_lr * self.warmup_lr_factor
 
-            # Compute and log average epoch loss
+            # Compute and log average epoch loss           
             epoch_loss = self.train_update()
             self.my_log_metrics(
                 metrics_dict={"loss": epoch_loss},
@@ -183,7 +171,7 @@ class unet:
                 # Update tqdm description        
                 if verbose:
                     (avg_f1, avg_recall, avg_precision) = (self.results['avg_f1'][-1][1], self.results['avg_recall'][-1][1], self.results['avg_precision'][-1][1])
-                    tqdm.write(f"Epoch {epoch + 1}/{max_epochs}, avg_f1_score: {self.results['avg_f1'][-1][1]:.4f}, avg_recall: {avg_recall:.4f}, avg_precision: {avg_precision:.4f}")
+                    tqdm.write(f"Epoch {epoch + 1}/{max_epochs}, avg_f1_score: {avg_f1:.4f}, avg_recall: {avg_recall:.4f}, avg_precision: {avg_precision:.4f}")
 
                 # Reset metrics function
                 self.metrics_function.reset()

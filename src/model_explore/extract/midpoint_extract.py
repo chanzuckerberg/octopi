@@ -1,5 +1,5 @@
 from scipy.spatial.transform import Rotation as R
-from model_explore.pytorch import io, extract
+from model_explore import io, extract
 from scipy.spatial import cKDTree
 from typing import Tuple
 import numpy as np

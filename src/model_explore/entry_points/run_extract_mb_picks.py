@@ -1,10 +1,9 @@
-from model_explore.pytorch import utils, io, extract
-import copick, subprocess, glob, os, click, json
+from model_explore.extract import membranebound_extract as extract
+from model_explore import utils, io
+import argparse, json, pprint, copick, json
 from typing import List, Tuple, Optional
-import argparse, json, pprint
 import multiprocess as mp
 from tqdm import tqdm
-import numpy as np
 
 def extract_membrane_bound_picks(
     config: str,

@@ -7,7 +7,7 @@ from monai.transforms import (
     Activationsd,
     AsDiscreted
 )
-from model_explore.pytorch import io, utils
+from model_explore import io, utils
 from copick_utils.writers import write
 from typing import List, Optional
 import torch, copick

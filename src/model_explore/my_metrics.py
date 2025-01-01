@@ -6,8 +6,7 @@ import torch, mlflow
 ##############################################################################################################################
 
 def do_metric_reduction(
-    f_list: list[torch.Tensor], reduction: MetricReduction | str = MetricReduction.MEAN, target_device='cuda:0'
-    ) -> tuple[torch.Tensor | Any, torch.Tensor]:
+    f_list: list[torch.Tensor], reduction: MetricReduction | str = MetricReduction.MEAN, target_device='cuda:0') -> tuple[torch.Tensor | Any, torch.Tensor]:
     """
     Perform metric reduction on a list of tensors locally on a single GPU.
 
@@ -37,8 +36,6 @@ def do_metric_reduction(
     if reduction == MetricReduction.NONE:
         return f, not_nans.float()
     
-    import pdb; pdb.set_trace()
-
     f[nans] = 0  # Set NaNs to zero for reduction
     if reduction == MetricReduction.MEAN:
         not_nans = not_nans.sum(dim=1).float()
@@ -170,7 +167,9 @@ def compute_confusion_matrix_metric(metric_name: str,
 def my_log_param(params_dict, client = None, trial_run_id = None):
 
     if client is not None and trial_run_id is not None:
-        client.log_params(run_id=trial_run_id, params=params_dict)
+        # client.log_params(run_id=trial_run_id, params=params_dict)
+        for key, value in params_dict.items():
+            client.log_param(run_id=trial_run_id, key=key, value=value)
     else:
         mlflow.log_params(params_dict)
 

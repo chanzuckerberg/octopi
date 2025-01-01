@@ -1,4 +1,4 @@
-from model_explore.pytorch import evaluate, utils
+from model_explore import evaluate, utils
 from typing import List
 import argparse
 

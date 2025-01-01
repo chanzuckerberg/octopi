@@ -98,9 +98,9 @@ def string2bool(value: str):
     """
     if isinstance(value, bool):
         return value
-    if value.lower() in {'true', 't', '1', 'yes'}:
+    if value.lower() in {'True', 'true', 't', '1', 'yes'}:
         return True
-    elif value.lower() in {'false', 'f', '0', 'no'}:
+    elif value.lower() in {'False', 'false', 'f', '0', 'no'}:
         return False
     else:
         raise argparse.ArgumentTypeError(f"Invalid boolean value: {value}")

@@ -1,5 +1,6 @@
-from model_explore.pytorch.datasets import generators, multi_config_generator
-from model_explore.pytorch import io, hyper_search, utils
+from model_explore.datasets import generators, multi_config_generator
+from model_explore.pytorch import hyper_search
+from model_explore import io, utils
 import torch, mlflow, optuna, argparse, json, os, pprint
 from typing import List, Optional
 
@@ -69,12 +70,10 @@ def model_search(
             voxel_size = voxel_size,
             Nclasses = Nclass,
             tomo_batch_size = tomo_batch_size ) 
-
+        
     # Split datasets into training and validation
     data_generator.get_data_splits(trainRunIDs = trainRunIDs,
                                    validateRunIDs = validateRunIDs)
-
-    import pdb; podb.set_trace()
 
     # Get the reload frequency
     data_generator.get_reload_frequency(num_epochs) 
@@ -108,12 +107,12 @@ def model_search(
     except:
         pass
     mlflow.set_experiment(mlflow_experiment_name)    
-
-    print(f'Running Architecture Search Over 1 GPU\n')
     storage = "sqlite:///trials.db"
 
     # Get available GPUs (for example, on an 4 GPU node) - Run the appropriate function based on the number of GPUs
     gpu_count = torch.cuda.device_count()
+    print(f'Running Architecture Search Over {gpu_count} GPUs\n')
+
     if gpu_count > 1:
         multi_gpu_optuna(storage, tpe_sampler, pruner, data_generator, num_epochs, 
                          random_seed, num_trials, best_metric, gpu_count)
@@ -138,7 +137,7 @@ def single_gpu_optuna(storage, tpe_sampler, pruner, data_generator, num_epochs, 
         mlflow.log_params(data_generator.get_dataloader_parameters())
 
         # Determine Device to Run Optuna On
-        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')        
+        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
         study.optimize(lambda trial: hyper_search.objective(trial, num_epochs, device, 
                                                             data_generator, random_seed = random_seed, 

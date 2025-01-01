@@ -1,10 +1,9 @@
-from model_explore.pytorch import midpoint_extract, utils
-import copick, subprocess, glob, os, click, json
+from model_explore.extract import midpoint_extract
+import argparse, json, pprint, copick, json
 from typing import List, Tuple, Optional
-import argparse, json, pprint
+from model_explore import utils
 import multiprocess as mp
 from tqdm import tqdm
-import numpy as np
 
 def extract_midpoint(
     config: str,

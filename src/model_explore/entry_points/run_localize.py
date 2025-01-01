@@ -1,4 +1,5 @@
-from model_explore.pytorch import localize, utils
+from model_explore.extract import localize
+from model_explore import utils
 import copick, argparse, json, pprint
 from typing import List, Tuple
 import multiprocess as mp

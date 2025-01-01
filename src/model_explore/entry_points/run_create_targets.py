@@ -1,10 +1,9 @@
-from copick_utils.segmentation.segmentation_from_picks import from_picks
 from model_explore import create_targets_from_picks as create_targets
-from model_explore.pytorch import utils, io 
+from model_explore import utils, io 
 import copick_utils.writers.write as write
 from collections import defaultdict
 from typing import List, Tuple, Union
-import argparse, copick, json
+import argparse, copick, json, os
 from tqdm import tqdm
 import numpy as np
 

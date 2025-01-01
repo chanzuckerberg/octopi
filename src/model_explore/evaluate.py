@@ -1,5 +1,5 @@
-from model_explore.pytorch import utils
 from scipy.spatial import distance
+from model_explore import utils
 from typing import List
 import copick, json, os
 import numpy as np
