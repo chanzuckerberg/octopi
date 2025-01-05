@@ -1,6 +1,7 @@
 from model_explore.datasets import generators, multi_config_generator
 from model_explore.pytorch import hyper_search
-from model_explore import io, utils
+from model_explore.entry_points import common
+from model_explore import utils
 import torch, mlflow, optuna, argparse, json, os, pprint
 from typing import List, Optional
 
@@ -189,28 +190,19 @@ def cli():
     """
     CLI entry point for running optuna model archetecture search.
     """
-    parser = argparse.ArgumentParser(description="Perform model architecture search with Optuna and MLflow integration.")
+    parser = argparse.ArgumentParser(
+        description="Perform model architecture search with Optuna and MLflow integration.",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter
+    )
 
-    # Required arguments
-    # parser.add_argument("--config", type=str, required=True, help="Path to the CoPick configuration file.")
-    parser.add_argument("--config", type=str, required=True, action='append',
-                            help="Specify a single configuration path (/path/to/config.json) "
-                                 "or multiple entries in the format session_name,/path/to/config.json. "
-                                 "Use multiple --config entries for multiple sessions.")    
-    parser.add_argument("--target-name", type=str, required=True, help="Name of the target to segment.")
+    common.add_config(parser, single_config=False)
+    common.add_model_parameters(parser, model_explore = True)
+    common.add_train_parameters(parser, model_explore = True)
 
-    # Optional arguments
-    parser.add_argument("--target-user-id", type=str, required=False, default=None, help="User ID of the target.")
-    parser.add_argument("--target-session-id", type=str, required=False, default=None, help="Session ID of the target.")
     parser.add_argument("--tomo-algorithm", type=str, default='wbp', required=False, help="Tomogram algorithm to use (default: 'wbp').")
-    parser.add_argument("--voxel-size", type=float, default=10, required=False, help="Voxel size for tomograms (default: 10).")    
-    parser.add_argument("--Nclass", type=int, default=3, required=False, help="Number of classes for prediction.")
     parser.add_argument("--mlflow-experiment-name", type=str, default="model-search", required=False, help="Name of the MLflow experiment (default: 'model-search').")
     parser.add_argument("--mlflow-tracking-uri", type=str, default="http://mlflow.mlflow.svc.cluster.local:5000", required=False, help="URI for the MLflow tracking server (default: 'http://mlflow.mlflow.svc.cluster.local:5000').")
     parser.add_argument("--random-seed", type=int, default=42, required=False, help="Random seed for reproducibility (default: 42).")
-    parser.add_argument("--num-epochs", type=int, default=100, required=False, help="Number of epochs per trial (default: 100).")
-    parser.add_argument("--num-trials", type=int, default=10, required=False, help="Number of trials for architecture search (default: 10).")
-    parser.add_argument("--tomo-batch-size", type=int, default=20, required=False, help="Batch size for tomograms (default: 20).")
     parser.add_argument("--best-metric", type=str, default='avg_f1', required=False, help="Metric to Monitor for Optimization")
     parser.add_argument("--trainRunIDs", type=utils.parse_list, default=None, required=False, help="List of training run IDs, e.g., run1,run2 or [run1,run2].")
     parser.add_argument("--validateRunIDs", type=utils.parse_list, default=None, required=False, help="List of validation run IDs, e.g., run3,run4 or [run3,run4].")

@@ -1,0 +1,198 @@
+{
+    "input": {
+        "copick_config": "/mnt/simulations/ml_challenge/ml_config.json",
+        "ground_truth_user_id": "polnet",
+        "ground_truth_session_id": "0",
+        "prediction_user_id": "DeepFindET",
+        "predict_session_id": "1"
+    },
+    "parameters": {
+        "distance_threshold_scale": 0.8,
+        "runIDs": [
+            "TS_4",
+            "TS_17"
+        ]
+    },
+    "summary_metrics": {
+        "apoferritin": {
+            "precision": {
+                "mean": 0.9832698961937716,
+                "std": 0.013269896193771613
+            },
+            "recall": {
+                "mean": 0.993167855377445,
+                "std": 0.003371937010098136
+            },
+            "f1_score": {
+                "mean": 0.9881688860927615,
+                "std": 0.00837090629478171
+            },
+            "accuracy": {
+                "mean": 0.9767497439399112,
+                "std": 0.016353704335950847
+            },
+            "true_positives": {
+                "mean": 289.5,
+                "std": 1.5
+            },
+            "false_positives": {
+                "mean": 5.0,
+                "std": 4.0
+            },
+            "false_negatives": {
+                "mean": 2.0,
+                "std": 1.0
+            }
+        },
+        "beta-amylase": {
+            "precision": {
+                "mean": 0.7463766594951986,
+                "std": 0.08074198457259796
+            },
+            "recall": {
+                "mean": 0.8904656285834993,
+                "std": 0.03729102540889617
+            },
+            "f1_score": {
+                "mean": 0.8111890291413433,
+                "std": 0.06336294218482147
+            },
+            "accuracy": {
+                "mean": 0.6871461429582448,
+                "std": 0.08992392073602268
+            },
+            "true_positives": {
+                "mean": 229.5,
+                "std": 14.5
+            },
+            "false_positives": {
+                "mean": 79.5,
+                "std": 28.5
+            },
+            "false_negatives": {
+                "mean": 28.0,
+                "std": 9.0
+            }
+        },
+        "beta-galactosidase": {
+            "precision": {
+                "mean": 0.5355127485449227,
+                "std": 0.011448577421928119
+            },
+            "recall": {
+                "mean": 0.6903622693096377,
+                "std": 0.05399863294600138
+            },
+            "f1_score": {
+                "mean": 0.6026766535293349,
+                "std": 0.027896594878308534
+            },
+            "accuracy": {
+                "mean": 0.4318786486745143,
+                "std": 0.028586467604555466
+            },
+            "true_positives": {
+                "mean": 98.5,
+                "std": 0.5
+            },
+            "false_positives": {
+                "mean": 85.5,
+                "std": 3.5
+            },
+            "false_negatives": {
+                "mean": 45.0,
+                "std": 11.0
+            }
+        },
+        "ribosome": {
+            "precision": {
+                "mean": 1.0,
+                "std": 0.0
+            },
+            "recall": {
+                "mean": 1.0,
+                "std": 0.0
+            },
+            "f1_score": {
+                "mean": 1.0,
+                "std": 0.0
+            },
+            "accuracy": {
+                "mean": 1.0,
+                "std": 0.0
+            },
+            "true_positives": {
+                "mean": 27.0,
+                "std": 0.0
+            },
+            "false_positives": {
+                "mean": 0.0,
+                "std": 0.0
+            },
+            "false_negatives": {
+                "mean": 0.0,
+                "std": 0.0
+            }
+        },
+        "thyroglobulin": {
+            "precision": {
+                "mean": 1.0,
+                "std": 0.0
+            },
+            "recall": {
+                "mean": 0.4051530993278566,
+                "std": 0.13330843913368184
+            },
+            "f1_score": {
+                "mean": 0.5637404580152672,
+                "std": 0.13625954198473283
+            },
+            "accuracy": {
+                "mean": 0.4051530993278566,
+                "std": 0.13330843913368184
+            },
+            "true_positives": {
+                "mean": 42.0,
+                "std": 14.0
+            },
+            "false_positives": {
+                "mean": 0.0,
+                "std": 0.0
+            },
+            "false_negatives": {
+                "mean": 61.5,
+                "std": 13.5
+            }
+        },
+        "virus-like-particle": {
+            "precision": {
+                "mean": 1.0,
+                "std": 0.0
+            },
+            "recall": {
+                "mean": 1.0,
+                "std": 0.0
+            },
+            "f1_score": {
+                "mean": 1.0,
+                "std": 0.0
+            },
+            "accuracy": {
+                "mean": 1.0,
+                "std": 0.0
+            },
+            "true_positives": {
+                "mean": 29.0,
+                "std": 0.0
+            },
+            "false_positives": {
+                "mean": 0.0,
+                "std": 0.0
+            },
+            "false_negatives": {
+                "mean": 0.0,
+                "std": 0.0
+            }
+        }
+    }
+}

@@ -121,7 +121,10 @@ def parse_args():
     """
     Parse command line arguments for target generation.
     """
-    parser = argparse.ArgumentParser(description="Generate segmentation targets from CoPick configurations.")
+    parser = argparse.ArgumentParser(
+        description="Generate segmentation targets from CoPick configurations.",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter
+    )
 
     parser.add_argument("--config", type=str, required=True, help="Path to the CoPick configuration file.")
     parser.add_argument("--target", type=utils.parse_target, action="append", default=None, help='Target specifications: "name,user_id,session_id".')

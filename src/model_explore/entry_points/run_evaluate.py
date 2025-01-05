@@ -30,7 +30,10 @@ def cli():
     """
     CLI entry point for running evaluation.
     """
-    parser = argparse.ArgumentParser(description='Run evaluation on pick and place predictions.')
+    parser = argparse.ArgumentParser(
+        description='Run evaluation on pick and place predictions.',
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter
+    )
     
     parser.add_argument('--config', type=str, required=True, help='Path to the copick configuration file')
     parser.add_argument('--ground-truth-user-id', type=str, required=True, help='User ID for ground truth data')

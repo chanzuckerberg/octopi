@@ -213,6 +213,6 @@ def create_model(model_type, n_classes, channels, strides_pattern, num_res_units
             strides=strides_pattern,
         )
     else:
-        raise ValueError(f"Unsupported model type: {model_type}")
+        raise ValueError(f"Unsupported model type: {model_type}, Available models are: 'Unet', 'AttentionUnet'")
     
     return model.to(device)

@@ -91,23 +91,37 @@ def pick_particles(
 
     print('Localization Complete!')
 
-# Entry point with argparse
-def cli():
-    parser = argparse.ArgumentParser(description="Localized particles in tomograms using multiprocessing.")
-    parser.add_argument("--config", type=str, required=True, help="Path to the CoPick configuration file.")
-    parser.add_argument("--method", type=str, choices=['watershed', 'com'], default='watershed', required=False, help="Localization method to use.")
-    parser.add_argument('--seg-info', type=utils.parse_target, required=True, help='Query for the organelles segmentations (e.g., "name" or "name,user_id,session_id".).')
-    parser.add_argument("--voxel-size", type=float, default=10, required=False, help="Voxel size for localization.")
-    parser.add_argument("--pick-session-id", type=str, default='1', required=False, help="Session ID for the particle picks.")
-    parser.add_argument("--pick-user-id", type=str, default='monai', required=False, help="User ID for the particle picks.")
-    parser.add_argument("--radius-min-scale", type=float, default=0.5, required=False, help="Minimum radius scale for particles.")
-    parser.add_argument("--radius-max-scale", type=float, default=1.5, required=False, help="Maximum radius scale for particles.")
-    parser.add_argument("--filter-size", type=float, default=10, required=False, help="Filter size for localization.")
-    parser.add_argument("--pick-objects", type=utils.parse_list, default=None, required=False, help="Specific Objects to Find Picks for.")
-    parser.add_argument("--runIDs", type=utils.parse_list, default = None, required=False, help="List of runIDs to run inference on, e.g., run1,run2,run3 or [run1,run2,run3].")
-    parser.add_argument("--n-procs", type=int, default=None, required=False, help="Number of CPU processes to parallelize runs across. Defaults to the max number of cores available or available runs.")
+def localize_parser(parser_description):
+    parser = argparse.ArgumentParser(
+        description=parser_description,
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter
+    )
+    input_group = parser.add_argument_group("Input Arguments")
+    input_group.add_argument("--config", type=str, required=True, help="Path to the CoPick configuration file.")
+    input_group.add_argument("--method", type=str, choices=['watershed', 'com'], default='watershed', required=False, help="Localization method to use.")
+    input_group.add_argument('--seg-info', type=utils.parse_target, required=True, help='Query for the organelles segmentations (e.g., "name" or "name,user_id,session_id".).')
+    input_group.add_argument("--voxel-size", type=float, default=10, required=False, help="Voxel size for localization.")
+    input_group.add_argument("--runIDs", type=utils.parse_list, default = None, required=False, help="List of runIDs to run inference on, e.g., run1,run2,run3 or [run1,run2,run3].")
+
+    localize_group = parser.add_argument_group("Localize Arguments")
+    localize_group.add_argument("--radius-min-scale", type=float, default=0.5, required=False, help="Minimum radius scale for particles.")
+    localize_group.add_argument("--radius-max-scale", type=float, default=1.5, required=False, help="Maximum radius scale for particles.")
+    localize_group.add_argument("--filter-size", type=float, default=10, required=False, help="Filter size for localization.")
+    localize_group.add_argument("--pick-objects", type=utils.parse_list, default=None, required=False, help="Specific Objects to Find Picks for.")
+    localize_group.add_argument("--n-procs", type=int, default=None, required=False, help="Number of CPU processes to parallelize runs across. Defaults to the max number of cores available or available runs.")
+
+    output_group = parser.add_argument_group("Output Arguments")
+    output_group.add_argument("--pick-session-id", type=str, default='1', required=False, help="Session ID for the particle picks.")
+    output_group.add_argument("--pick-user-id", type=str, default='monai', required=False, help="User ID for the particle picks.")
 
     args = parser.parse_args()
+    return args
+
+# Entry point with argparse
+def cli():
+    
+    parser_description = "Localized particles in tomograms using multiprocessing."
+    args = localize_parser(parser_description)
 
     # Save JSON with Parameters
     output_json = f'localize_{args.pick_user_id}_{args.pick_session_id}.json'    

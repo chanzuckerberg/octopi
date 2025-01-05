@@ -1,4 +1,5 @@
 from model_explore.pytorch import segmentation
+from model_explore.entry_points import common
 from model_explore import utils
 import torch, argparse, json, pprint
 from typing import List, Tuple
@@ -88,31 +89,36 @@ def inference(
 
     print("Inference completed successfully.")
 
+def inference_parser(parser_description):
+    """
+    Parse the arguments for the inference
+    """
+    parser = argparse.ArgumentParser(
+        description=parser_description,
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter
+    )
+    input_group = parser.add_argument_group("Input Arguments")
+    common.add_config(input_group, single_config=True)
+    model_group = parser.add_argument_group("Model Arguments")
+    common.add_model_parameters(model_group)
+
+    inference_group = parser.add_argument_group("Inference Arguments")
+    common.add_inference_parameters(inference_group)
+
+    args = parser.parse_args()
+    return args
+
 # Entry point with argparse
 def cli():
     """
     CLI entry point for running inference.
     """
-    parser = argparse.ArgumentParser(description="Run segmentation predictions with a specified model and configuration on CryoET Tomograms.")
-
-    # Add arguments
-    parser.add_argument("--config", type=str, required=True, help="Path to the configuration file.")
-    parser.add_argument("--model-weights", type=str, required=True, help="Path to the model weights file.")
-    parser.add_argument("--model-type", type=str, default="Unet", required=False, help="Type of model to use. Available options: ['UNet', 'AttentionUnet']. Default is 'UNet'.")
-    parser.add_argument("--Nclass", type=int, default=3, required=False, help="Number of classes. Default is 3.")
-    parser.add_argument("--channels", type=utils.parse_int_list, required=False, default="32,64,128,128", help="List of channel sizes for each layer, e.g., 32,64,128,128 or [32,64,128,128].")
-    parser.add_argument("--strides", type=utils.parse_int_list, required=False, default="2,2,1", help="List of stride values for each layer, e.g., 2,2,1 or [2,2,1].")
-    parser.add_argument("--res-units", type=int, default=2, required=False, help="Number of residual units. Default is 2.")
-    parser.add_argument("--dim-in", type=int, default=96, required=False, help="Dimension of the input tomograms. Default is 96.")
-    parser.add_argument("--voxel-size", type=float, default=10.0, required=False, help="Voxel size for tomogram reconstruction. Default is 10.0.")
-    parser.add_argument("--tomogram-algorithm", type=str, default="wbp", required=False, help="Tomogram reconstruction algorithm. Default is 'wbp'.")
-    parser.add_argument("--seg-info", type=utils.parse_list, default=None, required=True, help='Information Query to save Segmentation predictions under, e.g., (e.g., "name" or "name,user_id,session_id".')
-    parser.add_argument("--tomo-batch-size", type=int, default=50, required=False, help="Batch size for tomogram processing. Default is 48.")
-    parser.add_argument("--run-ids", type=utils.parse_list, default=None, required=False, help="List of run IDs for prediction, e.g., run1,run2 or [run1,run2]. If not provided, all available runs will be processed.")
     
-    # Parse arguments
-    args = parser.parse_args()
+    # Parse the arguments
+    parser_description = "Run segmentation predictions with a specified model and configuration on CryoET Tomograms."
+    args = inference_parser(parser_description)
 
+    # Set default values if not provided
     if args.seg_info[1] is None:
         args.seg_info[1] = "monai"
 

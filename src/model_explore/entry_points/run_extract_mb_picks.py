@@ -74,7 +74,10 @@ def extract_membrane_bound_picks(
     print('Extraction of Membrane-Bound Proteins Complete!')
 
 def cli():
-    parser = argparse.ArgumentParser(description='Extract membrane-bound picks based on proximity to segmentation.')
+    parser = argparse.ArgumentParser(
+        description='Extract membrane-bound picks based on proximity to segmentation.',
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter
+    )
     parser.add_argument('--config', type=str, required=True, help='Path to the configuration file.')
     parser.add_argument('--voxel-size', type=float, required=False, default=10, help='Voxel size.')
     parser.add_argument('--distance-threshold', type=float, required=False, default=10, help='Distance threshold.')

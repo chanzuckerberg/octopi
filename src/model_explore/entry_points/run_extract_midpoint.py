@@ -76,7 +76,10 @@ def extract_midpoint(
     print('Extraction of Midpoints Complete!')        
 
 def cli():
-    parser = argparse.ArgumentParser(description='Extract membrane-bound picks based on proximity to segmentation.')
+    parser = argparse.ArgumentParser(
+        description='Extract membrane-bound picks based on proximity to segmentation.',
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter
+    )
     parser.add_argument('--config', type=str, required=True, help='Path to the configuration file.')
     parser.add_argument('--voxel-size', type=float, required=False, default=10, help='Voxel size.')
     parser.add_argument('--picks-info', type=utils.parse_target, required=True, help='Query for the picks (e.g., "name" or "name,user_id,session_id".).')

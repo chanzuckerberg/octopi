@@ -1,5 +1,6 @@
 from model_explore.datasets import generators, multi_config_generator
 from monai.losses import DiceLoss, FocalLoss, TverskyLoss
+from model_explore.entry_points import common 
 from model_explore.pytorch import trainer 
 from model_explore import io, utils
 from monai.metrics import ConfusionMatrixMetric
@@ -136,41 +137,46 @@ def run_training_with_mlflow(model_trainer, model, data_generator, model_save_pa
         mlflow.log_params(io.flatten_params(params))
     mlflow.end_run()
 
+def train_model_parser(parser_description):
+    """
+    Parse the arguments for the training model
+    """
+    parser = argparse.ArgumentParser(
+        description=parser_description,
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter
+    )
+    # Input Arguments
+    input_group = parser.add_argument_group("Input Arguments")
+    common.add_config(input_group, single_config=False)
+    input_group.add_argument("--tomo-algorithm", default='wbp', help="Tomogram algorithm used for training")
+    input_group.add_argument("--trainRunIDs", type=utils.parse_list, help="List of training run IDs, e.g., run1,run2,run3")
+    input_group.add_argument("--validateRunIDs", type=utils.parse_list, help="List of validation run IDs, e.g., run4,run5,run6")
+    input_group.add_argument("--mlflow", type=utils.string2bool, default=False, help="Log the results with MLFlow or save in a unique directory")    
+    
+    # Model Arguments
+    model_group = parser.add_argument_group("Model Arguments")
+    common.add_model_parameters(model_group)
+    
+    # Training Arguments
+    train_group = parser.add_argument_group("Training Arguments")
+    common.add_train_parameters(train_group)
+    
+    # SLURM Arguments
+    slurm_group = parser.add_argument_group("SLURM Arguments")
+    common.add_slurm_parameters(slurm_group, 'train')
+
+    args = parser.parse_args()
+    return args
+
 # Entry point with argparse
 def cli():
     """
     CLI entry point for training models where results can either be saved to a local directory or a server with MLFlow.
     """
 
-    parser = argparse.ArgumentParser(description="Train a UNet model on CryoET Tomograms.")
-    # parser.add_argument("--config", type=str, required=True, help="Path to the CoPick configuration file.")
-    parser.add_argument("--config", type=str, required=True, action='append',
-                            help="Specify a single configuration path (/path/to/config.json) "
-                                 "or multiple entries in the format session_name,/path/to/config.json. "
-                                 "Use multiple --config entries for multiple sessions.")    
-    parser.add_argument("--target-name", type=str, required=True, help="Name of the target segmentation.")
-    parser.add_argument("--target-user-id", type=str, required=False, default=None, help="User ID for the target segmentation.")
-    parser.add_argument("--target-session-id", type=str, required=False, default=None, help="Session ID for the target segmentation.")
-    parser.add_argument("--tomo-algorithms", type=utils.parse_list, required=False, default = 'wbp', help="Tomogram algorithms to use for training.")
-    parser.add_argument("--voxel-size", type=float, required=False, default = 10, help="Voxel size for the tomograms.")
-    parser.add_argument("--channels", type=utils.parse_int_list, required=False, default = [32,64,128,128], help="List of channel sizes for each layer, e.g., 32,64,128,128 or [32,64,128,128].")
-    parser.add_argument("--strides", type=utils.parse_int_list, required=False, default = [2,2,1], help="List of stride sizes for each layer, e.g., 2,2,1 or [2,2,1].")
-    parser.add_argument("--res-units", type=int, required=False, default = 2, help="Number of residual units in the UNet.")
-    parser.add_argument("--dim-in", type=int, required=False, default = 96, help="Input dimension for the UNet model.")
-    parser.add_argument("--Nclass", type=int, required=False, default = 3, help="Number of prediction classes in the model.")
-    parser.add_argument("--model-type", type=str, required=False, default = 'UNet', help="Type of model to use. Available options: ['UNet', 'AttentionUNet']")
-    parser.add_argument("--model-save-path", type=str, required=False, default='results', help="Path to save the trained model and results.")
-    parser.add_argument("--num-tomo-crops", type=int, required=False, default = 16, help="Number of tomogram crops to use.")
-    parser.add_argument("--tomo-batch-size", type=int, required=False, default=15, help="Number of tomograms to load per epoch for training.")
-    parser.add_argument("--lr", type=float, required=False, default = 1e-3, help="Learning rate for the optimizer.")
-    parser.add_argument("--tversky-alpha", type=float, required=False, default = 0.5, help="Alpha parameter for the Tversky loss.")
-    parser.add_argument("--num-epochs", type=int, required=False, default = 100, help="Number of training epochs.")
-    parser.add_argument("--val-interval", type=int, required=False, default=25, help="Interval for validation metric calculations.")
-    parser.add_argument("--trainRunIDs", type=utils.parse_list, required=False, help="List of training run IDs, e.g., run1,run2,run3 or [run1,run2,run3].")
-    parser.add_argument("--validateRunIDs", type=utils.parse_list, required=False, help="List of validation run IDs, e.g., run4,run5,run6 or [run4,run5,run6].")    
-    parser.add_argument("--mlflow", type=utils.string2bool, required=False, default=False, help="Log the Results with MLFlow or Save it A Unique Directory.")
-
-    args = parser.parse_args()
+    # Parse the arguments
+    parser_description = "Train 3D CNN models"
+    args = train_model_parser(parser_description)
 
     # Parse the CoPick configuration paths
     if len(args.config) > 1:    copick_configs = utils.parse_copick_configs(args.config)
