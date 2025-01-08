@@ -137,7 +137,7 @@ def run_training_with_mlflow(model_trainer, model, data_generator, model_save_pa
         mlflow.log_params(io.flatten_params(params))
     mlflow.end_run()
 
-def train_model_parser(parser_description):
+def train_model_parser(parser_description, add_slurm: bool = False):
     """
     Parse the arguments for the training model
     """
@@ -162,8 +162,9 @@ def train_model_parser(parser_description):
     common.add_train_parameters(train_group)
     
     # SLURM Arguments
-    slurm_group = parser.add_argument_group("SLURM Arguments")
-    common.add_slurm_parameters(slurm_group, 'train')
+    if add_slurm:
+        slurm_group = parser.add_argument_group("SLURM Arguments")
+        common.add_slurm_parameters(slurm_group, 'train')
 
     args = parser.parse_args()
     return args

@@ -77,7 +77,7 @@ def model_search(
                                    validateRunIDs = validateRunIDs)
 
     # Get the reload frequency
-    data_generator.get_reload_frequency(num_epochs) 
+    data_generator.get_reload_frequency(num_epochs)   
 
     # Define Optuna pruning strategy to stop unpromising trials
     pruning = True
@@ -97,7 +97,7 @@ def model_search(
     #     n_startup_trials=10,     # Number of initial random trials before TPE kicks in
     #     multivariate=True        # Use multivariate TPE for correlated parameter sampling
     # )
-
+    
     # Create Save Folder if It Doesn't Exist
     os.makedirs('model_exploration', exist_ok=True)      
 
@@ -185,34 +185,49 @@ def print_input_configs(copick_config):
         print(f'  {copick_config}')
     print()
 
+def optuna_parser(parser_description, add_slurm: bool = False):
+    
+    parser = argparse.ArgumentParser(
+        description=parser_description,
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter
+    )
+
+    # Input Arguments
+    input_group = parser.add_argument_group("Input Arguments")
+    common.add_config(input_group, single_config=False)
+    input_group.add_argument("--tomo-algorithm", default='wbp', help="Tomogram algorithm used for training")
+    input_group.add_argument("--mlflow-experiment-name", type=str, default="model-search", required=False, help="Name of the MLflow experiment (default: 'model-search').")
+    input_group.add_argument("--mlflow-tracking-uri", type=str, default="http://mlflow.mlflow.svc.cluster.local:5000", required=False, help="URI for the MLflow tracking server (default: 'http://mlflow.mlflow.svc.cluster.local:5000').")
+    input_group.add_argument("--random-seed", type=int, default=42, required=False, help="Random seed for reproducibility (default: 42).")
+    input_group.add_argument("--best-metric", type=str, default='avg_f1', required=False, help="Metric to Monitor for Optimization")
+    input_group.add_argument("--trainRunIDs", type=utils.parse_list, default=None, required=False, help="List of training run IDs, e.g., run1,run2 or [run1,run2].")
+    input_group.add_argument("--validateRunIDs", type=utils.parse_list, default=None, required=False, help="List of validation run IDs, e.g., run3,run4 or [run3,run4].")    
+
+    model_group = parser.add_argument_group("Model Arguments")
+    common.add_model_parameters(model_group, model_explore = True)
+
+    train_group = parser.add_argument_group("Training Arguments")
+    common.add_train_parameters(train_group, model_explore = True)
+
+    if add_slurm:
+        slurm_group = parser.add_argument_group("SLURM Arguments")
+        common.add_slurm_parameters(slurm_group, 'optuna')
+
+    args = parser.parse_args()
+    return args
+
 # Entry point with argparse
 def cli():
     """
     CLI entry point for running optuna model archetecture search.
     """
-    parser = argparse.ArgumentParser(
-        description="Perform model architecture search with Optuna and MLflow integration.",
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter
-    )
 
-    common.add_config(parser, single_config=False)
-    common.add_model_parameters(parser, model_explore = True)
-    common.add_train_parameters(parser, model_explore = True)
-
-    parser.add_argument("--tomo-algorithm", type=str, default='wbp', required=False, help="Tomogram algorithm to use (default: 'wbp').")
-    parser.add_argument("--mlflow-experiment-name", type=str, default="model-search", required=False, help="Name of the MLflow experiment (default: 'model-search').")
-    parser.add_argument("--mlflow-tracking-uri", type=str, default="http://mlflow.mlflow.svc.cluster.local:5000", required=False, help="URI for the MLflow tracking server (default: 'http://mlflow.mlflow.svc.cluster.local:5000').")
-    parser.add_argument("--random-seed", type=int, default=42, required=False, help="Random seed for reproducibility (default: 42).")
-    parser.add_argument("--best-metric", type=str, default='avg_f1', required=False, help="Metric to Monitor for Optimization")
-    parser.add_argument("--trainRunIDs", type=utils.parse_list, default=None, required=False, help="List of training run IDs, e.g., run1,run2 or [run1,run2].")
-    parser.add_argument("--validateRunIDs", type=utils.parse_list, default=None, required=False, help="List of validation run IDs, e.g., run3,run4 or [run3,run4].")
-    
-    # Parse arguments
-    args = parser.parse_args()
+    description="Perform model architecture search with Optuna and MLflow integration."
+    args = optuna_parser(description)
 
     # Parse the CoPick configuration paths
     if len(args.config) > 1:    copick_configs = utils.parse_copick_configs(args.config)
-    else:                       copick_configs = args.config[0]    
+    else:                       copick_configs = args.config[0]
 
     # Save JSON with Parameters
     save_parameters_json(args, 'model_explore.json')

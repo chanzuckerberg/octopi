@@ -122,6 +122,7 @@ class evaluator:
                 "runIDs": runIDs,
             }    
             
+            os.makedirs(save_path, exist_ok=True)
             summary_metrics = { "input": self.input_params, "parameters": self.parameters, 
                                      "summary_metrics": final_summary_metrics }
             with open(os.path.join(save_path, 'average_metrics.json'), 'w') as f:

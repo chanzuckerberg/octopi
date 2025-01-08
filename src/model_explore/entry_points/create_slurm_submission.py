@@ -1,4 +1,5 @@
 from model_explore.submit_slurm import create_shellsubmit, create_multiconfig_shellsubmit
+from model_explore.entry_points import run_train, run_segment_predict, run_localize
 from model_explore.entry_points import common 
 from model_explore import utils
 import argparse
@@ -30,20 +31,11 @@ train-model \\
     )
 
 def train_model_slurm():
-    parser = argparse.ArgumentParser(
-        description="Create a SLURM script for training 3D CNN models",
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter
-    )
-    common.add_config(parser, single_config=False)
-    common.add_model_parameters(parser)
-    common.add_train_parameters(parser)
-    parser.add_argument("--tomo-algorithm", default='wbp', help="Tomogram algorithm used for training")
-    parser.add_argument("--trainRunIDs", type=utils.parse_list, help="List of training run IDs, e.g., run1,run2,run3")
-    parser.add_argument("--validateRunIDs", type=utils.parse_list, help="List of validation run IDs, e.g., run4,run5,run6")
-    parser.add_argument("--mlflow", type=utils.string2bool, default=False, help="Log the results with MLFlow or save in a unique directory")
-    common.add_slurm_parameters(parser, 'train')
-
-    args = parser.parse_args()
+    """
+    Create a SLURM script for training 3D CNN models
+    """
+    parser_description = "Create a SLURM script for training 3D CNN models"
+    args = run_train.train_model_parser(parser_description, add_slurm=True)
     create_train_script(args)   
 
 def create_inference_script(args):
@@ -84,18 +76,9 @@ inference \\
         )
 
 def inference_slurm():
-    parser = argparse.ArgumentParser(
-        description="Create a SLURM script for training 3D CNN models",
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter
-    )
-    common.add_config(parser, single_config=True)
-    common.add_model_parameters(parser)
-    common.add_slurm_parameters(parser, 'inference')
-    common.add_inference_parameters(parser)
-    parser.add_argument("--num-gpus", type=int, required=False, default = 1, 
-                                  help="Number of GPUs to Request for Parallel Inference")
-    parser.set_defaults(func=create_inference_script)
-    args = parser.parse_args()
+    
+    parser_description = "Create a SLURM script for running segmentation predictions with a specified model and configuration on CryoET Tomograms."
+    args = run_segment_predict.inference_parser(parser_description, add_slurm=True)
     create_inference_script(args)
 
 def create_localize_script(args):
@@ -131,14 +114,8 @@ localize \\
         )
 
 def localize_slurm():
-    parser = argparse.ArgumentParser(
-        description="Create a SLURM script for localization on predicted segmentation masks",
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter
-    )
-    common.add_config(parser, single_config=True)
-    common.add_localize_parameters(parser)
-    common.add_slurm_parameters(parser, 'localize')
-    parser.set_defaults(func=create_localize_script)
-    args = parser.parse_args()
+
+    parser_description = "Create a SLURM script for localization on predicted segmentation masks"
+    args = run_localize.localize_parser(parser_description, add_slurm=True)
     create_localize_script(args)
         

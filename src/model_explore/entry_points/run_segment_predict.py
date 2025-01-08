@@ -1,6 +1,5 @@
 from model_explore.pytorch import segmentation
 from model_explore.entry_points import common
-from model_explore import utils
 import torch, argparse, json, pprint
 from typing import List, Tuple
 
@@ -89,7 +88,7 @@ def inference(
 
     print("Inference completed successfully.")
 
-def inference_parser(parser_description):
+def inference_parser(parser_description, add_slurm: bool = False):
     """
     Parse the arguments for the inference
     """
@@ -104,6 +103,10 @@ def inference_parser(parser_description):
 
     inference_group = parser.add_argument_group("Inference Arguments")
     common.add_inference_parameters(inference_group)
+
+    if add_slurm:
+        slurm_group = parser.add_argument_group("SLURM Arguments")
+        common.add_slurm_parameters(slurm_group, 'segment_predict')
 
     args = parser.parse_args()
     return args

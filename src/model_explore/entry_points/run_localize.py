@@ -1,6 +1,7 @@
+from model_explore.entry_points import common
 from model_explore.extract import localize
-from model_explore import utils
 import copick, argparse, json, pprint
+from model_explore import utils
 from typing import List, Tuple
 import multiprocess as mp
 from tqdm import tqdm
@@ -91,7 +92,7 @@ def pick_particles(
 
     print('Localization Complete!')
 
-def localize_parser(parser_description):
+def localize_parser(parser_description, add_slurm: bool = False):
     parser = argparse.ArgumentParser(
         description=parser_description,
         formatter_class=argparse.ArgumentDefaultsHelpFormatter
@@ -113,6 +114,10 @@ def localize_parser(parser_description):
     output_group = parser.add_argument_group("Output Arguments")
     output_group.add_argument("--pick-session-id", type=str, default='1', required=False, help="Session ID for the particle picks.")
     output_group.add_argument("--pick-user-id", type=str, default='monai', required=False, help="User ID for the particle picks.")
+
+    if add_slurm:
+        slurm_group = parser.add_argument_group("SLURM Arguments")
+        common.add_slurm_parameters(slurm_group, 'localize')
 
     args = parser.parse_args()
     return args

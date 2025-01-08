@@ -13,7 +13,7 @@ class TrainLoaderManager:
                  target_session_id: str = None,
                  target_user_id: str = None,
                  voxel_size: float = 10, 
-                 tomo_algorithm: str = 'wbp', 
+                 tomo_algorithm: List[str] = ['wbp'], 
                  tomo_batch_size: int = 15, # Number of Tomograms to Load Per Sub-Epoch    
                  Nclasses: int = 3): # Number of Objects + Background
 

@@ -105,6 +105,7 @@ class unet:
         max_epochs: int = 100,
         val_interval: int = 15,
         lr_scheduler_type: str = 'cosine',
+        best_metric: str = 'avg_f1',
         use_mlflow: bool = False,
         verbose: bool = False
     ):
@@ -177,8 +178,8 @@ class unet:
                 self.metrics_function.reset()
 
                 # Save the best model
-                if self.results['avg_f1'][-1][1] > self.results["best_metric"]:
-                    self.results["best_metric"] = self.results['avg_f1'][-1][1]
+                if self.results[best_metric][-1][1] > self.results["best_metric"]:
+                    self.results["best_metric"] = self.results[best_metric][-1][1]
                     self.results["best_metric_epoch"] = epoch + 1
                     if model_save_path is not None: 
                         torch.save(self.model.state_dict(), os.path.join(model_save_path, "best_metric_model.pth"))    
@@ -205,7 +206,7 @@ class unet:
             max_lr = 0.01
             steps_per_epoch = len(self.train_loader)
             self.lr_scheduler = torch.optim.lr_scheduler.OneCycleLR(
-                self.optimizer, max_lr=max_lr, epochs=max_epochs, steps_per_epoch=steps_per_epoch )
+                self.optimizer, max_lr=max_lr, epochs=self.max_epochs, steps_per_epoch=steps_per_epoch )
         elif type == "reduce":
             mode = "min"
             patience = 5

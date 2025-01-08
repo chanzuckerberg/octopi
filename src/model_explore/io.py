@@ -186,7 +186,7 @@ def get_copick_coordinates(run,                    # CoPick run object containin
         
         message = ( f'\nNo picks found matching:\n'
                     f'  name: {name}, user_id: {user_id}, session_id: {session_id}\n'
-                    f'Available segmentations are:\n  '  
+                    f'Available picks are:\n  '  
                     + '\n  '.join(picks_details) )
         if raise_error:
             raise ValueError(message)

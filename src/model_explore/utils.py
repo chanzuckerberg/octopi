@@ -156,8 +156,6 @@ def parse_copick_configs(config_entries: List[str]):
     # Process the --config arguments into a dictionary
     copick_configs = {}
 
-    # import pdb; pdb.set_trace()
-
     for config_entry in config_entries:
         if ',' in config_entry:
             # Entry has a session name and a config path
@@ -177,6 +175,19 @@ def parse_copick_configs(config_entries: List[str]):
             #     )
             # copick_configs["default"] = config_entry
             copick_configs = config_entry
+
+        # if ',' in config_entry:
+        #     parts = config_entry.split(',')
+        #     if len(parts) == 2:
+        #         # Entry with session name and config path
+        #         session_name, config_path = parts
+        #         copick_configs[session_name] = {"path": config_path, "algorithm": None}
+        #     elif len(parts) == 3:
+        #         # Entry with session name, config path, and algorithm
+        #         session_name, config_path, algorithm = parts
+        #         copick_configs[session_name] = {"path": config_path, "algorithm": algorithm}    
+        # else:
+        #     copick_configs = config_entry
 
     return copick_configs
 

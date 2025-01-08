@@ -3,6 +3,7 @@ from monai.data import DataLoader, CacheDataset, Dataset
 from model_explore.datasets import dataset, augment
 from model_explore import io
 import multiprocess as mp
+from typing import List
 from tqdm import tqdm
 import torch
 
@@ -14,7 +15,7 @@ class MultiConfigTrainLoaderManager(TrainLoaderManager):
                  target_session_id: str = None,
                  target_user_id: str = None,
                  voxel_size: float = 10, 
-                 tomo_algorithm: str = 'wbp', 
+                 tomo_algorithm: List[str] = ['wbp'], 
                  tomo_batch_size: int = 15, 
                  Nclasses: int = 3):
         """
@@ -55,9 +56,9 @@ class MultiConfigTrainLoaderManager(TrainLoaderManager):
         Returns:
             List of tuples: [(session_name, run_name), ...]
         """
-        available_runIDs = []
+        available_runIDs = []  
         for name, root in self.roots.items():
-            runIDs = [run.name for run in root.runs]
+            runIDs = [run.name for run in root.runs]             
             for run in runIDs:
                 run = root.get_run(run)
                 seg = run.get_segmentations(

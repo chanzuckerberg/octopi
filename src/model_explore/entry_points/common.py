@@ -63,11 +63,11 @@ def add_localize_parameters(parser):
     parser.add_argument("--pick-objects", required=True, type=str, help="Pick objects")
     parser.add_argument("--seg-info", required=True, type=str, help="Segmentation info")
 
-def add_slurm_parameters(parser, base_job_name):
+def add_slurm_parameters(parser, base_job_name, gpus = 1):
     """
     Add SLURM job parameters to the parser.
     """
-    parser.add_argument("--conda-env", type=str, required=True, help="Path to Conda environment")
+    parser.add_argument("--conda-env", type=str, required=False, default='/hpc/projects/group.czii/cond_envs/pyUNET/', help="Path to Conda environment")
     parser.add_argument("--gpu-constraint", type=str, required=False, default='H100', help="GPU constraint")
     parser.add_argument("--output", type=str, required=False, default=f'{base_job_name}.log', help="Output log file for SLURM job")
     parser.add_argument("--output-script", type=str, required=False, default=f'{base_job_name}.sh', help="Name of SLURM shell script")
