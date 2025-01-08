@@ -13,7 +13,6 @@ def extract_midpoint(
     distance_min: float,
     distance_max: float,
     distance_threshold: float,
-    save_user_id: str,
     save_session_id: str,
     runIDs: List[str],
     n_procs: int = None
@@ -56,7 +55,6 @@ def extract_midpoint(
                           distance_min,
                           distance_max,
                           distance_threshold,
-                          save_user_id, 
                           save_session_id)
                 )
                 processes.append(p)
@@ -81,26 +79,27 @@ def cli():
         formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
     parser.add_argument('--config', type=str, required=True, help='Path to the configuration file.')
-    parser.add_argument('--voxel-size', type=float, required=False, default=10, help='Voxel size.')
+    parser.add_argument('--voxel-size', type=float, required=False, default=10, help='Segmentation Voxel size.')
     parser.add_argument('--picks-info', type=utils.parse_target, required=True, help='Query for the picks (e.g., "name" or "name,user_id,session_id".).')
     parser.add_argument('--organelle-info', type=utils.parse_target, required=False, help='Query for the organelles segmentations (e.g., "name" or "name,user_id,session_id".).')
     parser.add_argument('--distance-min', type=float, required=False, default=10, help='Minimum distance for valid nearest neighbors.') 
     parser.add_argument('--distance-max', type=float, required=False, default=70, help='Maximum distance for valid nearest neighbors.')
     parser.add_argument('--distance-threshold', type=float, required=False, default=25, help='Distance threshold for picks to associated organelles.')
-    parser.add_argument('--save-user-id', type=str, required=False, default=None, help='User ID to save the new picks.')
-    parser.add_argument('--save-session-id', type=str, required=True, help='Session ID to save the new picks.')
-    parser.add_argument('--runIDs', type=utils.parse_list, required=False, help='List of run IDs to process.')
-    parser.add_argument('--n-procs', type=int, required=False, default=None, help='Number of processes to use.')
+    parser.add_argument('--save-session-id', type=str, required=False, default=None, help='(Optional)SessionID to save the new picks. If none provided, will use the sessionID from the picks.')
+    parser.add_argument('--runIDs', type=utils.parse_list, required=False, help='(Optional) List of run IDs to process.')
+    parser.add_argument('--n-procs', type=int, required=False, default=None, help='Number of processes to use. In none providd, will use the total number of CPUs available.')
 
     args = parser.parse_args()
 
     # Increment session ID for the second class
-    if args.save_user_id is None: 
-        args.save_user_id = args.picks_user_id
+    if args.save_session_id is None: 
+        args.save_session_id = args.picks_info[2]
+    args.save_user_id = args.picks_info[1]       
 
     # Save JSON with Parameters
-    output_json = f'midpoint-extract_{args.save_user_id}_{args.save_session_id}.json'        
+    output_json = f'midpoint-extract_{args.picks_info[1]}_{args.save_session_id}.json'
     save_parameters_json(args, output_json)
+
 
     extract_midpoint(
         config=args.config,
@@ -110,7 +109,6 @@ def cli():
         distance_min=args.distance_min,
         distance_max=args.distance_max,
         distance_threshold=args.distance_threshold,
-        save_user_id=args.save_user_id,
         save_session_id=args.save_session_id,
         runIDs=args.runIDs,
         n_procs=args.n_procs,

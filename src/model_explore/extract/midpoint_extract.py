@@ -1,5 +1,6 @@
+from model_explore.extract import membranebound_extract as extract
 from scipy.spatial.transform import Rotation as R
-from model_explore import io, extract
+from model_explore import io
 from scipy.spatial import cKDTree
 from typing import Tuple
 import numpy as np
@@ -11,7 +12,6 @@ def process_midpoint_extract(
     organelle_info: Tuple[str, str, str],
     distance_min: float, distance_max: float, 
     distance_threshold: float,
-    save_user_id: str, 
     save_session_id: str):
 
     """
@@ -27,13 +27,17 @@ def process_midpoint_extract(
         save_session_id: Session ID to save the new picks.
     """
 
-    # Need Better Error Handing for Missing Picks
+    # Pull Picks that Are used for Midpoint Extraction
     coordinates = io.get_copick_coordinates(
         run, 
         picks_info[0], picks_info[1], picks_info[2],
         voxel_size
     )
     nPoints = len(coordinates)
+    
+    # Create Base Query for Saving Picks
+    save_picks_info = list(picks_info)
+    save_picks_info[2] = save_session_id
 
     # Get Organelle Segmentation
     seg = io.get_segmentation_array(
@@ -61,7 +65,7 @@ def process_midpoint_extract(
         )
     
         # Step 2: Find Midpoints of Closest Points
-        midpoints = find_midpoints_in_range(
+        midpoints, endpoints = find_midpoints_in_range(
             points, 
             distance_min, 
             distance_max
@@ -73,31 +77,21 @@ def process_midpoint_extract(
             # Step 3: Get Organelle Centers (Optional if an organelle segmentation is provided)
             organelle_centers = extract.organelle_points(seg)
 
-            # Step 5: Concatenate All Midpoints
-            concatenated_midpoints = concatenate_all_midpoints(midpoints)   
-            nPoints = concatenated_midpoints.shape[0]
+            save_picks_info[1] = picks_info[1] + '-midpoint'
+            save_oriented_points(
+                run, voxel_size, 
+                midpoints, 
+                organelle_centers,
+                save_picks_info
+            )
 
-            # Initialize orientations array
-            orientations = np.zeros([nPoints, 4, 4])
-            orientations[:,3,3] = 1 
-
-            # Step 4: Get Rotation Matrices from Euler Angles Based on Normal Vector
-            idx = 0
-            for key, points in midpoints.items():
-                if points.size > 0:
-                    for point in points:
-                        rot = extract.mCalcAngles(point, organelle_centers[str(key)])
-                        r = R.from_euler('ZYZ', rot, degrees=True)
-                        orientations[idx,:3,:3] = r.inv().as_matrix() 
-                        idx += 1
-             
-            # Swap z and x coordinates (0 and 2) before scaling Back to Angstroms
-            concatenated_midpoints[:, [0, 2]] = concatenated_midpoints[:, [2, 0]]
-            concatenated_midpoints = concatenated_midpoints * voxel_size                        
-
-            # Step 4: Save Midpoints to Copick
-            close_picks = run.new_picks(object_name=picks_info[0], user_id=save_user_id, session_id=save_session_id)
-            close_picks.from_numpy(concatenated_midpoints, orientations)
+            save_picks_info[1] = picks_info[1] + '-endpoint'
+            save_oriented_points(
+                run, voxel_size, 
+                endpoints, 
+                organelle_centers,
+                save_picks_info
+            )
 
 def find_midpoints_in_range(lysosome_points, min_distance, max_distance):
     """
@@ -112,8 +106,10 @@ def find_midpoints_in_range(lysosome_points, min_distance, max_distance):
     Returns:
         dict: A dictionary where keys are lysosome labels and values are arrays of midpoints
               for pairs within the specified distance range.
+        dict: A dictionary where keys are lysosome labels and values are arrays of endpoints
     """
     midpoints = {}
+    endpoints = {}
     
     for label, points in lysosome_points.items():
         if len(points) < 2:
@@ -137,8 +133,16 @@ def find_midpoints_in_range(lysosome_points, min_distance, max_distance):
         midpoints[label] = np.array([
             (points[i] + points[j]) / 2 for i, j in valid_pairs
         ])
-    
-    return midpoints
+
+        # Get Endpoints
+        endpoint_pairs = np.array([
+            (points[i], points[j]) for i, j in valid_pairs
+        ])
+        unique_endpoints = np.unique(endpoint_pairs.reshape(-1, 3), axis=0)
+        endpoints[label] = unique_endpoints
+
+    # Return EndPoints and Midpoints
+    return midpoints, endpoints
 
 # Assuming `test` is the dictionary or list of arrays
 def concatenate_all_midpoints(midpoints_dict):
@@ -157,3 +161,33 @@ def concatenate_all_midpoints(midpoints_dict):
     else:
         concatenated_array = np.array([])  # Return an empty array if no midpoints exist
     return concatenated_array
+
+
+
+def save_oriented_points(run, voxel_size, points, organelle_centers, picks_info):
+
+    # Step 5: Concatenate All Midpoints
+    concatenated_points = concatenate_all_midpoints(points)   
+    nPoints = concatenated_points.shape[0]
+
+    # Initialize orientations array
+    orientations = np.zeros([nPoints, 4, 4])
+    orientations[:,3,3] = 1 
+
+    # Step 4: Get Rotation Matrices from Euler Angles Based on Normal Vector
+    idx = 0
+    for key, points in points.items():
+        if points.size > 0:
+            for point in points:
+                rot = extract.mCalcAngles(point, organelle_centers[str(key)])
+                r = R.from_euler('ZYZ', rot, degrees=True)
+                orientations[idx,:3,:3] = r.inv().as_matrix() 
+                idx += 1
+        
+    # Swap z and x coordinates (0 and 2) before scaling Back to Angstroms
+    concatenated_points[:, [0, 2]] = concatenated_points[:, [2, 0]]
+    concatenated_points = concatenated_points * voxel_size
+
+    # Step 4: Save Midpoints to Copick
+    close_picks = run.new_picks(object_name=picks_info[0], user_id=picks_info[1], session_id=picks_info[2])
+    close_picks.from_numpy(concatenated_points, orientations)
