@@ -1,10 +1,12 @@
-from monai.networks.nets import UNet, AttentionUnet
-from model_explore import my_metrics, io, losses
 from monai.losses import FocalLoss, TverskyLoss
 from monai.metrics import ConfusionMatrixMetric
 from model_explore.pytorch import trainer
 from mlflow.tracking import MlflowClient
-import torch, mlflow, os, optuna
+from model_explore import io, losses
+import torch, mlflow, optuna
+from monai.networks.nets import (
+    UNet, AttentionUnet, SegResNet, SegResNetDS, BasicUNetPlusPlus
+)
 
 def build_model(trial, data_generator, device):
     """Build the model with parameters suggested by Optuna."""
@@ -16,12 +18,12 @@ def build_model(trial, data_generator, device):
         gamma = round(trial.suggest_float("gamma", 0.1, 4), 3)
         loss_function = FocalLoss(include_background=True, to_onehot_y=True, use_softmax=True, gamma=gamma)
     elif loss_name == "TverskyLoss":
-        alpha = round(trial.suggest_float("alpha", 0.15, 0.85), 3)
+        alpha = round(trial.suggest_float("alpha", 0.15, 0.75), 3)
         beta = 1.0 - alpha
         loss_function = TverskyLoss(include_background=True, to_onehot_y=True, softmax=True, alpha=alpha, beta=beta)
     elif loss_name == 'WeightedFocalTverskyLoss':
         gamma = round(trial.suggest_float("gamma", 0.1, 4), 3)
-        alpha = round(trial.suggest_float("alpha", 0.15, 0.85), 3)
+        alpha = round(trial.suggest_float("alpha", 0.15, 0.75), 3)
         beta = 1.0 - alpha
         weight_tversky = round(trial.suggest_float("weight_tversky", 0.1, 0.9), 3)
         weight_focal = 1.0 - weight_tversky
@@ -35,29 +37,40 @@ def build_model(trial, data_generator, device):
         beta = 1.0 - alpha
         loss_function = losses.FocalTverskyLoss(gamma=gamma, alpha=alpha, beta=beta)
 
-    # Model parameters
-    num_layers = trial.suggest_int("num_layers", 3, 5)
-    hidden_layers = trial.suggest_int("hidden_layers", 1, 3)
-    base_channel = trial.suggest_categorical("base_channel", [8, 16, 32])
-
-    # Create channel sizes and strides
-    downsampling_channels = [base_channel * (2 ** i) for i in range(num_layers)]
-    hidden_channels = [downsampling_channels[-1]] * hidden_layers
-    channels = downsampling_channels + hidden_channels
-    strides = [2] * (num_layers - 1) + [1] * hidden_layers
-
     # Create the model
-    model_type = trial.suggest_categorical("model_type", ["UNet", "AttentionUnet"])
-    if model_type == "UNet":    num_res_units = trial.suggest_int("num_res_units", 1, 3)
-    else:                       num_res_units = 0
+    model_type = trial.suggest_categorical(
+        "model_type", ["UNet", "AttentionUnet"]
+    )
+    
+    # Construction for UNet and AttentionUnet is similar
+    # act = trial.suggest_categorical("activation", ["LeakyReLU", "PReLU", "GELU", "ELU"])    
+    if model_type == "UNet" or model_type == "AttentionUnet":  
 
-    # # Calculate channels and strides
-    # channels = [base_channel * (2 ** min(i, num_layers - 2)) for i in range(num_layers)]
-    # strides_pattern = [2 if channels[i] != channels[i + 1] else 1 for i in range(len(channels) - 1)]
+        # Model parameters
+        num_layers = trial.suggest_int("num_layers", 3, 5)
+        hidden_layers = trial.suggest_int("hidden_layers", 1, 3)
+        base_channel = trial.suggest_categorical("base_channel", [8, 16, 32])
+        if model_type == "UNet":  num_res_units = trial.suggest_int("num_res_units", 1, 3)
+        else:                     num_res_units = 0
+
+        # Create channel sizes and strides
+        downsampling_channels = [base_channel * (2 ** i) for i in range(num_layers)]
+        hidden_channels = [downsampling_channels[-1]] * hidden_layers
+        channels = downsampling_channels + hidden_channels
+        strides = [2] * (num_layers - 1) + [1] * hidden_layers
+
+        model_parameters = {'num_layers': num_layers, 'hidden_layers': hidden_layers, 
+                            'channels': channels, 'strides': strides, 'num_res_units': num_res_units} 
+         
+    elif model_type == "UNet++":
+        act = trial.suggest_categorical("activation", ["LeakyReLU", "PReLU", "GELU", "ELU"])   
+        dropout_prob = trial.suggest_float("dropout", 0.0, 0.5)
+        upsample = trial.suggest_categorical("upsample", ["deconv", "pixelshuffle", "nontrainable"])        
+        model_parameters = {"activation": act,'dropout': dropout_prob, 'upsample': upsample} 
 
     # Create the model
     Nclass = data_generator.Nclasses
-    model = create_model(model_type, Nclass, channels, strides, num_res_units, device)
+    model = create_model(model_type, Nclass, model_parameters, device)
 
     # Define metrics
     metrics_function = ConfusionMatrixMetric(
@@ -68,7 +81,7 @@ def build_model(trial, data_generator, device):
 
     # Sample crop size and num_samples
     samplings = {
-        'crop_size': trial.suggest_int("crop_size", 64, 160, step=16),
+        'crop_size': trial.suggest_int("crop_size", 48, 160, step=16),
         'num_samples': 8
     }
 
@@ -114,13 +127,20 @@ def objective(
         # Save best model and associated parameters
         best_score_so_far = get_best_score(trial)        
         if score > best_score_so_far:
-            torch.save(model_trainer.model.state_dict(), 'model_exploration/best_metric_model.pth')
+            torch.save(model_trainer.model_weights, 'model_exploration/best_metric_model.pth')
             io.save_parameters_to_json(model, model_trainer, data_generator, 'model_exploration/training_parameters.json')        
 
         return score      
 
 
-def multi_gpu_objective(parent_run_id, trial, epochs, data_generator, random_seed=42, val_interval=5, best_metric='avg_f1', gpu_count=1):
+def multi_gpu_objective(
+        parent_run_id, 
+        trial, epochs,
+        data_generator, 
+        random_seed=42, 
+        val_interval=5, 
+        best_metric='avg_f1', 
+        gpu_count=1):
     
     # utils.set_seed(random_seed)
 
@@ -146,12 +166,13 @@ def multi_gpu_objective(parent_run_id, trial, epochs, data_generator, random_see
         'model': io.get_model_parameters(model),
         'optimizer': io.get_optimizer_parameters(model_trainer)
     }    
-    my_metrics.my_log_param(io.flatten_params(params), client = client, trial_run_id = target_run_id )
+    # my_metrics.my_log_param(io.flatten_params(params), client = client, trial_run_id = target_run_id )
+    model_trainer.my_log_params(io.flatten_params(params))
 
     # Save best model and associated parameters
     best_score_so_far = get_best_score(trial)
     if score > best_score_so_far:
-        torch.save(model_trainer.model.state_dict(), 'model_exploration/best_metric_model.pth')
+        torch.save(model_trainer.model_weights, 'model_exploration/best_metric_model.pth')
         io.save_parameters_to_json(model, model_trainer, data_generator, 'model_exploration/training_parameters.json')      
 
     return score    
@@ -211,15 +232,15 @@ def train_model(trial, model_trainer, data_generator, epochs, val_interval, crop
         )
         return results['best_metric']
     except torch.cuda.OutOfMemoryError:
-        print(f"[Trial Failed] Out of Memory for crop_size={crop_size} and num_samples={num_samples}")
+        print(f"[Trial Failed] Out of Memory for model={model_trainer.model}, crop_size={crop_size}, and num_samples={num_samples}")
         trial.set_user_attr("out_of_memory", True)
         raise optuna.TrialPruned()
     except Exception as e:
         print(f"[Trial Failed] Unexpected error: {e}")
         trial.set_user_attr("error", str(e))
-        raise optuna.TrialPruned()    
+        raise optuna.TrialPruned()
 
-def create_model(model_type, n_classes, channels, strides_pattern, num_res_units, device):
+def create_model(model_type, n_classes, model_parameters, device):
     """
     Create either a UNet or AttentionUnet model based on trial parameters.
     
@@ -237,17 +258,49 @@ def create_model(model_type, n_classes, channels, strides_pattern, num_res_units
             spatial_dims=3,
             in_channels=1,
             out_channels=n_classes,
-            channels=channels,
-            strides=strides_pattern,
-            num_res_units=num_res_units,
+            channels=model_parameters['channels'],
+            strides=model_parameters['strides'],
+            num_res_units=model_parameters['num_res_units'],
         )
-    else:  # AttentionUnet
+    elif model_type == "AttentionUnet":
         model = AttentionUnet(
             spatial_dims=3,
             in_channels=1,
             out_channels=n_classes,
-            channels=channels,
-            strides=strides_pattern,
+            channels=model_parameters['channels'],
+            strides=model_parameters['strides'],
         )
-    
+    elif model_type == "UNet++":
+        model = BasicUNetPlusPlus(
+            spatial_dims=3,
+            in_channels=1,
+            out_channels=n_classes,
+            deep_supervision=True,
+            features=(16, 16, 32, 64, 128, 16),  # Halve the features
+            dropout=model_parameters['dropout'],
+            upsample=model_parameters['upsample'],
+            act=model_parameters['activation']
+        )  
+
+    # Not Sure if I want to Use These
+    # elif model_type == 'SegResNet':
+    #         model = SegResNet(
+    #         spatial_dims=3,
+    #         in_channels=1,
+    #         out_channels=n_classes,
+    #         init_filters = model_parameters['init_filters'],
+    #         dropout_prob = model_parameters['dropout'],
+    #         upsample_mode = model_parameters['upsample'],
+    #         act = model_parameters['activation']
+    #     )        
+    # elif model_type == "SegResNetDS":
+    #     model = SegResNetDS(
+    #         spatial_dims=3,
+    #         in_channels=1,
+    #         out_channels=n_classes,
+    #         init_filters=model_parameters['init_filters'],
+    #         act = model_parameters['activation'],
+    #         upsample_mode=model_parameters['upsample']
+    #     )
+
     return model.to(device)

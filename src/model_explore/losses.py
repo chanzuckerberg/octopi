@@ -5,7 +5,7 @@ class WeightedFocalTverskyLoss(torch.nn.Module):
     def __init__(
         self, gamma=1.0, alpha=0.7, beta=0.3, 
         weight_tversky=0.5, weight_focal=0.5, 
-        smooth=1e-6, **kwargs ):
+        smooth=1e-5, **kwargs ):
         """
         Weighted combination of Focal and Tversky loss.
 
@@ -27,6 +27,9 @@ class WeightedFocalTverskyLoss(torch.nn.Module):
             include_background=True, to_onehot_y=True, 
             use_softmax=True, gamma=gamma
         )
+        self.alpha = alpha
+        self.beta = beta
+        self.gamma = gamma
         self.weight_tversky = weight_tversky
         self.weight_focal = weight_focal
 
@@ -48,7 +51,7 @@ class WeightedFocalTverskyLoss(torch.nn.Module):
 class FocalTverskyLoss(TverskyLoss):
     def __init__(
         self, 
-        alpha=0.7, beta=0.3, gamma=1.0, smooth=1e-6, **kwargs):
+        alpha=0.7, beta=0.3, gamma=1.0, smooth=1e-5, **kwargs):
         """
         Focal Tversky Loss with an additional power term for harder samples.
 
@@ -66,6 +69,8 @@ class FocalTverskyLoss(TverskyLoss):
             to_onehot_y=True, softmax=True, 
             smooth_nr=smooth, smooth_dr=smooth, **kwargs)
         self.gamma = gamma
+        self.alpha = alpha
+        self.beta = beta
 
     def forward(self, y_pred, y_true):
         """

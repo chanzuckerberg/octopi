@@ -1,10 +1,11 @@
-from typing import Dict, List, Optional, Tuple
-import model_explore.my_metrics as metrics
+from monai.inferers import sliding_window_inference
 from monai.data import decollate_batch
 from monai.transforms import AsDiscrete
+from typing import List, Optional
 import matplotlib.pyplot as plt
 import torch, os, mlflow
 from tqdm import tqdm 
+import numpy as np
 
 # Not Ideal, but Necessary if Class is Missing From Dataset
 import warnings
@@ -70,22 +71,34 @@ class unet:
             for val_data in self.val_loader:
                 val_inputs = val_data["image"].to(self.device)
                 val_labels = val_data["label"].to(self.device)
-                val_outputs = self.model(val_inputs)
+                
+                # val_outputs = self.model(val_inputs)
+                val_outputs = sliding_window_inference(
+                    inputs=val_inputs, 
+                    roi_size=(self.crop_size, self.crop_size, self.crop_size), 
+                    sw_batch_size=4,
+                    predictor=self.model, 
+                    overlap=0.5,
+                    device=self.device
+                )
 
                 # Compute the loss for this batch
                 loss = self.loss_function(val_outputs, val_labels)  # Assuming self.loss_function is defined
                 val_loss += loss.item()  # Accumulate the loss                
                 
                 # Decollate batches into lists
-                val_outputs_list = decollate_batch(val_outputs)
-                val_labels_list = decollate_batch(val_labels)
+                # val_outputs_list = decollate_batch(val_outputs)
+                # val_labels_list = decollate_batch(val_labels)
                 
                 # Apply post-processing
-                metric_val_outputs = [self.post_pred(i) for i in val_outputs_list]
-                metric_val_labels = [self.post_label(i) for i in val_labels_list]
+                # metric_val_outputs = [self.post_pred(i) for i in val_outputs_list]
+                # metric_val_labels = [self.post_label(i) for i in val_labels_list]
+
+                metric_val_outputs = [self.post_pred(i) for i in val_outputs]
+                metric_val_labels = [self.post_label(i) for i in val_labels]                             
                 
                 # Compute metrics
-                self.metrics_function(y_pred=metric_val_outputs, y=metric_val_labels)
+                self.metrics_function(y_pred=metric_val_outputs, y=metric_val_labels)                
 
         # # Contains recall, precision, and f1 for each class
         metric_values = self.metrics_function.aggregate(reduction='mean_batch')
@@ -104,20 +117,27 @@ class unet:
         crop_size: int = 96,
         max_epochs: int = 100,
         val_interval: int = 15,
-        lr_scheduler_type: str = 'cosine',
+        lr_scheduler_type: str = 'cosine', 
         best_metric: str = 'avg_f1',
         use_mlflow: bool = False,
         verbose: bool = False
     ):
 
+        # best lr scheduler options are cosine or reduce
+
         self.warmup_epochs = 5
         self.warmup_lr_factor = 0.1
+        self.min_lr = 1e-6
 
         self.max_epochs = max_epochs
         self.crop_size = crop_size
         self.num_samples = my_num_samples
         self.val_interval = val_interval
         self.use_mlflow = use_mlflow
+
+        # Early Stopping Parameters
+        self.nan_counter = 0
+        self.max_nan_epochs = 10
 
         # Create Save Folder if It Doesn't Exist
         if model_save_path is not None:
@@ -147,12 +167,15 @@ class unet:
 
             # Compute and log average epoch loss           
             epoch_loss = self.train_update()
-            self.my_log_metrics(
-                metrics_dict={"loss": epoch_loss},
-                curr_step=epoch + 1,
-                client=self.client,
-                trial_run_id=self.trial_run_id,
-            )
+
+            # Check for NaN in the loss
+            if self.check_for_early_stopping(epoch_loss):
+                tqdm.write(f"Training stopped early due to NaN values in loss for more than {self.max_nan_epochs} epochs.")
+                break
+
+            current_lr = self.optimizer.param_groups[0]['lr']
+            self.my_log_metrics( metrics_dict={"loss": epoch_loss}, curr_step=epoch + 1 )
+            self.my_log_metrics( metrics_dict={"learning_rate": current_lr}, curr_step=epoch + 1 )                        
 
             # Validation and metric logging
             if (epoch + 1) % val_interval == 0 or (epoch + 1) == max_epochs:
@@ -162,12 +185,7 @@ class unet:
                 metric_values = self.validate_update()
 
                 # Log all metrics
-                self.my_log_metrics(
-                    metrics_dict=metric_values,
-                    curr_step=epoch + 1,
-                    client=self.client,
-                    trial_run_id=self.trial_run_id,
-                )
+                self.my_log_metrics( metrics_dict=metric_values, curr_step=epoch + 1 )
 
                 # Update tqdm description        
                 if verbose:
@@ -181,6 +199,7 @@ class unet:
                 if self.results[best_metric][-1][1] > self.results["best_metric"]:
                     self.results["best_metric"] = self.results[best_metric][-1][1]
                     self.results["best_metric_epoch"] = epoch + 1
+                    self.model_weights = self.model.state_dict()
                     if model_save_path is not None: 
                         torch.save(self.model.state_dict(), os.path.join(model_save_path, "best_metric_model.pth"))    
 
@@ -189,7 +208,9 @@ class unet:
                     self.plot_results(save_plot=os.path.join(model_save_path, "net_train_history.png"))
 
             # Run the learning rate scheduler
-            self.run_scheduler(data_load_gen, original_lr, epoch, epoch_loss)
+            early_stop = self.run_scheduler(data_load_gen, original_lr, epoch, val_interval, lr_scheduler_type)
+            if early_stop:
+                break
 
         return self.results
 
@@ -199,20 +220,24 @@ class unet:
         """
         # Configure learning rate scheduler based on the type
         if type == "cosine":
-            eta_min = 1e-8
+            eta_min = 1e-6
             self.lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
                 self.optimizer, T_max=self.max_epochs, eta_min=eta_min )
         elif type == "onecyle":
-            max_lr = 0.01
+            max_lr = 1e-3
             steps_per_epoch = len(self.train_loader)
             self.lr_scheduler = torch.optim.lr_scheduler.OneCycleLR(
                 self.optimizer, max_lr=max_lr, epochs=self.max_epochs, steps_per_epoch=steps_per_epoch )
         elif type == "reduce":
             mode = "min"
-            patience = 5
-            factor = 0.8
+            patience = 3
+            factor = 0.5
             self.lr_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
                 self.optimizer, mode=mode, patience=patience, factor=factor )
+        elif type == 'exponential':
+            gamma = 0.9
+            self.lr_scheduler = torch.optim.lr_scheduler.ExponentialLR(
+                self.optimizer, gamma=gamma)
         else:
             raise ValueError(f"Unsupported scheduler type: {type}")
 
@@ -220,28 +245,69 @@ class unet:
         self, 
         data_load_gen, 
         original_lr: float,
-        epoch: int, 
-        epoch_loss: float
+        epoch: int,
+        val_interval: int,
+        type: str
         ):
         """
         Manage the learning rate scheduler, including warm-up and normal scheduling.
         """
-
-        # Apply warm-up learning rate if within warm-up period
-        if (epoch + 1) % data_load_gen.reload_frequency < self.warmup_epochs:
-            if isinstance(self.lr_scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau):
-                # No scheduler step during warm-up for ReduceLROnPlateau
-                return
-        else:
-            # Restore original learning rate after warm-up
+        # Apply warm-up logic
+        if (epoch + 1) <= self.warmup_epochs:
             for param_group in self.optimizer.param_groups:
-                param_group['lr'] = original_lr
+                param_group['lr'] = original_lr * self.warmup_lr_factor
+            return False  # Continue training
 
-            # Step the scheduler
-            if isinstance(self.lr_scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau):
-                self.lr_scheduler.step(epoch_loss)  # Step with validation loss
-            else:
-                self.lr_scheduler.step()  # Step for other schedulers
+        # Step the scheduler
+        if isinstance(self.lr_scheduler, torch.optim.lr_scheduler.CosineAnnealingLR):
+            self.lr_scheduler.step()
+        elif isinstance(self.lr_scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau) and (epoch + 1) % val_interval == 0:
+            metric_value = self.results['val_loss'][-1][1]
+            self.lr_scheduler.step(metric_value)
+        else:
+            self.lr_scheduler.step()  # Step for other schedulers
+
+        # Check learning rate for early stopping
+        current_lr = self.optimizer.param_groups[0]['lr']
+        if current_lr < self.min_lr and type != 'onecycle':
+            print(f"Early stopping triggered at epoch {epoch + 1} as learning rate fell below {self.min_lr}.")
+            return True  # Indicate early stopping
+
+        return False  # Continue training
+
+        # # Apply warm-up learning rate if within warm-up period
+        # if (epoch + 1) % data_load_gen.reload_frequency < self.warmup_epochs:
+        #     if isinstance(self.lr_scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau):
+        #         # No scheduler step during warm-up for ReduceLROnPlateau
+        #         return
+        # else:
+        #     # Restore original learning rate after warm-up
+        #     for param_group in self.optimizer.param_groups:
+        #         param_group['lr'] = original_lr
+
+        #     # Step the scheduler
+        #     if isinstance(self.lr_scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau) and (epoch + 1) % val_interval == 0:
+        #         metric_value = self.results['val_loss'][-1][1]
+        #         self.lr_scheduler.step(metric_value)  # Step with validation loss
+        #     else:
+        #         self.lr_scheduler.step()  # Step for other schedulers
+
+        # # Check learning rate for early stopping
+        # current_lr = self.optimizer.param_groups[0]['lr']
+        # if current_lr < self.min_lr and type != 'onecycle':
+        #     print(f"Early stopping triggered at epoch {epoch + 1} as learning rate fell below {self.min_lr}.")
+        #     return True  # Indicate early stopping
+        # return False # Continue training
+
+    def check_for_early_stopping(self, epoch_loss: float):
+        # Check for NaN in the loss
+        if np.isnan(epoch_loss):
+            self.nan_counter += 1
+            if self.nan_counter > self.max_nan_epochs:
+                return True
+        else:
+            self.nan_counter = 0  # Reset the counter if loss is valid
+            return False
 
     def create_results_dictionary(self, Nclass: int):
 
@@ -264,8 +330,6 @@ class unet:
         self,
         metrics_dict: dict,
         curr_step: int,
-        client=None,
-        trial_run_id=None,
     ):
         # If metrics_dict contains multiple elements (e.g., recall, precision, f1), process them
         if len(metrics_dict) > 1:
@@ -297,10 +361,10 @@ class unet:
             self.results[metric_name].append((curr_step, value))
 
         # Log to MLflow or client
-        if client is not None and trial_run_id is not None:
+        if self.client is not None and self.trial_run_id is not None:
             for metric_name, value in metrics_dict.items():
-                client.log_metric(
-                    run_id=trial_run_id,
+                self.client.log_metric(
+                    run_id=self.trial_run_id,
                     key=metric_name,
                     value=value,
                     step=curr_step,
@@ -312,16 +376,19 @@ class unet:
     def my_log_params(
         self,
         params_dict: dict, 
-        client=None, 
-        trial_run_id=None
     ):
 
-        self.results["params"] = params_dict
+        # self.results["params"] = params_dict
 
-        if client is not None and trial_run_id is not None:
-            client.log_params(run_id=trial_run_id, params=params_dict)
-        elif self.use_mlflow:
-            mlflow.log_params(params_dict)                
+        # if self.client is not None and self.trial_run_id is not None:
+        #     self.client.log_params(run_id=self.trial_run_id, params=params_dict)
+        # elif self.use_mlflow:
+        #     mlflow.log_params(params_dict)
+        if self.client is not None and self.trial_run_id is not None:
+            for key, value in params_dict.items():
+                self.client.log_param(run_id=self.trial_run_id, key=key, value=value)
+        else:
+            mlflow.log_params(params_dict)                 
     
     def plot_results(self, 
                      class_names: Optional[List[str]] = None,

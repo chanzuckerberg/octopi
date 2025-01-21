@@ -22,6 +22,7 @@ python-dotenv = "*"
 monai-weekly = { version = "1.5.dev2448", allow-prereleases = true }
 copick-utils = {git = "https://github.com/copick/copick-utils.git", branch = "main"}
 multiprocess = "*"
+ipywidgets = "*"
 
 [tool.poetry.dev-dependencies]
 pytest = "^6.2.3"
@@ -32,6 +33,7 @@ ruff = "^0.6.4"
 [tool.poetry.scripts]
 create-targets = "model_explore.entry_points.run_create_targets:cli"
 create-shellsubmit = "model_explore.entry_points.run_create_shellsubmit:cli"
+download-dataportal = "model_explore.download:cli"
 train-model = "model_explore.entry_points.run_train:cli"
 train-model-slurm = "model_explore.entry_points.run_create_shellsubmit:train_model_slurm"
 model-explore = "model_explore.entry_points.run_optuna:cli"

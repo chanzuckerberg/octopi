@@ -32,6 +32,34 @@ conda activate {conda_path}
 
     print(f"\nShell script has been created successfully as {shell_name}\n")
 
+def create_shellsubmit_array(
+    job_name, 
+    output_file,
+    shell_name,
+    conda_path,
+    command,
+    job_array = [min, max]):
+
+    shell_script_content = f"""#!/bin/bash
+
+#SBATCH --time=18:00:00
+#SBATCH --cpus-per-task=24
+#SBATCH --mem-per-cpu=16G
+#SBATCH --job-name={job_name}
+#SBATCH --output={output_file}
+#SBATCH --array={job_array[0]}-{job_array[1]}
+
+ml anaconda 
+conda activate {conda_path}
+{command}
+"""
+
+    # Save to file
+    with open(shell_name, "w") as file:
+        file.write(shell_script_content)
+
+    print(f"\nShell script has been created successfully as {shell_name}\n")
+
 def create_multiconfig_shellsubmit(
     job_name, 
     output_file,

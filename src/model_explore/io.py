@@ -336,14 +336,20 @@ def prepare_for_inline_json(data):
 
 def get_model_parameters(model):
 
+    model_name = model.__class__.__name__
     model_parameters = {
         'model_name': model.__class__.__name__, 
-        'channels': model.channels,
-        'strides': model.strides
+        'Nclasses': model.out_channels
     }
 
-    if model.__class__.__name__ == 'UNet':
+    if model_name == 'AttentionUnet' or model_name == 'UNet':
+        model_parameters['channels'] = model.channels
+        model_parameters['strides'] = model.strides
+
+    if model_name == 'UNet':
         model_parameters['res_units'] = model.num_res_units
+
+    # Parameters for UNet++
 
     return model_parameters
 
@@ -362,7 +368,15 @@ def get_optimizer_parameters(trainer):
     # Log Tversky Loss Parameters
     if trainer.loss_function.__class__.__name__ == 'TverskyLoss':
         optimizer_parameters['alpha'] = trainer.loss_function.alpha
-        optimizer_parameters['beta'] = trainer.loss_function.beta
+    elif trainer.loss_function.__class__.__name__ == 'FocalLoss':
+        optimizer_parameters['gamma'] = trainer.loss_function.gamma
+    elif trainer.loss_function.__class__.__name__ == 'WeightedFocalTverskyLoss':
+        optimizer_parameters['alpha'] = trainer.loss_function.alpha
+        optimizer_parameters['gamma'] = trainer.loss_function.gamma
+        optimizer_parameters['weight_tversky'] = trainer.loss_function.weight_tversky
+    elif trainer.loss_function.__class__.__name__ == 'FocalTverskyLoss':
+        optimizer_parameters['alpha'] = trainer.loss_function.alpha
+        optimizer_parameters['gamma'] = trainer.loss_function.gamma
 
     return optimizer_parameters
 

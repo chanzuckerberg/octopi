@@ -45,32 +45,7 @@ def set_seed(seed):
     # Ensure reproducibility of operations by disabling certain optimizations
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
-
-###############################################################################################################################    
-
-def get_copick_coordinates(copick_run,             # CoPick run object containing the segmentation data
-                           name: str,              # Name of the object or protein for which coordinates are being extracted
-                           user_id: str,           # Identifier of the user that generated the picks
-                           session_id: str = None, # Identifier of the session that generated the picks
-                           voxel_size: float = 10  # Voxel size of the tomogram, used for scaling the coordinates
-                           ):
-                           
-    # Retrieve the pick points associated with the specified object and user ID
-    points = copick_run.get_picks(object_name=name, user_id=user_id, session_id=session_id)[0].points
     
-    # Initialize an array to store the coordinates
-    nPoints = len(points)                      # Number of points retrieved
-    coordinates = np.zeros([len(points), 3])   # Create an empty array to hold the (z, y, x) coordinates
-
-    # Iterate over all points and convert their locations to coordinates in voxel space
-    for ii in range(nPoints):
-        coordinates[ii,] = [points[ii].location.z / voxel_size,   # Scale z-coordinate by voxel size
-                            points[ii].location.y / voxel_size,   # Scale y-coordinate by voxel size
-                            points[ii].location.x / voxel_size]   # Scale x-coordinate by voxel size
-    
-    # Return the array of coordinates
-    return coordinates
-
 ###############################################################################################################################
 
 def parse_list(value: str) -> List[str]:

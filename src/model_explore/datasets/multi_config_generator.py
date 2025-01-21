@@ -192,7 +192,7 @@ class MultiConfigTrainLoaderManager(TrainLoaderManager):
             # Wrap the cached dataset to apply random transforms during iteration
             self.dynamic_validation_dataset = dataset.DynamicDataset(
                 data=val_ds, 
-                transform=augment.get_validation_transforms(my_crop_size, my_num_samples, self.Nclasses) 
+                # transform=augment.get_validation_transforms(my_crop_size, my_num_samples, self.Nclasses) 
             )
 
             # Create validation DataLoader

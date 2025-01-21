@@ -1,5 +1,5 @@
+from model_explore import utils, io
 from scipy.spatial import distance
-from model_explore import utils
 from typing import List
 import copick, json, os
 import numpy as np
@@ -81,8 +81,19 @@ class evaluator:
 
             for name, radius in self.objects:
 
-                gt_coordinates = utils.get_copick_coordinates(run, name, self.ground_truth_user_id, self.ground_truth_session_id, self.voxel_size)
-                pred_coordinates = utils.get_copick_coordinates(run, name,self.prediction_user_id, self.predict_session_id, self.voxel_size)
+                gt_coordinates = io.get_copick_coordinates(
+                    run, name, 
+                    self.ground_truth_user_id, self.ground_truth_session_id, 
+                    self.voxel_size, raise_error=True
+                )
+                pred_coordinates = io.get_copick_coordinates(
+                    run, name,
+                    self.prediction_user_id, self.predict_session_id, 
+                    self.voxel_size, raise_error=False
+                )
+
+                if gt_coordinates is None or pred_coordinates is None:
+                    continue
 
                 # Compute Distance Threshold Based on Particle Radius
                 distance_threshold = (radius/self.voxel_size) * distance_threshold_scale
@@ -172,6 +183,7 @@ class evaluator:
         for name, metrics in metrics_dict.items():
             recall = metrics['recall']
             precision = metrics['precision']
+            f1_score = metrics['f1_score']
             false_positives = metrics['false_positives']
             false_negatives = metrics['false_negatives']
             
@@ -179,6 +191,7 @@ class evaluator:
             formatted_metrics = (
                 f"Recall: {recall['mean']:.3f} ± {recall['std']:.3f}, "
                 f"Precision: {precision['mean']:.3f} ± {precision['std']:.3f}, "
+                f"F1 Score: {f1_score['mean']:.3f} ± {f1_score['std']:.3f}, "
                 f"False_Positives: {false_positives['mean']:.1f} ± {false_positives['std']:.1f}, "
                 f"False_Negatives: {false_negatives['mean']:.1f} ± {false_negatives['std']:.1f}"
             )

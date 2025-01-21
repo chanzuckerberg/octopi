@@ -20,6 +20,7 @@ def model_search(
     num_trials: int,
     tomo_batch_size: int,
     best_metric: str,
+    val_interval: int,
     trainRunIDs: List[str],
     validateRunIDs: List[str],   
     ):
@@ -116,13 +117,13 @@ def model_search(
 
     if gpu_count > 1:
         multi_gpu_optuna(storage, tpe_sampler, pruner, data_generator, num_epochs, 
-                         random_seed, num_trials, best_metric, gpu_count)
+                         random_seed, num_trials, best_metric, val_interval, gpu_count)
     else:
         single_gpu_optuna(storage, tpe_sampler, pruner, data_generator, num_epochs, 
-                          random_seed, num_trials, best_metric)
+                          random_seed, num_trials, best_metric, val_interval)
     
 
-def single_gpu_optuna(storage, tpe_sampler, pruner, data_generator, num_epochs, random_seed, num_trials, best_metric):
+def single_gpu_optuna(storage, tpe_sampler, pruner, data_generator, num_epochs, random_seed, num_trials, best_metric, val_interval):
     """
     Run Optuna optimization on a single GPU.
     """
@@ -142,13 +143,14 @@ def single_gpu_optuna(storage, tpe_sampler, pruner, data_generator, num_epochs, 
 
         study.optimize(lambda trial: hyper_search.objective(trial, num_epochs, device, 
                                                             data_generator, random_seed = random_seed, 
+                                                            val_interval = val_interval,
                                                             best_metric = best_metric), 
                         n_trials=num_trials)
 
         print(f"Best trial: {study.best_trial.value}")
         print(f"Best params: {study.best_params}")
     
-def multi_gpu_optuna(storage, tpe_sampler, pruner, data_generator, num_epochs, random_seed, num_trials, best_metric, gpu_count):
+def multi_gpu_optuna(storage, tpe_sampler, pruner, data_generator, num_epochs, random_seed, num_trials, best_metric, val_interval, gpu_count):
     """
     Run Optuna optimization on multiple GPUs.
     """     
@@ -168,6 +170,7 @@ def multi_gpu_optuna(storage, tpe_sampler, pruner, data_generator, num_epochs, r
                                                                       num_epochs,
                                                                       data_generator, 
                                                                       best_metric = best_metric,
+                                                                      val_interval = val_interval,
                                                                       gpu_count = gpu_count), 
                        n_trials=num_trials,
                        n_jobs=gpu_count) # Run trials on multiple GPUs
@@ -249,7 +252,8 @@ def cli():
         trainRunIDs=args.trainRunIDs,
         validateRunIDs=args.validateRunIDs, 
         tomo_batch_size=args.tomo_batch_size,
-        best_metric=args.best_metric
+        best_metric=args.best_metric,
+        val_interval=args.val_interval
     )
 
 def save_parameters_json(args, output_path: str):
