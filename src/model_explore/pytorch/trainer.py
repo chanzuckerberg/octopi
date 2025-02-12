@@ -1,6 +1,6 @@
+from monai.transforms import AsDiscrete, Compose, Activationsd, AsDiscreted
 from monai.inferers import sliding_window_inference
 from monai.data import decollate_batch
-from monai.transforms import AsDiscrete
 from typing import List, Optional
 import matplotlib.pyplot as plt
 import torch, os, mlflow
@@ -40,9 +40,9 @@ class unet:
     
     def train_update(self):
 
-        self.model.train()
-        epoch_loss = 0
         step = 0
+        epoch_loss = 0
+        self.model.train()
         for batch_data in self.train_loader:
             step += 1
             inputs = batch_data["image"].to(self.device)  # Shape: [B, C, H, W, D]
@@ -72,7 +72,7 @@ class unet:
                 val_inputs = val_data["image"].to(self.device)
                 val_labels = val_data["label"].to(self.device)
                 
-                # val_outputs = self.model(val_inputs)
+                # Apply sliding window inference
                 val_outputs = sliding_window_inference(
                     inputs=val_inputs, 
                     roi_size=(self.crop_size, self.crop_size, self.crop_size), 
@@ -85,17 +85,10 @@ class unet:
                 # Compute the loss for this batch
                 loss = self.loss_function(val_outputs, val_labels)  # Assuming self.loss_function is defined
                 val_loss += loss.item()  # Accumulate the loss                
-                
-                # Decollate batches into lists
-                # val_outputs_list = decollate_batch(val_outputs)
-                # val_labels_list = decollate_batch(val_labels)
-                
-                # Apply post-processing
-                # metric_val_outputs = [self.post_pred(i) for i in val_outputs_list]
-                # metric_val_labels = [self.post_label(i) for i in val_labels_list]
 
-                metric_val_outputs = [self.post_pred(i) for i in val_outputs]
-                metric_val_labels = [self.post_label(i) for i in val_labels]                             
+                # Apply post-processing
+                metric_val_outputs = [self.post_pred(i) for i in decollate_batch(val_outputs)]
+                metric_val_labels = [self.post_label(i) for i in decollate_batch(val_labels)]                             
                 
                 # Compute metrics
                 self.metrics_function(y_pred=metric_val_outputs, y=metric_val_labels)                
@@ -127,7 +120,7 @@ class unet:
 
         self.warmup_epochs = 5
         self.warmup_lr_factor = 0.1
-        self.min_lr = 1e-6
+        self.min_lr = 1e-7
 
         self.max_epochs = max_epochs
         self.crop_size = crop_size
@@ -145,6 +138,7 @@ class unet:
 
         Nclass = data_load_gen.Nclasses
         self.create_results_dictionary(Nclass)  
+        
         self.post_pred = AsDiscrete(argmax=True, to_onehot=Nclass)
         self.post_label = AsDiscrete(to_onehot=Nclass)                             
 
@@ -220,7 +214,7 @@ class unet:
         """
         # Configure learning rate scheduler based on the type
         if type == "cosine":
-            eta_min = 1e-6
+            eta_min = 1e-7
             self.lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
                 self.optimizer, T_max=self.max_epochs, eta_min=eta_min )
         elif type == "onecyle":

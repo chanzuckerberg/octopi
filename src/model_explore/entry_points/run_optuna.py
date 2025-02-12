@@ -3,6 +3,7 @@ from model_explore.pytorch import hyper_search
 from model_explore.entry_points import common
 from model_explore import utils
 import torch, mlflow, optuna, argparse, json, os, pprint
+import pandas as pd
 from typing import List, Optional
 
 def model_search(
@@ -14,7 +15,6 @@ def model_search(
     voxel_size: float,    
     Nclass: int,
     mlflow_experiment_name: str,
-    mlflow_tracking_uri: str, 
     random_seed: int,
     num_epochs: int,
     num_trials: int,
@@ -36,7 +36,6 @@ def model_search(
     - voxel_size (float): Voxel size for tomograms (default: 10).
     - Nclass (int): Number of prediction classes (default: 3).
     - mlflow_experiment_name (str): MLflow experiment name (default: 'model-search').
-    - mlflow_tracking_uri (str): URI for MLflow tracking server.
     - random_seed (int): Seed for reproducibility (default: 42).
     - num_epochs (int): Number of epochs per trial.
     - num_trials (int): Number of trials for hyperparameter optimization.
@@ -104,8 +103,8 @@ def model_search(
 
     # Initialize MLflow for experiment tracking
     try:
-        utils.mlflow_setup()
-        mlflow.set_tracking_uri(mlflow_tracking_uri)
+        tracking_uri = utils.mlflow_setup()
+        mlflow.set_tracking_uri(tracking_uri)
     except:
         pass
     mlflow.set_experiment(mlflow_experiment_name)    
@@ -147,6 +146,9 @@ def single_gpu_optuna(storage, tpe_sampler, pruner, data_generator, num_epochs, 
                                                             best_metric = best_metric), 
                         n_trials=num_trials)
 
+        # Save contour plot
+        save_contour_plot_as_png(study)
+
         print(f"Best trial: {study.best_trial.value}")
         print(f"Best params: {study.best_params}")
     
@@ -174,6 +176,9 @@ def multi_gpu_optuna(storage, tpe_sampler, pruner, data_generator, num_epochs, r
                                                                       gpu_count = gpu_count), 
                        n_trials=num_trials,
                        n_jobs=gpu_count) # Run trials on multiple GPUs
+        
+        # Save contour plot
+        save_contour_plot_as_png(study)
 
     print(f"Best trial: {study.best_trial.value}")
     print(f"Best params: {study.best_params}")
@@ -200,7 +205,6 @@ def optuna_parser(parser_description, add_slurm: bool = False):
     common.add_config(input_group, single_config=False)
     input_group.add_argument("--tomo-algorithm", default='wbp', help="Tomogram algorithm used for training")
     input_group.add_argument("--mlflow-experiment-name", type=str, default="model-search", required=False, help="Name of the MLflow experiment (default: 'model-search').")
-    input_group.add_argument("--mlflow-tracking-uri", type=str, default="http://mlflow.mlflow.svc.cluster.local:5000", required=False, help="URI for the MLflow tracking server (default: 'http://mlflow.mlflow.svc.cluster.local:5000').")
     input_group.add_argument("--random-seed", type=int, default=42, required=False, help="Random seed for reproducibility (default: 42).")
     input_group.add_argument("--best-metric", type=str, default='avg_f1', required=False, help="Metric to Monitor for Optimization")
     input_group.add_argument("--trainRunIDs", type=utils.parse_list, default=None, required=False, help="List of training run IDs, e.g., run1,run2 or [run1,run2].")
@@ -245,7 +249,6 @@ def cli():
         voxel_size=args.voxel_size,
         Nclass=args.Nclass,
         mlflow_experiment_name=args.mlflow_experiment_name,
-        mlflow_tracking_uri=args.mlflow_tracking_uri,
         random_seed=args.random_seed,
         num_epochs=args.num_epochs,
         num_trials=args.num_trials,
@@ -276,7 +279,6 @@ def save_parameters_json(args, output_path: str):
         },
         "optimization": {
             "mlflow_experiment_name": args.mlflow_experiment_name,
-            "mlflow_tracking_uri": args.mlflow_tracking_uri,
             "random_seed": args.random_seed,
             "num_trials": args.num_trials,
             "best_metric": args.best_metric
@@ -290,12 +292,52 @@ def save_parameters_json(args, output_path: str):
     }
 
     # Print the parameters
-    print(f"\nParameters for Model ArchitectureSearch:")
+    print(f"\nParameters for Model Architecture Search:")
     pprint.pprint(params); print()
 
     # Save to JSON file
     with open(output_path, 'w') as f:
-        json.dump(params, f, indent=4)    
+        json.dump(params, f, indent=4)   
+
+def save_contour_plot_as_png(study):
+    """
+    Save the contour plot of hyperparameter interactions as a PNG, 
+    automatically extracting parameter names from the study object.
+
+    Args:
+        study: The Optuna study object.
+        output_path: Path to save the PNG file.
+    """
+    # Extract all parameter names from the study trials
+    all_params = set()
+    for trial in study.trials:
+        all_params.update(trial.params.keys())
+    all_params = list(all_params)  # Convert to a sorted list for consistency
+
+    # Generate the contour plot
+    fig = optuna.visualization.plot_contour(study, params=all_params) 
+
+    # Adjust figure size and font size
+    fig.update_layout(
+        width=6000, height=6000,  # Large figure size
+        font=dict(size=40)  # Increase font size for better readability
+    )
+
+    # Save the plot as a PNG file
+    fig.write_image('model_exploration/contour_plot.png', scale=1)  
+
+     # Extract trial data
+    trials = [
+        {**trial.params, 'objective_value': trial.value}
+        for trial in study.trials if trial.state == optuna.trial.TrialState.COMPLETE
+    ]
+
+    # Convert to DataFrame
+    df = pd.DataFrame(trials)
+
+    # Save to CSV
+    df.to_csv("model_exploration/optuna_results.csv", index=False)
+
 
 if __name__ == "__main__":
     cli()

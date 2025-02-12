@@ -15,7 +15,7 @@ def from_dataportal(
 
         # Check if voxel spacing is available
         vs = run.get_voxel_spacing(voxel_size)
-        # import pdb; pdb.set_trace()
+
         if vs is None:
             print(f'No Voxel-Spacing Available for RunID: {run.name}, Voxel-Size: {voxel_size}')
             continue
@@ -54,10 +54,10 @@ def from_dataportal(
             tomogram.from_numpy(vol)
 
 def cli():
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--config', type=str, required=True)
-    parser.add_argument('--method', type=str, required=False, default='wbp')
-    parser.add_argument('--processing', type=str, required=False, default='raw')
-    parser.add_argument('--voxel-size', type=float, required=False, default=10)
+    parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser.add_argument('--config', type=str, required=True, help='Path to the config file')
+    parser.add_argument('--method', type=str, required=False, default='wbp', help='Tomogram method')
+    parser.add_argument('--processing', type=str, required=False, default='raw', help='Tomogram processing')
+    parser.add_argument('--voxel-size', type=float, required=False, default=10, help='Voxel size')
     args = parser.parse_args()
     from_dataportal(args.config, args.method, args.processing, args.voxel_size)

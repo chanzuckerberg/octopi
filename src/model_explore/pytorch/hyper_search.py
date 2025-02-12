@@ -7,6 +7,7 @@ import torch, mlflow, optuna
 from monai.networks.nets import (
     UNet, AttentionUnet, SegResNet, SegResNetDS, BasicUNetPlusPlus
 )
+import gc
 
 def build_model(trial, data_generator, device):
     """Build the model with parameters suggested by Optuna."""
@@ -81,7 +82,7 @@ def build_model(trial, data_generator, device):
 
     # Sample crop size and num_samples
     samplings = {
-        'crop_size': trial.suggest_int("crop_size", 48, 160, step=16),
+        'crop_size': trial.suggest_int("crop_size", 48, 120, step=16),
         'num_samples': 8
     }
 
@@ -93,10 +94,7 @@ def objective(
     device, 
     data_generator, 
     best_metric='avg_f1', 
-    random_seed=42, 
     val_interval=15):
-    
-    # utils.set_seed(random_seed)
 
     # Set a unique run name for each trial
     trial_num = f"trial_{trial.number}"
@@ -108,7 +106,7 @@ def objective(
         model, loss_function, metrics_function, samplings = build_model(trial, data_generator, device)
 
         # Define optimizer
-        optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
+        optimizer = torch.optim.Adam(model.parameters(), lr=5e-4)
 
         # Create trainer
         model_trainer = trainer.unet(model, device, loss_function, metrics_function, optimizer)
@@ -130,6 +128,7 @@ def objective(
             torch.save(model_trainer.model_weights, 'model_exploration/best_metric_model.pth')
             io.save_parameters_to_json(model, model_trainer, data_generator, 'model_exploration/training_parameters.json')        
 
+        cleanup(model_trainer, optimizer)
         return score      
 
 
@@ -137,12 +136,9 @@ def multi_gpu_objective(
         parent_run_id, 
         trial, epochs,
         data_generator, 
-        random_seed=42, 
         val_interval=5, 
         best_metric='avg_f1', 
         gpu_count=1):
-    
-    # utils.set_seed(random_seed)
 
     # Set up the MLflow run and GPU device for the trial
     device, client, target_run_id = setup_parallel_trial_run(trial, parent_run_id, gpu_count)
@@ -151,7 +147,7 @@ def multi_gpu_objective(
     model, loss_function, metrics_function, samplings = build_model(trial, data_generator, device)
 
     # Define optimizer
-    optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
+    optimizer = torch.optim.Adam(model.parameters(), lr=5e-4)
 
     # Create trainer
     model_trainer = trainer.unet(model, device, loss_function, metrics_function, optimizer)
@@ -175,11 +171,22 @@ def multi_gpu_objective(
         torch.save(model_trainer.model_weights, 'model_exploration/best_metric_model.pth')
         io.save_parameters_to_json(model, model_trainer, data_generator, 'model_exploration/training_parameters.json')      
 
+    cleanup(model_trainer, optimizer)
     return score    
 
     # except optuna.TrialPruned:
     #     print(f"[Trial {trial_num}] Pruned due to failure or invalid score.")
     #     raise  # Let Optuna handle pruned trials
+
+def cleanup(model_trainer, optimizer):
+    """
+    Clean up the model and optimizer.
+    """
+    model_trainer = None
+    optimizer = None
+    torch.cuda.empty_cache()
+    gc.collect()
+    mlflow.end_run()
 
 def get_best_score(trial):
     """

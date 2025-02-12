@@ -1,14 +1,18 @@
 from monai.networks.nets import UNet, AttentionUnet
 from typing import List, Tuple, Union
 from dotenv import load_dotenv
+import argparse, model_explore
 import torch, random, os
 from typing import List
 import numpy as np
-import argparse
 
 ##############################################################################################################################
 
 def mlflow_setup():
+
+    module_root = os.path.dirname(model_explore.__file__)
+    dotenv_path = module_root.replace('src/model_explore','') + '.env'
+    load_dotenv(dotenv_path=dotenv_path)
 
     # MLflow setup
     username = os.getenv('MLFLOW_TRACKING_USERNAME')
@@ -26,6 +30,8 @@ def mlflow_setup():
         print("Password loaded successfully")
         os.environ['MLFLOW_TRACKING_USERNAME'] = username
         os.environ['MLFLOW_TRACKING_PASSWORD'] = password    
+
+    return os.getenv('MLFLOW_TRACKING_URI')
 
 ##############################################################################################################################
 

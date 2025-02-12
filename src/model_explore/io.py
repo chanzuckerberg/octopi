@@ -95,8 +95,8 @@ def get_tomogram_array(run,
         availableVoxelSpacings = [tomo.voxel_size for tomo in run.voxel_spacings]
 
         # Report to the user which voxel spacings they can use 
-        message = (f"[Warning] No tomogram found for {run.name} with voxel size {voxel_size} and tomogram type {tomo_type}"
-                   f"Available spacings are: {', '.join(map(str, availableVoxelSpacings))}" ) 
+        message = (f"\n[Warning] No tomogram found for {run.name} with voxel size {voxel_size} and tomogram type {tomo_type}"
+                   f"\nAvailable spacings are: {', '.join(map(str, availableVoxelSpacings))}\n" ) 
         if raise_error:
             raise ValueError(message)
         else:
@@ -109,8 +109,8 @@ def get_tomogram_array(run,
         availableAlgorithms = [tomo.tomo_type for tomo in run.get_voxel_spacing(voxel_size).tomograms]
         
         # Report to the user which algorithms are available
-        message = (f"[Warning] No tomogram found for {run.name} with voxel size {voxel_size} and tomogram type {tomo_type}"
-                   f"Available algorithms are: {', '.join(availableAlgorithms)}")
+        message = (f"\n[Warning] No tomogram found for {run.name} with voxel size {voxel_size} and tomogram type {tomo_type}"
+                   f"\nAvailable algorithms are: {', '.join(availableAlgorithms)}\n")
         if raise_error:
             raise ValueError(message)
         else:

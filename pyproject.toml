@@ -9,20 +9,24 @@ readme = "README.md"
 [tool.poetry.dependencies]
 python = "^3.9"
 requests = "^2.25.1"
-torch = { version = "*", source = "https://download.pytorch.org/whl/cu118", allow-prereleases = true }
 matplotlib = "^3.4.3"
 tqdm = "4.66.5"
 copick = "*"
 nibabel = "5.2.1"
 mlflow = "2.17.0"
-pytorch-lightning = "2.4.0"
 optuna = "4.0.0"
-optuna-integration = { version = "*", extras = ["pytorch_lightning"] }
-python-dotenv = "*"
-monai-weekly = { version = "1.5.dev2448", allow-prereleases = true }
-copick-utils = {git = "https://github.com/copick/copick-utils.git", branch = "main"}
-multiprocess = "*"
+plotly = "*"
+kaleido = "*"
 ipywidgets = "*"
+multiprocess = "*"
+python-dotenv = "*"
+pytorch-lightning = "2.4.0"
+monai-weekly = { version = "1.5.dev2448", allow-prereleases = true }
+optuna-integration = { version = "*", extras = ["pytorch_lightning"] }
+copick-utils = {git = "https://github.com/copick/copick-utils.git", branch = "main"}
+torch = { version = "*", source = "https://download.pytorch.org/whl/cu118", allow-prereleases = true }
+seaborn = "*"
+pandas = "*"
 
 [tool.poetry.dev-dependencies]
 pytest = "^6.2.3"
