@@ -1,3 +1,4 @@
+
 from monai.transforms import AsDiscrete, Compose, Activationsd, AsDiscreted
 from monai.inferers import sliding_window_inference
 from monai.data import decollate_batch
@@ -11,7 +12,7 @@ import numpy as np
 import warnings
 warnings.filterwarnings("ignore", category=UserWarning)
 
-class unet:
+class ModelTrainer:
 
     def __init__(self, 
                  model, 

@@ -72,3 +72,4 @@ def add_slurm_parameters(parser, base_job_name, gpus = 1):
     parser.add_argument("--output", type=str, required=False, default=f'{base_job_name}.log', help="Output log file for SLURM job")
     parser.add_argument("--output-script", type=str, required=False, default=f'{base_job_name}.sh', help="Name of SLURM shell script")
     parser.add_argument("--job-name", type=str, required=False, default=f'{base_job_name}', help="Job name for SLURM job")        
+

@@ -35,6 +35,7 @@ def train_model(
     mlflow_experiment_name: str = "model-train"    
     ):
 
+    # Experimental, Still Needs to be Fixed
     if len(tomo_algorithms) == 1:
         tomo_algorithm = tomo_algorithms[0]
 
@@ -78,7 +79,10 @@ def train_model(
 
     # Create UNet Model and Load Weights
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    model = utils.create_model(model_type, Nclass, channels, strides, res_units, device)
+    
+    model_builder = common.get_model(Nclass, device, model_type)
+    if model_type == "UNet":            model = model_builder.build_model(channels, strides, res_units)
+    elif model_type == "AttentionUnet": model = model_builder.build_model(channels, strides)
     if model_weights: 
         model.load_state_dict(torch.load(model_weights, weights_only=True))
 
@@ -88,7 +92,7 @@ def train_model(
     # optimizer = torch.optim.RAdam(model.parameters(), lr, weight_decay=0.1)
 
     # Create UNet-Trainer
-    model_trainer = trainer.unet(model, device, loss_function, metrics_function, optimizer)
+    model_trainer = trainer.ModelTrainer(model, device, loss_function, metrics_function, optimizer)
 
     if mlflow:
         run_training_with_mlflow(model_trainer, model, data_generator, model_save_path, 
