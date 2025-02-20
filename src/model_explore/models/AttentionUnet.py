@@ -14,7 +14,9 @@ class myAttentionUnet:
     def build_model(
         self, 
         channels=[32,64,128,128], 
-        strides=[2,2,1]):
+        strides=[2,2,1],
+        dropout=0.0
+        ):
         """Creates the AttentionUnet model based on provided parameters."""
         
         self.model = AttentionUnet(
@@ -22,7 +24,8 @@ class myAttentionUnet:
             in_channels=1,
             out_channels=self.num_classes,
             channels=channels,
-            strides=strides
+            strides=strides,
+            dropout=dropout
         )
         
         return self.model.to(self.device)
@@ -40,8 +43,9 @@ class myAttentionUnet:
         hidden_channels = [downsampling_channels[-1]] * hidden_layers
         channels = downsampling_channels + hidden_channels
         strides = [2] * (num_layers - 1) + [1] * hidden_layers
+        dropout = trial.suggest_float("dropout", 0.0, 0.5)
         
-        model = self.build_model(channels, strides)
+        model = self.build_model(channels, strides, dropout)
         return model
 
     def get_model_parameters(self):

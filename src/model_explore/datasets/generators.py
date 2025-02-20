@@ -256,7 +256,7 @@ class TrainLoaderManager:
             self._check_max_label_value(val_files)
 
             # Create validation dataset
-            val_ds = CacheDataset(data=val_files, transform=augment.get_transforms(), cache_rate=1.0)
+            val_ds = CacheDataset(data=val_files, transform=augment.get_predict_transforms(), cache_rate=1.0)
 
             # Wrap the cached dataset to apply random transforms during iteration
             self.dynamic_validation_dataset = dataset.DynamicDataset(

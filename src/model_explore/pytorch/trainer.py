@@ -184,7 +184,9 @@ class ModelTrainer:
 
                 # Update tqdm description        
                 if verbose:
-                    (avg_f1, avg_recall, avg_precision) = (self.results['avg_f1'][-1][1], self.results['avg_recall'][-1][1], self.results['avg_precision'][-1][1])
+                    (avg_f1, avg_recall, avg_precision) = (self.results['avg_f1'][-1][1], 
+                                                           self.results['avg_recall'][-1][1], 
+                                                           self.results['avg_precision'][-1][1])
                     tqdm.write(f"Epoch {epoch + 1}/{max_epochs}, avg_f1_score: {avg_f1:.4f}, avg_recall: {avg_recall:.4f}, avg_precision: {avg_precision:.4f}")
 
                 # Reset metrics function
@@ -325,7 +327,8 @@ class ModelTrainer:
         self,
         metrics_dict: dict,
         curr_step: int,
-    ):
+        ):
+
         # If metrics_dict contains multiple elements (e.g., recall, precision, f1), process them
         if len(metrics_dict) > 1:
 
@@ -371,7 +374,7 @@ class ModelTrainer:
     def my_log_params(
         self,
         params_dict: dict, 
-    ):
+        ):
 
         # self.results["params"] = params_dict
 

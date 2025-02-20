@@ -162,7 +162,7 @@ class MultiConfigTrainLoaderManager(TrainLoaderManager):
             self.dynamic_train_dataset = dataset.DynamicDataset(
                 data=train_ds, 
                 transform=augment.get_random_transforms(my_crop_size, my_num_samples, self.Nclasses)
-            )           
+            ) 
 
             self.train_loader = DataLoader(
                 self.dynamic_train_dataset,

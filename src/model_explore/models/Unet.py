@@ -15,7 +15,9 @@ class myUNet:
         self, 
         channels=[32,64,128,128], 
         strides=[2,2,1], 
-        num_res_units=1):
+        num_res_units=1,
+        dropout=0.0
+        ):
         """Creates the Unet model based on provided parameters."""
         
         self.model = UNet(
@@ -24,7 +26,8 @@ class myUNet:
             out_channels=self.num_classes,
             channels=channels,
             strides=strides,
-            num_res_units=num_res_units
+            num_res_units=num_res_units,
+            dropout=dropout
         )
     
     def bayesian_search(self, trial):
@@ -35,6 +38,7 @@ class myUNet:
         hidden_layers = trial.suggest_int("hidden_layers", 1, 3)
         base_channel = trial.suggest_categorical("base_channel", [8, 16, 32])
         num_res_units = trial.suggest_int("num_res_units", 1, 3)
+        dropout = trial.suggest_float("dropout", 0.0, 0.5)
         
         # Create channel sizes and strides
         downsampling_channels = [base_channel * (2 ** i) for i in range(num_layers)]
@@ -42,7 +46,7 @@ class myUNet:
         channels = downsampling_channels + hidden_channels
         strides = [2] * (num_layers - 1) + [1] * hidden_layers
         
-        self.build_model(channels, strides, num_res_units)
+        self.build_model(channels, strides, num_res_units, dropout)
 
     def get_model_parameters(self):
         """Retrieve stored model parameters."""
