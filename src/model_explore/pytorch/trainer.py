@@ -31,6 +31,9 @@ class ModelTrainer:
         self.client = None
         self.trial_run_id = None  
 
+        # Default F-Beta Value
+        self.beta = 3
+
     def set_parallel_mlflow(self, 
                             client,
                             trial_run_id):
@@ -116,7 +119,6 @@ class ModelTrainer:
         use_mlflow: bool = False,
         verbose: bool = False
     ):
-
         # best lr scheduler options are cosine or reduce
 
         self.warmup_epochs = 5
@@ -314,6 +316,7 @@ class ModelTrainer:
             'avg_f1': [],
             'avg_recall': [],
             'avg_precision': [],
+            'avg_fbeta': [],
             'best_metric': -1,  # Initialize as None or a default value
             'best_metric_epoch': -1
         }
@@ -334,11 +337,11 @@ class ModelTrainer:
 
             # Extract individual metrics 
             # (assume metrics_dict contains recall, precision, f1, val_loss in sequence)
-            recall, precision, f1, val_loss = metrics_dict[0], metrics_dict[1], metrics_dict[2], metrics_dict[3]
+            recall, precision, f1s, val_loss = metrics_dict[0], metrics_dict[1], metrics_dict[2], metrics_dict[3]
 
             # Log per-class metrics
             metrics_to_log = {}
-            for i, (rec, prec, f1) in enumerate(zip(recall, precision, f1)):
+            for i, (rec, prec, f1) in enumerate(zip(recall, precision, f1s)):
                 metrics_to_log[f"recall_class{i+1}"] = rec.item()
                 metrics_to_log[f"precision_class{i+1}"] = prec.item()
                 metrics_to_log[f"f1_class{i+1}"] = f1.item()
@@ -346,7 +349,8 @@ class ModelTrainer:
             # Prepare average metrics
             metrics_to_log["avg_recall"] = recall.mean().cpu().item()
             metrics_to_log["avg_precision"] = precision.mean().cpu().item()
-            metrics_to_log["avg_f1"] = f1.mean().cpu().item()
+            metrics_to_log["avg_f1"] = f1s.mean().cpu().item()
+            metrics_to_log["avg_fbeta"] = self.fbeta(precision, recall).mean().cpu().item()
             metrics_to_log['val_loss'] = val_loss
 
             # Update metrics_dict for further logging
@@ -370,6 +374,9 @@ class ModelTrainer:
         elif self.use_mlflow:
             for metric_name, value in metrics_dict.items():
                 mlflow.log_metric(metric_name, value, step=curr_step)
+
+    def fbeta(self, precision, recall):
+        return (1 + self.beta**2) * (precision * recall) / ((self.beta**2 * precision) + recall)
 
     def my_log_params(
         self,

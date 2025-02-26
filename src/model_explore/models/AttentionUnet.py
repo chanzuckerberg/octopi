@@ -57,5 +57,5 @@ class myAttentionUnet:
             'num_classes': self.num_classes,
             'channels': self.model.channels,
             'strides': self.model.strides,
-            'num_res_units': self.model.num_res_units
+            'dropout': self.model.dropout
         }

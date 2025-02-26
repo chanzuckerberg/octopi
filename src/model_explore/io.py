@@ -334,24 +334,24 @@ def prepare_for_inline_json(data):
                 data['model'][key] = f"[{', '.join(map(repr, data['model'][key]))}]"
     return data
 
-def get_model_parameters(model):
+# def get_model_parameters(model):
 
-    model_name = model.__class__.__name__
-    model_parameters = {
-        'model_name': model.__class__.__name__, 
-        'Nclasses': model.out_channels
-    }
+#     model_name = model.__class__.__name__
+#     model_parameters = {
+#         'model_name': model.__class__.__name__, 
+#         'Nclasses': model.out_channels
+#     }
 
-    if model_name == 'AttentionUnet' or model_name == 'UNet':
-        model_parameters['channels'] = model.channels
-        model_parameters['strides'] = model.strides
+#     if model_name == 'AttentionUnet' or model_name == 'UNet':
+#         model_parameters['channels'] = model.channels
+#         model_parameters['strides'] = model.strides
 
-    if model_name == 'UNet':
-        model_parameters['res_units'] = model.num_res_units
+#     if model_name == 'UNet':
+#         model_parameters['res_units'] = model.num_res_units
 
-    # Parameters for UNet++
+#     # Parameters for UNet++
 
-    return model_parameters
+#     return model_parameters
 
 def get_optimizer_parameters(trainer):
 
@@ -383,7 +383,7 @@ def get_optimizer_parameters(trainer):
 def save_parameters_to_json(model, trainer, dataloader, filename: str):
 
     parameters = {
-        'model': get_model_parameters(model),
+        'model': model.get_model_parameters(),
         'optimizer': get_optimizer_parameters(trainer),
         'dataloader': dataloader.get_dataloader_parameters()
     }

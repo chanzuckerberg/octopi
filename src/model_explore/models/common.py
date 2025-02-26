@@ -46,12 +46,12 @@ def get_model(num_classes, device, model_type):
         model = Unet.myUNet(num_classes, device)
     elif model_type == "AttentionUnet":
         model = AttentionUnet.myAttentionUnet(num_classes, device)
+    else:
+        raise ValueError(f"Model type {model_type} not supported!!")
 
     return model
 
 
 #### TODO : Models to try Adding? 
-# 1. SWIN UNETR 
-# 2. SegResNet / SegResNetDS 
-# 3. MedNext 
-# 4. Swin-Conv-UNet
+# 1. Swin UNETR 
+# 2. Swin-Conv-UNet

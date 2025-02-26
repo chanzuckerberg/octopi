@@ -1,5 +1,6 @@
 from model_explore.datasets import generators, multi_config_generator
 from monai.losses import DiceLoss, FocalLoss, TverskyLoss
+from model_explore.models import common as builder
 from model_explore.entry_points import common 
 from model_explore.pytorch import trainer 
 from model_explore import io, utils
@@ -12,7 +13,7 @@ def train_model(
     target_name: str,
     target_user_id: str = None,
     target_session_id: str = None,
-    tomo_algorithms: List[str] = ['wbp'],
+    tomo_algorithm: str = 'wbp',
     voxel_size: float = 10,
     trainRunIDs: List[str] = None,
     validateRunIDs: List[str] = None,    
@@ -34,10 +35,6 @@ def train_model(
     mlflow_tracking_uri: str = "http://mlflow.mlflow.svc.cluster.local:5000", 
     mlflow_experiment_name: str = "model-train"    
     ):
-
-    # Experimental, Still Needs to be Fixed
-    if len(tomo_algorithms) == 1:
-        tomo_algorithm = tomo_algorithms[0]
 
     # Initialize the data generator to manage training and validation datasets
     print(f'Training with {copick_config_path}\n')
@@ -80,16 +77,18 @@ def train_model(
     # Create UNet Model and Load Weights
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     
-    model_builder = common.get_model(Nclass, device, model_type)
-    if model_type == "UNet":            model = model_builder.build_model(channels, strides, res_units)
-    elif model_type == "AttentionUnet": model = model_builder.build_model(channels, strides)
+    channels = [int(channel) for channel in channels.split(',')]
+    strides = [int(stride) for stride in strides.split(',')]
+    model_builder = builder.get_model(Nclass, device, model_type)
+    if model_type == "Unet":            model_builder.build_model(channels, strides, res_units)
+    elif model_type == "AttentionUnet": model_builder.build_model(channels, strides)
+    model = model_builder.model.to(device)
     if model_weights: 
-        model.load_state_dict(torch.load(model_weights, weights_only=True))
+        model.load_state_dict(torch.load(model_weights, weights_only=True))     
 
     # Optimizer
-    # optimizer = torch.optim.Adam(model.parameters(), lr, weight_decay=0.1)
-    optimizer = torch.optim.AdamW(model.parameters(), lr, weight_decay=0.1)
-    # optimizer = torch.optim.RAdam(model.parameters(), lr, weight_decay=0.1)
+    # optimizer = torch.optim.Adam(model.parameters(), lr)
+    optimizer = torch.optim.AdamW(model.parameters(), lr, weight_decay=1e-3)
 
     # Create UNet-Trainer
     model_trainer = trainer.ModelTrainer(model, device, loss_function, metrics_function, optimizer)
@@ -196,7 +195,7 @@ def cli():
         target_name=args.target_name,
         target_user_id=args.target_user_id,
         target_session_id=args.target_session_id,        
-        tomo_algorithms=args.tomo_algorithms,
+        tomo_algorithm=args.tomo_algorithm,
         voxel_size=args.voxel_size,
         channels=args.channels,
         strides=args.strides,

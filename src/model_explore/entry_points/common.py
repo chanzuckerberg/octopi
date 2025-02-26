@@ -10,7 +10,7 @@ def add_model_parameters(parser, model_explore = False):
     
     # Add model parameters if not exploring model architecture
     if not model_explore:
-        parser.add_argument("--model-type", type=str, required=False, default='UNet', help="Type of model: ['UNet', 'AttentionUNet']")
+        parser.add_argument("--model-type", type=str, required=False, default='Unet', help="Type of model: ['UNet', 'AttentionUNet']")
         parser.add_argument("--channels", type=str, required=False, default='32,64,128,128', help="List of channel sizes")
         parser.add_argument("--strides", type=str, required=False, default='2,2,1', help="List of stride sizes")
         parser.add_argument("--res-units", type=int, required=False, default=2, help="Number of residual units in the UNet")

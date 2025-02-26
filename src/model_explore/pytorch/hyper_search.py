@@ -48,7 +48,7 @@ class BayesianModelSearch:
 
         # Sample crop size and num_samples
         self.sampling = {
-            'crop_size': trial.suggest_int("crop_size", 48, 120, step=16),
+            'crop_size': trial.suggest_int("crop_size", 48, 160, step=16),
             'num_samples': 8
         }
 
@@ -109,7 +109,7 @@ class BayesianModelSearch:
 
             # Log parameters and metrics
             params = {
-                'model': io.get_model_parameters(self.model),
+                'model': self.model_builder.get_model_parameters(),
                 'optimizer': io.get_optimizer_parameters(model_trainer)
             }
             model_trainer.my_log_params(io.flatten_params(params))
@@ -173,7 +173,7 @@ class BayesianModelSearch:
 
         # Log training parameters
         params = {
-            'model': io.get_model_parameters(self.model),
+            'model': self.model_builder.get_model_parameters(),
             'optimizer': io.get_optimizer_parameters(model_trainer)
         }    
         model_trainer.my_log_params(io.flatten_params(params))
@@ -191,7 +191,7 @@ class BayesianModelSearch:
         best_score_so_far = self.get_best_score(trial)
         if score > best_score_so_far:
             torch.save(model_trainer.model_weights, f'{self.results_dir}/best_metric_model.pth')
-            io.save_parameters_to_json(self.model, model_trainer, self.data_generator, 
+            io.save_parameters_to_json(self.model_builder, model_trainer, self.data_generator, 
                                     f'{self.results_dir}/training_parameters.json')
 
     def get_best_score(self, trial):
