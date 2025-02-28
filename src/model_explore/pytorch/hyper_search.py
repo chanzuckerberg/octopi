@@ -97,6 +97,9 @@ class BayesianModelSearch:
             # Build model
             self.my_build_model(trial)
 
+            # Set the input dimension of the model
+            self.model.dim_in = self.sampling['crop_size']
+
             # Create trainer
             self._define_optimizer()
             model_trainer = trainer.ModelTrainer(self.model, self.device, self.loss_function, self.metrics_function, self.optimizer)
@@ -190,9 +193,9 @@ class BayesianModelSearch:
         """Saves the best model if it improves upon previous scores."""
         best_score_so_far = self.get_best_score(trial)
         if score > best_score_so_far:
-            torch.save(model_trainer.model_weights, f'{self.results_dir}/best_metric_model.pth')
-            io.save_parameters_to_json(self.model_builder, model_trainer, self.data_generator, 
-                                    f'{self.results_dir}/training_parameters.json')
+            torch.save(model_trainer.model_weights, f'{self.results_dir}/best_model.pth')
+            io.save_parameters_to_yaml(self.model_builder, model_trainer, self.data_generator, 
+                                    f'{self.results_dir}/best_model_config.yaml')
 
     def get_best_score(self, trial):
         """Retrieve the best score from the trial."""

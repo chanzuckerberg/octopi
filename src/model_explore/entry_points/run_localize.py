@@ -1,7 +1,7 @@
 from model_explore.entry_points import common
 from model_explore.extract import localize
-import copick, argparse, json, pprint
 from model_explore import utils
+import copick, argparse, pprint
 from typing import List, Tuple
 import multiprocess as mp
 from tqdm import tqdm
@@ -33,7 +33,8 @@ def pick_particles(
             raise ValueError(f"Invalid object format: {obj}. Expected a tuple with (name, label, radius).")
 
     # Filter elements
-    objects = [obj for obj in objects if obj[0] in pick_objects]
+    if pick_objects is not None:
+        objects = [obj for obj in objects if obj[0] in pick_objects]
 
     print(f'Running Localization on the Following Objects: ')
     print(', '.join([f'{obj[0]} (Label: {obj[1]})' for obj in objects]) + '\n')
@@ -45,7 +46,7 @@ def pick_particles(
 
     # Determine the number of processes to use
     if n_procs is None:
-        n_procs = min(mp.cpu_count(), n_run_ids)
+        n_procs = min(int(mp.cpu_count()//4), n_run_ids)
     print(f"Using {n_procs} processes to parallelize across {n_run_ids} run IDs.")
 
     # Initialize tqdm progress bar
@@ -117,7 +118,7 @@ def localize_parser(parser_description, add_slurm: bool = False):
 
     if add_slurm:
         slurm_group = parser.add_argument_group("SLURM Arguments")
-        common.add_slurm_parameters(slurm_group, 'localize')
+        common.add_slurm_parameters(slurm_group, 'localize', gpus = 0)
 
     args = parser.parse_args()
     return args
@@ -129,8 +130,8 @@ def cli():
     args = localize_parser(parser_description)
 
     # Save JSON with Parameters
-    output_json = f'localize_{args.pick_user_id}_{args.pick_session_id}.json'    
-    save_parameters_json(args, output_json)    
+    output_yaml = f'localize_{args.pick_user_id}_{args.pick_session_id}.yaml'    
+    save_parameters(args, output_yaml)    
 
     # Set multiprocessing start method
     mp.set_start_method("spawn")
@@ -150,8 +151,8 @@ def cli():
         n_procs=args.n_procs,
     )
 
-def save_parameters_json(args: argparse.Namespace, 
-                         output_path: str):
+def save_parameters(args: argparse.Namespace, 
+                    output_path: str):
 
     # Organize parameters into categories
     params = {
@@ -179,9 +180,8 @@ def save_parameters_json(args: argparse.Namespace,
     print(f"\nParameters for Localization:")
     pprint.pprint(params); print()
 
-    # Save to JSON file
-    with open(output_path, 'w') as f:
-        json.dump(params, f, indent=4)                         
+    # Save to YAML file
+    utils.save_parameters_yaml(params, output_path)
 
 if __name__ == "__main__":
     cli()

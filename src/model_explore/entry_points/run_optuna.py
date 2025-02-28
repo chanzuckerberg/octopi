@@ -1,12 +1,11 @@
 from model_explore.datasets import generators, multi_config_generator
-import torch, mlflow, optuna, argparse, json, os, pprint
+import torch, mlflow, optuna, argparse, os, pprint
 from model_explore.pytorch import hyper_search
 from model_explore.pytorch.hyper_search import BayesianModelSearch
 from model_explore.entry_points import common
 from typing import List, Optional
 from model_explore import utils
 import pandas as pd
-
 
 class ModelSearchSubmit:
     def __init__(
@@ -77,7 +76,7 @@ class ModelSearchSubmit:
         # Initialize dataset generator
         self._initialize_data_generator()
 
-        # 
+        # Run the model search
         self.run_model_search()
 
     def _initialize_data_generator(self):
@@ -288,18 +287,24 @@ def optuna_parser(parser_description, add_slurm: bool = False):
     # Input Arguments
     input_group = parser.add_argument_group("Input Arguments")
     common.add_config(input_group, single_config=False)
-    input_group.add_argument("--tomo-algorithm", default='wbp', help="Tomogram algorithm used for training")
-    input_group.add_argument("--mlflow-experiment-name", type=str, default="model-search", required=False, help="Name of the MLflow experiment (default: 'model-search').")
-    input_group.add_argument("--random-seed", type=int, default=42, required=False, help="Random seed for reproducibility (default: 42).")
-    input_group.add_argument("--best-metric", type=str, default='avg_f1', required=False, help="Metric to Monitor for Optimization")
-    input_group.add_argument("--trainRunIDs", type=utils.parse_list, default=None, required=False, help="List of training run IDs, e.g., run1,run2 or [run1,run2].")
-    input_group.add_argument("--validateRunIDs", type=utils.parse_list, default=None, required=False, help="List of validation run IDs, e.g., run3,run4 or [run3,run4].")    
+    input_group.add_argument("--tomo-algorithm", default='wbp', 
+                             help="Tomogram algorithm used for training")
+    input_group.add_argument("--mlflow-experiment-name", type=str, default="model-search", required=False, 
+                             help="Name of the MLflow experiment (default: 'model-search').")
+    input_group.add_argument("--random-seed", type=int, default=42, required=False, 
+                             help="Random seed for reproducibility (default: 42).")
+    input_group.add_argument("--best-metric", type=str, default='avg_f1', required=False, 
+                             help="Metric to Monitor for Optimization")
+    input_group.add_argument("--trainRunIDs", type=utils.parse_list, default=None, required=False, 
+                             help="List of training run IDs, e.g., run1,run2 or [run1,run2].")
+    input_group.add_argument("--validateRunIDs", type=utils.parse_list, default=None, required=False, 
+                             help="List of validation run IDs, e.g., run3,run4 or [run3,run4].")    
 
     model_group = parser.add_argument_group("Model Arguments")
     model_group.add_argument("--model-type", type=str, default='Unet', required=False, 
                              choices=['Unet', 'AttentionUnet'],
                              help="Model type to use for training")
-    common.add_model_parameters(model_group, model_explore = True)
+    model_group.add_argument("--Nclass", type=int, default=3, required=False, help="Number of prediction classes in the model")
 
     train_group = parser.add_argument_group("Training Arguments")
     common.add_train_parameters(train_group, model_explore = True)
@@ -328,14 +333,14 @@ def cli():
     os.makedirs(f'explore_results_{args.model_type}', exist_ok=True)
 
     # Save JSON with Parameters
-    save_parameters_json(args, f'explore_results_{args.model_type}/model_explore.json')
+    save_parameters_json(args, f'explore_results_{args.model_type}/model_explore.yaml')
 
     # Call the function with parsed arguments
     search = ModelSearchSubmit(
         copick_config=copick_configs,
-        target_name=args.target_name,
-        target_user_id=args.target_user_id,
-        target_session_id=args.target_session_id,
+        target_name=args.target_info[0],
+        target_user_id=args.target_info[1],
+        target_session_id=args.target_info[2],
         tomo_algorithm=args.tomo_algorithm,
         voxel_size=args.voxel_size,
         Nclass=args.Nclass,
@@ -351,7 +356,8 @@ def cli():
         val_interval=args.val_interval
     )
 
-def save_parameters_json(args, output_path: str):
+def save_parameters(args: argparse.Namespace, 
+                    output_path: str):
     """
     Save the Optuna search parameters to a JSON file.
     Args:
@@ -362,9 +368,7 @@ def save_parameters_json(args, output_path: str):
     params = {
         "input": {
             "copick_config": args.config,
-            "target_name": args.target_name,
-            "target_user_id": args.target_user_id,
-            "target_session_id": args.target_session_id,
+            "target_info": args.target_info,
             "tomo_algorithm": args.tomo_algorithm,
             "voxel_size": args.voxel_size,
             "Nclass": args.Nclass,            
@@ -388,10 +392,8 @@ def save_parameters_json(args, output_path: str):
     print(f"\nParameters for Model Architecture Search:")
     pprint.pprint(params); print()
 
-    # Save to JSON file
-    with open(output_path, 'w') as f:
-        json.dump(params, f, indent=4)   
-
+    # Save to YAML file
+    utils.save_parameters_yaml(params, output_path)
 
 if __name__ == "__main__":
     cli()

@@ -2,19 +2,13 @@ import torch.nn as nn
 import torch
 
 class myModelTemplate:
-    def __init__(self, num_classes, device):
+    def __init__(self):
         """
         Initialize the model template.
-
-        Args:
-            num_classes (int): Number of output classes.
-            device (torch.device): Device to run the model on.
         """
-        self.device = device
-        self.num_classes = num_classes
-        
-        # Placeholder for the model
+        # Placeholder for the model and config
         self.model = None
+        self.config = None
 
     def build_model(self):
         """

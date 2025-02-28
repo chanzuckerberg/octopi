@@ -3,29 +3,22 @@ import torch.nn as nn
 import torch
 
 class myAttentionUnet:
-    def __init__(self, num_classes, device):
+    def __init__(self):
 
-        self.device = device
-        self.num_classes = num_classes
-        
-        # Placeholder for the model
+        # Placeholder for the model and config
         self.model = None
+        self.config = None
 
-    def build_model(
-        self, 
-        channels=[32,64,128,128], 
-        strides=[2,2,1],
-        dropout=0.0
-        ):
+    def build_model( self, config: dict ):
         """Creates the AttentionUnet model based on provided parameters."""
         
         self.model = AttentionUnet(
             spatial_dims=3,
             in_channels=1,
-            out_channels=self.num_classes,
-            channels=channels,
-            strides=strides,
-            dropout=dropout
+            out_channels=config['num_classes'],
+            channels=config['channels'],
+            strides=config['strides'],
+            dropout=config['dropout']
         )
         
         return self.model.to(self.device)
@@ -45,17 +38,19 @@ class myAttentionUnet:
         strides = [2] * (num_layers - 1) + [1] * hidden_layers
         dropout = trial.suggest_float("dropout", 0.0, 0.5)
         
-        model = self.build_model(channels, strides, dropout)
-        return model
+        config = {
+            'architecture': 'AttentionUnet',
+            'num_classes': self.num_classes,
+            'channels': channels,
+            'strides': strides,
+            'dropout': dropout
+        }
+
+        return self.build_model(config)
 
     def get_model_parameters(self):
         """Retrieve stored model parameters."""
         if self.model is None:
             raise ValueError("Model has not been initialized yet. Call build_model() or bayesian_search() first.")
         
-        return {
-            'num_classes': self.num_classes,
-            'channels': self.model.channels,
-            'strides': self.model.strides,
-            'dropout': self.model.dropout
-        }
+        return self.config

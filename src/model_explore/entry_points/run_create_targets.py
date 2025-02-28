@@ -3,7 +3,7 @@ from model_explore import utils, io
 import copick_utils.writers.write as write
 from collections import defaultdict
 from typing import List, Tuple, Union
-import argparse, copick, json, os
+import argparse, copick, yaml, os
 from tqdm import tqdm
 import numpy as np
 
@@ -145,8 +145,8 @@ def cli():
     args = parse_args()
 
     # Save JSON with Parameters
-    output_json = f'create-targets_{args.target_user_id}_{args.target_session_id}_{args.target_segmentation_name}.json'
-    save_parameters_json(args, output_json)      
+    output_yaml = f'create-targets_{args.target_user_id}_{args.target_session_id}_{args.target_segmentation_name}.yaml'
+    save_parameters(args, output_yaml)      
 
     if args.target:
         # If at least one --target is provided, call create_sub_train_targets
@@ -178,15 +178,16 @@ def cli():
             run_ids=args.run_ids,
         )
 
-def save_parameters_json(args, output_path: str):
+def save_parameters(args, output_path: str):
     """
-    Save parameters to a JSON file with subgroups for input, output, and parameters.
+    Save parameters to a YAML file with subgroups for input, output, and parameters.
     Append to the file if it already exists.
 
     Args:
         args: Parsed arguments from argparse.
-        output_path: Path to save the JSON file.
+        output_path: Path to save the YAML file.
     """
+    
     # Organize parameters into subgroups
     new_entry = {
         "input": {
@@ -208,16 +209,18 @@ def save_parameters_json(args, output_path: str):
         }
     }
 
-    # Check if the JSON file already exists
+    # Check if the YAML file already exists
     if os.path.exists(output_path):
         # Load the existing content
         with open(output_path, 'r') as f:
             try:
-                existing_data = json.load(f)
+                existing_data = yaml.safe_load(f)
                 # Ensure it's a list to append to
-                if not isinstance(existing_data, list):
-                    raise ValueError("Existing JSON data is not a list. Cannot append.")
-            except json.JSONDecodeError:
+                if existing_data is None:
+                    existing_data = []
+                elif not isinstance(existing_data, list):
+                    raise ValueError("Existing YAML data is not a list. Cannot append.")
+            except yaml.YAMLError:
                 existing_data = []  # Treat as empty if the file is malformed
     else:
         existing_data = []  # No file, start with an empty list
@@ -225,9 +228,8 @@ def save_parameters_json(args, output_path: str):
     # Append the new entry
     existing_data.append(new_entry)
 
-    # Save back to the JSON file
-    with open(output_path, 'w') as f:
-        json.dump(existing_data, f, indent=4)
+    # Save back to the YAML file
+    utils.save_parameters_yaml(existing_data, output_path)
 
 if __name__ == "__main__":
     main()

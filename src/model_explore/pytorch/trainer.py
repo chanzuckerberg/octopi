@@ -1,5 +1,6 @@
 
 from monai.transforms import AsDiscrete, Compose, Activationsd, AsDiscreted
+from model_explore import visualization_tools as viz
 from monai.inferers import sliding_window_inference
 from monai.data import decollate_batch
 from typing import List, Optional
@@ -147,6 +148,7 @@ class ModelTrainer:
 
         # Produce Dataloaders for the First Training Iteration
         self.train_loader, self.val_loader = data_load_gen.create_train_dataloaders(crop_size=crop_size, num_samples=my_num_samples)
+        self.model.config['dim_in'] = self.crop_size
 
         # Save the original learning rate
         original_lr = self.optimizer.param_groups[0]['lr']
@@ -200,11 +202,12 @@ class ModelTrainer:
                     self.results["best_metric_epoch"] = epoch + 1
                     self.model_weights = self.model.state_dict()
                     if model_save_path is not None: 
-                        torch.save(self.model.state_dict(), os.path.join(model_save_path, "best_metric_model.pth"))    
+                        torch.save(self.model.state_dict(), os.path.join(model_save_path, "best_model.pth"))    
 
                 # Save plot if Local Training Call
                 if not self.use_mlflow:
-                    self.plot_results(save_plot=os.path.join(model_save_path, "net_train_history.png"))
+                    viz.plot_training_results(self.results, save_plot=os.path.join(model_save_path, "net_train_history.png"))
+                    # self.plot_results(save_plot=os.path.join(model_save_path, "net_train_history.png"))
 
             # Run the learning rate scheduler
             early_stop = self.run_scheduler(data_load_gen, original_lr, epoch, val_interval, lr_scheduler_type)
@@ -395,72 +398,72 @@ class ModelTrainer:
         else:
             mlflow.log_params(params_dict)                 
     
-    def plot_results(self, 
-                     class_names: Optional[List[str]] = None,
-                     save_plot: str = None):
+    # def plot_results(self, 
+    #                  class_names: Optional[List[str]] = None,
+    #                  save_plot: str = None):
 
-        # Create a 2x2 subplot layout
-        fig, axs = plt.subplots(2, 2, figsize=(12, 10))
-        fig.suptitle("Metrics Over Epochs", fontsize=16)
+    #     # Create a 2x2 subplot layout
+    #     fig, axs = plt.subplots(2, 2, figsize=(12, 10))
+    #     fig.suptitle("Metrics Over Epochs", fontsize=16)
 
-        # Unpack the data for loss (logged every epoch)
-        epochs_loss = [epoch for epoch, _ in self.results['loss']]
-        loss = [value for _, value in self.results['loss']]
-        val_epochs_loss = [epoch for epoch, _ in self.results['val_loss']]
-        val_loss = [value for _,value in self.results['val_loss']]
+    #     # Unpack the data for loss (logged every epoch)
+    #     epochs_loss = [epoch for epoch, _ in self.results['loss']]
+    #     loss = [value for _, value in self.results['loss']]
+    #     val_epochs_loss = [epoch for epoch, _ in self.results['val_loss']]
+    #     val_loss = [value for _,value in self.results['val_loss']]
 
-        # Plot Training Loss in the top-left
-        axs[0, 0].plot(epochs_loss, loss, label="Training Loss")
-        axs[0, 0].plot(val_epochs_loss, val_loss, label='Validation Loss')
-        axs[0, 0].set_xlabel("Epochs")
-        axs[0, 0].set_ylabel("Loss")
-        axs[0, 0].set_title("Training Loss")
-        axs[0, 0].legend()
-        axs[0, 0].tick_params(axis='both', direction='in', top=True, right=True, length=6, width=1)
+    #     # Plot Training Loss in the top-left
+    #     axs[0, 0].plot(epochs_loss, loss, label="Training Loss")
+    #     axs[0, 0].plot(val_epochs_loss, val_loss, label='Validation Loss')
+    #     axs[0, 0].set_xlabel("Epochs")
+    #     axs[0, 0].set_ylabel("Loss")
+    #     axs[0, 0].set_title("Training Loss")
+    #     axs[0, 0].legend()
+    #     axs[0, 0].tick_params(axis='both', direction='in', top=True, right=True, length=6, width=1)
 
-        # For metrics that are logged every `val_interval` epochs
-        epochs_metrics = [epoch for epoch, _ in self.results['avg_recall']]
+    #     # For metrics that are logged every `val_interval` epochs
+    #     epochs_metrics = [epoch for epoch, _ in self.results['avg_recall']]
         
-        # Determine the number of classes and names
-        num_classes = len([key for key in self.results.keys() if key.startswith('recall_class')])
+    #     # Determine the number of classes and names
+    #     num_classes = len([key for key in self.results.keys() if key.startswith('recall_class')])
 
-        if class_names is None or len(class_names) != num_classes - 1:
-            class_names = [f"Class {i+1}" for i in range(num_classes)]
+    #     if class_names is None or len(class_names) != num_classes - 1:
+    #         class_names = [f"Class {i+1}" for i in range(num_classes)]
 
-        # Plot Recall in the top-right
-        for class_idx in range(num_classes):
-            recall_class = [value for _, value in self.results[f'recall_class{class_idx+1}']]
-            axs[0, 1].plot(epochs_metrics, recall_class, label=f"{class_names[class_idx]}")
-        axs[0, 1].set_xlabel("Epochs")
-        axs[0, 1].set_ylabel("Recall")
-        axs[0, 1].set_title("Recall per Class")
-        # axs[0, 1].legend()
-        axs[0, 1].tick_params(axis='both', direction='in', top=True, right=True, length=6, width=1)
+    #     # Plot Recall in the top-right
+    #     for class_idx in range(num_classes):
+    #         recall_class = [value for _, value in self.results[f'recall_class{class_idx+1}']]
+    #         axs[0, 1].plot(epochs_metrics, recall_class, label=f"{class_names[class_idx]}")
+    #     axs[0, 1].set_xlabel("Epochs")
+    #     axs[0, 1].set_ylabel("Recall")
+    #     axs[0, 1].set_title("Recall per Class")
+    #     # axs[0, 1].legend()
+    #     axs[0, 1].tick_params(axis='both', direction='in', top=True, right=True, length=6, width=1)
 
-        # Plot Precision in the bottom-left
-        for class_idx in range(num_classes):
-            precision_class = [value for _, value in self.results[f'precision_class{class_idx+1}']]
-            axs[1, 0].plot(epochs_metrics, precision_class, label=f"{class_names[class_idx]}")
-        axs[1, 0].set_xlabel("Epochs")
-        axs[1, 0].set_ylabel("Precision")
-        axs[1, 0].set_title("Precision per Class")
-        axs[1, 0].legend()
-        axs[1, 0].tick_params(axis='both', direction='in', top=True, right=True, length=6, width=1)
+    #     # Plot Precision in the bottom-left
+    #     for class_idx in range(num_classes):
+    #         precision_class = [value for _, value in self.results[f'precision_class{class_idx+1}']]
+    #         axs[1, 0].plot(epochs_metrics, precision_class, label=f"{class_names[class_idx]}")
+    #     axs[1, 0].set_xlabel("Epochs")
+    #     axs[1, 0].set_ylabel("Precision")
+    #     axs[1, 0].set_title("Precision per Class")
+    #     axs[1, 0].legend()
+    #     axs[1, 0].tick_params(axis='both', direction='in', top=True, right=True, length=6, width=1)
 
-        # Plot F1 Score in the bottom-right
-        for class_idx in range(num_classes):
-            f1_class = [value for _, value in self.results[f'f1_class{class_idx+1}']]
-            axs[1, 1].plot(epochs_metrics, f1_class, label=f"{class_names[class_idx]}")
-        axs[1, 1].set_xlabel("Epochs")
-        axs[1, 1].set_ylabel("F1 Score")
-        axs[1, 1].set_title("F1 Score per Class")
-        # axs[1, 1].legend()
-        axs[1, 1].tick_params(axis='both', direction='in', top=True, right=True, length=6, width=1)
+    #     # Plot F1 Score in the bottom-right
+    #     for class_idx in range(num_classes):
+    #         f1_class = [value for _, value in self.results[f'f1_class{class_idx+1}']]
+    #         axs[1, 1].plot(epochs_metrics, f1_class, label=f"{class_names[class_idx]}")
+    #     axs[1, 1].set_xlabel("Epochs")
+    #     axs[1, 1].set_ylabel("F1 Score")
+    #     axs[1, 1].set_title("F1 Score per Class")
+    #     # axs[1, 1].legend()
+    #     axs[1, 1].tick_params(axis='both', direction='in', top=True, right=True, length=6, width=1)
 
-        # Adjust layout and show plot
-        plt.tight_layout(rect=[0, 0, 1, 0.96])  # Leave space for the main title
+    #     # Adjust layout and show plot
+    #     plt.tight_layout(rect=[0, 0, 1, 0.96])  # Leave space for the main title
 
-        if save_plot: 
-            fig.savefig(save_plot)
-        else:
-            plt.show()
+    #     if save_plot: 
+    #         fig.savefig(save_plot)
+    #     else:
+    #         plt.show()

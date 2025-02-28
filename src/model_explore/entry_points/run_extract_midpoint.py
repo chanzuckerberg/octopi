@@ -1,6 +1,6 @@
 from model_explore.extract import midpoint_extract
-import argparse, json, pprint, copick, json
 from typing import List, Tuple, Optional
+import argparse, pprint, copick
 from model_explore import utils
 import multiprocess as mp
 from tqdm import tqdm
@@ -97,8 +97,8 @@ def cli():
     args.save_user_id = args.picks_info[1]       
 
     # Save JSON with Parameters
-    output_json = f'midpoint-extract_{args.picks_info[1]}_{args.save_session_id}.json'
-    save_parameters_json(args, output_json)
+    output_yaml = f'midpoint-extract_{args.picks_info[1]}_{args.save_session_id}.yaml'
+    save_parameters(args, output_yaml)
 
 
     extract_midpoint(
@@ -114,8 +114,8 @@ def cli():
         n_procs=args.n_procs,
     )
 
-def save_parameters_json(args: argparse.Namespace, 
-                         output_path: str):
+def save_parameters(args: argparse.Namespace, 
+                    output_path: str):
 
     params_dict = {
         "input": {
@@ -136,8 +136,8 @@ def save_parameters_json(args: argparse.Namespace,
     print(f"\nParameters for Extraction of Membrane-Bound Picks:")
     pprint.pprint(params_dict); print()
 
-    with open(output_path, 'w') as f:
-        json.dump(params_dict, f, indent=4)    
+    # Save parameters to YAML file
+    utils.save_parameters_yaml(params_dict, output_path) 
 
 if __name__ == "__main__":
     cli()

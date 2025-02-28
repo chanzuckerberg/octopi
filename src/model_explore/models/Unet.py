@@ -3,31 +3,22 @@ import torch.nn as nn
 import torch
 
 class myUNet:
-    def __init__(self, num_classes, device):
-
-        self.device = device
-        self.num_classes = num_classes
-        
-        # Placeholder for the model
+    def __init__(self):
+        # Placeholder for the model and config
         self.model = None
+        self.config = None
 
-    def build_model(
-        self, 
-        channels=[32,64,128,128], 
-        strides=[2,2,1], 
-        num_res_units=1,
-        dropout=0.0
-        ):
+    def build_model( self, config: dict ):
         """Creates the Unet model based on provided parameters."""
         
         self.model = UNet(
             spatial_dims=3,
             in_channels=1,
-            out_channels=self.num_classes,
-            channels=channels,
-            strides=strides,
-            num_res_units=num_res_units,
-            dropout=dropout
+            out_channels=config['num_classes'],
+            channels=config['channels'],
+            strides=config['strides'],
+            num_res_units=config['num_res_units'],
+            dropout=config['dropout']
         )
     
     def bayesian_search(self, trial):
@@ -45,18 +36,22 @@ class myUNet:
         hidden_channels = [downsampling_channels[-1]] * hidden_layers
         channels = downsampling_channels + hidden_channels
         strides = [2] * (num_layers - 1) + [1] * hidden_layers
+
+        # Create config dictionary
+        self.config = {
+            'architecture': 'UNet',
+            'num_classes': self.num_classes,
+            'channels': channels,
+            'strides': strides,
+            'num_res_units': num_res_units,
+            'dropout': dropout
+        }
         
-        self.build_model(channels, strides, num_res_units, dropout)
+        return self.build_model(self.config)
 
     def get_model_parameters(self):
         """Retrieve stored model parameters."""
         if self.model is None:
             raise ValueError("Model has not been initialized yet. Call build_model() or bayesian_search() first.")
         
-        return {
-            'num_classes': self.num_classes,
-            'channels': self.model.channels,
-            'strides': self.model.strides,
-            'num_res_units': self.model.num_res_units,
-            'dropout': self.model.dropout
-        }
+        return self.config

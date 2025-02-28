@@ -1,8 +1,24 @@
 from monai.losses import FocalLoss, TverskyLoss
 from model_explore import losses
 from model_explore.models import (
-    Unet, AttentionUnet
+    Unet, AttentionUnet, MedNeXt, SegResNet
 )
+
+def get_model(architecture):
+
+    # Initialize model based on architecture
+    if architecture == "Unet":
+        model = Unet.myUNet()
+    elif architecture == "AttentionUnet":
+        model = AttentionUnet.myAttentionUnet()
+    elif architecture == "MedNeXt":
+        model = MedNeXt.myMedNeXt()
+    elif architecture == "SegResNet":
+        model = SegResNet.mySegResNet()
+    else:
+        raise ValueError(f"Model type {architecture} not supported!!")
+
+    return model
 
 def get_loss_function(trial, loss_name = None):
 
@@ -39,17 +55,6 @@ def get_loss_function(trial, loss_name = None):
         loss_function = losses.FocalTverskyLoss(gamma=gamma, alpha=alpha, beta=beta)
 
     return loss_function
-
-def get_model(num_classes, device, model_type):
-
-    if model_type == "Unet":
-        model = Unet.myUNet(num_classes, device)
-    elif model_type == "AttentionUnet":
-        model = AttentionUnet.myAttentionUnet(num_classes, device)
-    else:
-        raise ValueError(f"Model type {model_type} not supported!!")
-
-    return model
 
 
 #### TODO : Models to try Adding? 

@@ -22,8 +22,8 @@ train-model \\
 
     create_shellsubmit(
         job_name = args.job_name,
-        output_file = args.output,
-        shell_name = args.output_script,
+        output_file = 'train_model.log',
+        shell_name = 'train_model.sh',
         conda_path = args.conda_env,
         command = command,
         num_gpus = 1,
@@ -40,12 +40,12 @@ def train_model_slurm():
 
 def create_inference_script(args):
     
-    if len(args.config) > 1:
+    if len(args.config.split(',')) > 1:
 
         create_multiconfig_shellsubmit(
             job_name = args.job_name,
-            output_file = args.output,
-            shell_name = args.output_script,
+            output_file = 'segment-predict.log',
+            shell_name = 'segment.sh',
             conda_path = args.conda_env,
             base_inputs = args.base_inputs,
             config_inputs = args.config_inputs,
@@ -57,21 +57,21 @@ def create_inference_script(args):
 
         command = f"""
 inference \\
-    --config {args.config[0]} \\
-    --seg-info {args.seg_info} \\
+    --config {args.config} \\
+    --seg-info  {",".join(args.seg_info)} \\
     --model-weights {args.model_weights} \\
     --dim-in {args.dim_in} --res-units {args.res_units} \\
-    --model-type {args.model_type} --channels {args.channels} --strides {args.strides} \\
-    --voxel-size {args.voxel_size} --tomogram-algorithm {args.tomo_algorithm} --Nclass {args.Nclass}
+    --model-type {args.model_type} --channels {",".join(map(str, args.channels))} --strides {",".join(map(str, args.strides))} \\
+    --voxel-size {args.voxel_size} --tomo-algorithm {args.tomo_algorithm} --Nclass {args.Nclass}
 """
 
         create_shellsubmit(
             job_name = args.job_name,
-            output_file = args.output,
-            shell_name = args.output_script,
+            output_file = 'segment-predict.log',
+            shell_name = 'segment.sh',
             conda_path = args.conda_env,
             command = command,
-            num_gpus = args.num_gpus,
+            num_gpus = 1,
             gpu_constraint = args.gpu_constraint
         )
 
@@ -83,7 +83,7 @@ def inference_slurm():
 
 def create_localize_script(args):
     
-    if len(args.config) > 1:
+    if len(args.config.split(',')) > 1:
     
         create_multiconfig_shellsubmit(
             job_name = args.job_name,
@@ -99,15 +99,16 @@ def create_localize_script(args):
         command = f"""
 localize \\
     --config {args.config} \\
-    --voxel-size {args.voxel_size} \\
-    --method {args.method} --pick-session-id {args.pick_session_id} --pick-objects {args.pick_objects} \\
-    --seg-info {args.seg_info}
+    --voxel-size {args.voxel_size} --pick-session-id {args.pick_session_id} --pick-user-id {args.pick_user_id} \\
+    --method {args.method}  --seg-info {",".join(args.seg_info)} \\
 """
+        if args.pick_objects is not None:
+            command += f" --pick-objects {args.pick_objects}"
 
         create_shellsubmit(
             job_name = args.job_name,
-            output_file = args.output,
-            shell_name = args.output_script,
+            output_file = 'localize.log',
+            shell_name = 'localize.sh',
             conda_path = args.conda_env,
             command = command,
             num_gpus = 0

@@ -5,10 +5,10 @@ def create_shellsubmit(
     conda_path,
     command,
     num_gpus = 1, 
-    gpu_constraint = 'H100'):
+    gpu_constraint = 'h100'):
 
     if num_gpus > 0:
-        slurm_gpus = f'#SBATCH --partition=gpu\n#SBATCH --gpus={num_gpus}\n#SBATCH --constraint="{gpu_constraint}"'
+        slurm_gpus = f'#SBATCH --partition=gpu\n#SBATCH --gpus={gpu_constraint}:{num_gpus}'
     else:
         slurm_gpus = f'#SBATCH --partition=cpu'
 
@@ -16,7 +16,7 @@ def create_shellsubmit(
 
 {slurm_gpus}
 #SBATCH --time=18:00:00
-#SBATCH --cpus-per-task=24
+#SBATCH --cpus-per-task=4
 #SBATCH --mem-per-cpu=16G
 #SBATCH --job-name={job_name}
 #SBATCH --output={output_file}
@@ -43,7 +43,7 @@ def create_shellsubmit_array(
     shell_script_content = f"""#!/bin/bash
 
 #SBATCH --time=18:00:00
-#SBATCH --cpus-per-task=24
+#SBATCH --cpus-per-task=4
 #SBATCH --mem-per-cpu=16G
 #SBATCH --job-name={job_name}
 #SBATCH --output={output_file}
@@ -73,7 +73,7 @@ def create_multiconfig_shellsubmit(
 
 #SBATCH --job-name={job_name}
 #SBATCH --time=24:00:00
-#SBATCH --cpus-per-task=64
+#SBATCH --cpus-per-task=4
 #SBATCH --mem-per-cpu=12G
 #SBATCH --partition=cpu
 #SBATCH --output={output_file}

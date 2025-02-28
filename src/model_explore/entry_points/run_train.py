@@ -6,13 +6,12 @@ from model_explore.pytorch import trainer
 from model_explore import io, utils
 from monai.metrics import ConfusionMatrixMetric
 import torch, mlflow, os, argparse, json
-from typing import List, Optional
+from typing import List, Optional, Tuple
+import pprint
 
 def train_model(
     copick_config_path: str,
-    target_name: str,
-    target_user_id: str = None,
-    target_session_id: str = None,
+    target_info: Tuple[str, str, str],
     tomo_algorithm: str = 'wbp',
     voxel_size: float = 10,
     trainRunIDs: List[str] = None,
@@ -21,19 +20,15 @@ def train_model(
     strides: List[int] = [2,2,1],
     res_units: int = 2,
     Nclass: int = 3,
-    model_type: str = 'UNet',
     model_save_path: str = 'results',
+    model_config: str = None,
     model_weights: Optional[str] = None,
     dim_in: int = 96,
     num_tomo_crops: int = 16,
     tomo_batch_size: int = 15,
     lr: float = 1e-3,
     tversky_alpha: float = 0.5,
-    num_epochs: int = 100,
-    val_interval: int = 25,
-    mlflow: bool = False,
-    mlflow_tracking_uri: str = "http://mlflow.mlflow.svc.cluster.local:5000", 
-    mlflow_experiment_name: str = "model-train"    
+    num_epochs: int = 100,  
     ):
 
     # Initialize the data generator to manage training and validation datasets
@@ -93,52 +88,21 @@ def train_model(
     # Create UNet-Trainer
     model_trainer = trainer.ModelTrainer(model, device, loss_function, metrics_function, optimizer)
 
-    if mlflow:
-        run_training_with_mlflow(model_trainer, model, data_generator, model_save_path, 
-                                 mlflow_tracking_uri, mlflow_experiment_name, num_epochs, 
-                                 num_tomo_crops, val_interval)
-    else:
-        run_training_local(model_trainer, model, data_generator, model_save_path, num_epochs, 
-                           num_tomo_crops, val_interval, dim_in)
-
-def run_training_local(model_trainer, model, data_generator, model_save_path, num_epochs, num_tomo_crops, val_interval, dim_in):
-
     results = model_trainer.train(
         data_generator, model_save_path, max_epochs=num_epochs,
         crop_size=dim_in, my_num_samples=num_tomo_crops,
         val_interval=val_interval, verbose=True
     )
 
+    # parameters_save_name = os.path.join(model_save_path, "training_parameters.json")
+    # io.save_parameters_to_json(model, model_trainer, data_generator, parameters_save_name)
+    
     # Save parameters and results
-    parameters_save_name = os.path.join(model_save_path, "training_parameters.json")
-    io.save_parameters_to_json(model, model_trainer, data_generator, parameters_save_name)
+    parameters_save_name = os.path.join(model_save_path, "training_parameters.yaml")
+    io.save_parameters_to_yaml(model, model_trainer, data_generator, parameters_save_name)
 
     results_save_name = os.path.join(model_save_path, "results.json")
     io.save_results_to_json(results, results_save_name)
-
-def run_training_with_mlflow(model_trainer, model, data_generator, model_save_path, mlflow_tracking_uri, mlflow_experiment_name, num_epochs, num_tomo_crops, val_interval):
-    
-    try:
-        utils.mlflow_setup()
-        mlflow.set_tracking_uri(mlflow_tracking_uri)
-    except: pass
-    mlflow.set_experiment(mlflow_experiment_name)
-
-    with mlflow.start_run():
-        model_trainer.train(
-            data_generator, max_epochs=num_epochs,
-            my_num_samples=num_tomo_crops, val_interval=val_interval,
-            model_save_path=model_save_path, use_mlflow = True, verbose=False
-        )
-
-        # Log parameters and metrics
-        params = {
-            "model": io.get_model_parameters(model),
-            "optimizer": io.get_optimizer_parameters(model_trainer),
-            "dataloader": data_generator.get_dataloader_parameters()
-        }
-        mlflow.log_params(io.flatten_params(params))
-    mlflow.end_run()
 
 def train_model_parser(parser_description, add_slurm: bool = False):
     """
@@ -151,13 +115,13 @@ def train_model_parser(parser_description, add_slurm: bool = False):
     # Input Arguments
     input_group = parser.add_argument_group("Input Arguments")
     common.add_config(input_group, single_config=False)
+    input_group.add_argument("--target-info", type=utils.parse_target, help="Target information, e.g., name,user_id,session_id")
     input_group.add_argument("--tomo-algorithm", default='wbp', help="Tomogram algorithm used for training")
     input_group.add_argument("--trainRunIDs", type=utils.parse_list, help="List of training run IDs, e.g., run1,run2,run3")
     input_group.add_argument("--validateRunIDs", type=utils.parse_list, help="List of validation run IDs, e.g., run4,run5,run6")
-    input_group.add_argument("--mlflow", type=utils.string2bool, default=False, help="Log the results with MLFlow or save in a unique directory")    
     
     # Model Arguments
-    model_group = parser.add_argument_group("Model Arguments")
+    model_group = parser.add_argument_group("UNet-Model Arguments")
     common.add_model_parameters(model_group)
     
     # Training Arguments
@@ -167,7 +131,7 @@ def train_model_parser(parser_description, add_slurm: bool = False):
     # SLURM Arguments
     if add_slurm:
         slurm_group = parser.add_argument_group("SLURM Arguments")
-        common.add_slurm_parameters(slurm_group, 'train')
+        common.add_slurm_parameters(slurm_group, 'train', gpus = 1)
 
     args = parser.parse_args()
     return args
@@ -192,16 +156,13 @@ def cli():
     # Call the training function
     train_model(
         copick_config_path=copick_configs, 
-        target_name=args.target_name,
-        target_user_id=args.target_user_id,
-        target_session_id=args.target_session_id,        
+        target_info=args.target_info,
         tomo_algorithm=args.tomo_algorithm,
         voxel_size=args.voxel_size,
         channels=args.channels,
         strides=args.strides,
         res_units=args.res_units,
         Nclass=args.Nclass,
-        model_type=args.model_type,
         model_save_path=args.model_save_path,
         dim_in=args.dim_in,
         num_tomo_crops=args.num_tomo_crops,
@@ -211,11 +172,11 @@ def cli():
         num_epochs=args.num_epochs,
         val_interval=args.val_interval,
         trainRunIDs=args.trainRunIDs,
-        validateRunIDs=args.validateRunIDs,  
-        mlflow=args.mlflow,      
+        validateRunIDs=args.validateRunIDs,       
     )
 
-# def save_parameters_json(args, output_path: str):    
+# def save_parameters(
+#     args: argparse.Namespace, output_path: str ):    
 #     """
 #     Save the training parameters to a JSON file.
 #     Args:
@@ -226,14 +187,11 @@ def cli():
 #     params = {
 #         "input": {
 #             "copick_config_path": args.config,
-#             "target_name": args.target_name,
-#             "target_user_id": args.target_user_id,
-#             "target_session_id": args.target_session_id,
+#             "target_info": args.target_info,
 #             "tomo_algorithm": args.tomo_algorithm,
 #             "voxel_size": args.voxel_size,            
 #         },
 #         "model": {
-#             "model_type": args.model_type,
 #             "Nclass": args.Nclass,
 #             "dim_in": args.dim_in,
 #             "channels": args.channels,
@@ -251,10 +209,16 @@ def cli():
 #             "validateRunIDs": args.validateRunIDs,
 #         },
 #         "output": {
-#             "model_save_path": args.model_save_path,
-#             "mlflow": args.mlflow,
+#             "model_save_path": args.model_save_path
 #         },
 #     }
+
+#     # Print the parameters
+#     print(f"\nParameters for Training:")
+#     pprint.pprint(params); print()
+
+#     # Save to YAML file
+#     utils.save_parameters_yaml(params, output_path)
 
 #     # Save to JSON file
 #     with open(output_path, 'w') as f:

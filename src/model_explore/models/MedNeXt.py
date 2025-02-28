@@ -3,10 +3,10 @@ import torch.nn as nn
 import torch
 
 class myMedNeXt:
-    def __init__(self, num_classes, device):
-        self.device = device
-        self.num_classes = num_classes
+    def __init__(self ):
+        # Placeholder for the model and config
         self.model = None
+        self.config = None
 
     def build_model(
         self,
@@ -97,6 +97,7 @@ class myMedNeXt:
             raise ValueError("Model has not been initialized yet. Call build_model() or bayesian_search() first.")
         
         return {
+            'architecture': 'MedNeXt',
             'num_classes': self.num_classes,
             'init_filters': self.model.init_filters,
             'encoder_expansion_ratio': self.model.encoder_expansion_ratio,

@@ -96,8 +96,8 @@ def cli():
         args.save_user_id = args.picks_user_id
 
     # Save JSON with Parameters
-    output_json = f'membrane-extract_{args.save_user_id}_{args.save_session_id}.json'        
-    save_parameters_json(args, output_json)
+    output_yaml = f'membrane-extract_{args.save_user_id}_{args.save_session_id}.yaml'        
+    save_parameters(args, output_yaml)
 
     extract_membrane_bound_picks(
         config=args.config,
@@ -112,8 +112,8 @@ def cli():
         n_procs=args.n_procs,
     )
 
-def save_parameters_json(args: argparse.Namespace, 
-                         output_path: str):
+def save_parameters(args: argparse.Namespace, 
+                    output_path: str):
 
     params_dict = {
         "input": {
@@ -134,8 +134,8 @@ def save_parameters_json(args: argparse.Namespace,
     print(f"\nParameters for Extraction of Membrane-Bound Picks:")
     pprint.pprint(params_dict); print()
 
-    with open(output_path, 'w') as f:
-        json.dump(params_dict, f, indent=4)    
+    # Save parameters to YAML file
+    utils.save_parameters_yaml(params_dict, output_path) 
 
 if __name__ == "__main__":
     cli()

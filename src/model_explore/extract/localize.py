@@ -53,6 +53,11 @@ def processs_localization(run,
 
         # Save Coordinates if any 3D points are provided
         if points.size > 2:
+
+            # Remove Picks that are too close to each other
+            # points = remove_repeated_picks(points, min_radius, pixelSize = voxel_size)
+
+            # Swap the coordinates to match the expected format
             points = points[:,[2,1,0]] 
 
             # Convert the Picks back to Angstrom
