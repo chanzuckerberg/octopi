@@ -27,6 +27,7 @@ def add_train_parameters(parser, model_explore = False):
     parser.add_argument("--num-epochs", type=int, required=False, default=100, help="Number of training epochs")
     parser.add_argument("--val-interval", type=int, required=False, default=10, help="Interval for validation metric calculations")
     parser.add_argument("--tomo-batch-size", type=int, required=False, default=15, help="Number of tomograms to load per epoch for training")
+    parser.add_argument("--best-metric", type=str, default='avg_f1', required=False, help="Metric to Monitor for Determining Best Model. To track fBetaN, use fBetaN with N as the beta-value.")
     
     if not model_explore:
         parser.add_argument("--num-tomo-crops", type=int, required=False, default=16, help="Number of tomogram crops to use per patch")    

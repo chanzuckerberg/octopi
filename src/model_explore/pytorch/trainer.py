@@ -4,8 +4,7 @@ from model_explore import visualization_tools as viz
 from monai.inferers import sliding_window_inference
 from monai.data import decollate_batch
 from typing import List, Optional
-import matplotlib.pyplot as plt
-import torch, os, mlflow
+import torch, os, mlflow, re
 from tqdm import tqdm 
 import numpy as np
 
@@ -120,6 +119,7 @@ class ModelTrainer:
         use_mlflow: bool = False,
         verbose: bool = False
     ):
+
         # best lr scheduler options are cosine or reduce
 
         self.warmup_epochs = 5
@@ -142,13 +142,22 @@ class ModelTrainer:
 
         Nclass = data_load_gen.Nclasses
         self.create_results_dictionary(Nclass)  
-        
+
+        # Regex pattern for fBetaN and fBetaN_classM (Still need to handle fBetaN_classM)
+        pattern = r"^fBeta[1-9]\d*(?:_class[1-9]\d*)?$"
+        if re.match(pattern, best_metric) or best_metric in self.metric_names:
+            self.beta = int(best_metric[5:])
+            best_metric = 'avg_fbeta'
+            print(f'\nTracking {best_metric} as the best metric\n')
+        else:
+            print(f'\n{best_metric} is not a valid metric! Tracking avg_f1 as the best metric\n')
+            best_metric = 'avg_f1'
+
         self.post_pred = AsDiscrete(argmax=True, to_onehot=Nclass)
         self.post_label = AsDiscrete(to_onehot=Nclass)                             
 
         # Produce Dataloaders for the First Training Iteration
         self.train_loader, self.val_loader = data_load_gen.create_train_dataloaders(crop_size=crop_size, num_samples=my_num_samples)
-        self.model.config['dim_in'] = self.crop_size
 
         # Save the original learning rate
         original_lr = self.optimizer.param_groups[0]['lr']
@@ -325,9 +334,12 @@ class ModelTrainer:
         }
 
         for i in range(Nclass-1):
+            self.results[f'fbeta_class{i+1}'] = []
             self.results[f'f1_class{i+1}'] = []
             self.results[f'recall_class{i+1}'] = []
             self.results[f'precision_class{i+1}'] = []
+
+        self.metric_names = self.results.keys()
 
     def my_log_metrics(
         self,
@@ -348,6 +360,7 @@ class ModelTrainer:
                 metrics_to_log[f"recall_class{i+1}"] = rec.item()
                 metrics_to_log[f"precision_class{i+1}"] = prec.item()
                 metrics_to_log[f"f1_class{i+1}"] = f1.item()
+                metrics_to_log[f"fbeta_class{i+1}"] = self.fbeta(prec, rec).item()
 
             # Prepare average metrics
             metrics_to_log["avg_recall"] = recall.mean().cpu().item()
@@ -398,72 +411,4 @@ class ModelTrainer:
         else:
             mlflow.log_params(params_dict)                 
     
-    # def plot_results(self, 
-    #                  class_names: Optional[List[str]] = None,
-    #                  save_plot: str = None):
-
-    #     # Create a 2x2 subplot layout
-    #     fig, axs = plt.subplots(2, 2, figsize=(12, 10))
-    #     fig.suptitle("Metrics Over Epochs", fontsize=16)
-
-    #     # Unpack the data for loss (logged every epoch)
-    #     epochs_loss = [epoch for epoch, _ in self.results['loss']]
-    #     loss = [value for _, value in self.results['loss']]
-    #     val_epochs_loss = [epoch for epoch, _ in self.results['val_loss']]
-    #     val_loss = [value for _,value in self.results['val_loss']]
-
-    #     # Plot Training Loss in the top-left
-    #     axs[0, 0].plot(epochs_loss, loss, label="Training Loss")
-    #     axs[0, 0].plot(val_epochs_loss, val_loss, label='Validation Loss')
-    #     axs[0, 0].set_xlabel("Epochs")
-    #     axs[0, 0].set_ylabel("Loss")
-    #     axs[0, 0].set_title("Training Loss")
-    #     axs[0, 0].legend()
-    #     axs[0, 0].tick_params(axis='both', direction='in', top=True, right=True, length=6, width=1)
-
-    #     # For metrics that are logged every `val_interval` epochs
-    #     epochs_metrics = [epoch for epoch, _ in self.results['avg_recall']]
-        
-    #     # Determine the number of classes and names
-    #     num_classes = len([key for key in self.results.keys() if key.startswith('recall_class')])
-
-    #     if class_names is None or len(class_names) != num_classes - 1:
-    #         class_names = [f"Class {i+1}" for i in range(num_classes)]
-
-    #     # Plot Recall in the top-right
-    #     for class_idx in range(num_classes):
-    #         recall_class = [value for _, value in self.results[f'recall_class{class_idx+1}']]
-    #         axs[0, 1].plot(epochs_metrics, recall_class, label=f"{class_names[class_idx]}")
-    #     axs[0, 1].set_xlabel("Epochs")
-    #     axs[0, 1].set_ylabel("Recall")
-    #     axs[0, 1].set_title("Recall per Class")
-    #     # axs[0, 1].legend()
-    #     axs[0, 1].tick_params(axis='both', direction='in', top=True, right=True, length=6, width=1)
-
-    #     # Plot Precision in the bottom-left
-    #     for class_idx in range(num_classes):
-    #         precision_class = [value for _, value in self.results[f'precision_class{class_idx+1}']]
-    #         axs[1, 0].plot(epochs_metrics, precision_class, label=f"{class_names[class_idx]}")
-    #     axs[1, 0].set_xlabel("Epochs")
-    #     axs[1, 0].set_ylabel("Precision")
-    #     axs[1, 0].set_title("Precision per Class")
-    #     axs[1, 0].legend()
-    #     axs[1, 0].tick_params(axis='both', direction='in', top=True, right=True, length=6, width=1)
-
-    #     # Plot F1 Score in the bottom-right
-    #     for class_idx in range(num_classes):
-    #         f1_class = [value for _, value in self.results[f'f1_class{class_idx+1}']]
-    #         axs[1, 1].plot(epochs_metrics, f1_class, label=f"{class_names[class_idx]}")
-    #     axs[1, 1].set_xlabel("Epochs")
-    #     axs[1, 1].set_ylabel("F1 Score")
-    #     axs[1, 1].set_title("F1 Score per Class")
-    #     # axs[1, 1].legend()
-    #     axs[1, 1].tick_params(axis='both', direction='in', top=True, right=True, length=6, width=1)
-
-    #     # Adjust layout and show plot
-    #     plt.tight_layout(rect=[0, 0, 1, 0.96])  # Leave space for the main title
-
-    #     if save_plot: 
-    #         fig.savefig(save_plot)
-    #     else:
-    #         plt.show()
+    

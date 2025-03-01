@@ -76,9 +76,6 @@ class ModelSearchSubmit:
         # Initialize dataset generator
         self._initialize_data_generator()
 
-        # Run the model search
-        self.run_model_search()
-
     def _initialize_data_generator(self):
         """Initializes the data generator for training and validation datasets."""
         self._print_input_configs()
@@ -287,14 +284,11 @@ def optuna_parser(parser_description, add_slurm: bool = False):
     # Input Arguments
     input_group = parser.add_argument_group("Input Arguments")
     common.add_config(input_group, single_config=False)
+    input_group.add_argument("--target-info", type=utils.parse_target, help="Target information, e.g., 'name' or 'name,user_id,session_id'")    
     input_group.add_argument("--tomo-algorithm", default='wbp', 
                              help="Tomogram algorithm used for training")
     input_group.add_argument("--mlflow-experiment-name", type=str, default="model-search", required=False, 
                              help="Name of the MLflow experiment (default: 'model-search').")
-    input_group.add_argument("--random-seed", type=int, default=42, required=False, 
-                             help="Random seed for reproducibility (default: 42).")
-    input_group.add_argument("--best-metric", type=str, default='avg_f1', required=False, 
-                             help="Metric to Monitor for Optimization")
     input_group.add_argument("--trainRunIDs", type=utils.parse_list, default=None, required=False, 
                              help="List of training run IDs, e.g., run1,run2 or [run1,run2].")
     input_group.add_argument("--validateRunIDs", type=utils.parse_list, default=None, required=False, 
@@ -308,6 +302,8 @@ def optuna_parser(parser_description, add_slurm: bool = False):
 
     train_group = parser.add_argument_group("Training Arguments")
     common.add_train_parameters(train_group, model_explore = True)
+    train_group.add_argument("--random-seed", type=int, default=42, required=False, 
+                             help="Random seed for reproducibility (default: 42).")
 
     if add_slurm:
         slurm_group = parser.add_argument_group("SLURM Arguments")
@@ -333,7 +329,7 @@ def cli():
     os.makedirs(f'explore_results_{args.model_type}', exist_ok=True)
 
     # Save JSON with Parameters
-    save_parameters_json(args, f'explore_results_{args.model_type}/model_explore.yaml')
+    save_parameters(args, f'explore_results_{args.model_type}/model_explore.yaml')
 
     # Call the function with parsed arguments
     search = ModelSearchSubmit(
@@ -355,6 +351,9 @@ def cli():
         best_metric=args.best_metric,
         val_interval=args.val_interval
     )
+
+    # Run the model search
+    search.run_model_search()
 
 def save_parameters(args: argparse.Namespace, 
                     output_path: str):

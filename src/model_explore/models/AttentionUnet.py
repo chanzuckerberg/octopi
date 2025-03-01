@@ -21,9 +21,9 @@ class myAttentionUnet:
             dropout=config['dropout']
         )
         
-        return self.model.to(self.device)
+        return self.model
     
-    def bayesian_search(self, trial):
+    def bayesian_search(self, trial, num_classes: int):
         """Defines the Bayesian optimization search space and builds the model with suggested parameters."""
         
         # Define the search space
@@ -40,7 +40,7 @@ class myAttentionUnet:
         
         config = {
             'architecture': 'AttentionUnet',
-            'num_classes': self.num_classes,
+            'num_classes': num_classes,
             'channels': channels,
             'strides': strides,
             'dropout': dropout

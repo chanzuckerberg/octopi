@@ -10,19 +10,13 @@ class myModelTemplate:
         self.model = None
         self.config = None
 
-    def build_model(self):
+    def build_model(self, config: dict):
         """
-        Build the model based on provided parameters.
-
-        Example Args:
-            channels (list of int): List defining the number of filters at each stage.
-            strides (list of int): List defining the downsampling factors.
-            num_res_units (int): Number of residual units per stage.
-            dropout (float): Dropout rate.
+        Build the model based on provided parameters in a config dictionary.
         """
         pass
 
-    def bayesian_search(self, trial):
+    def bayesian_search(self, trial, num_classes: int):
         """
         Define the hyperparameter search space for Bayesian optimization and build the model.
 
@@ -30,14 +24,13 @@ class myModelTemplate:
         
         Args:
             trial (optuna.trial.Trial): Optuna trial object.
+            num_classes (int): Number of classes in the dataset.
         """
         pass
     
     def get_model_parameters(self):
-        """
-        Retrieve stored model parameters for logging or analysis.
-
-        Returns:
-            dict: A dictionary of the current model parameters.
-        """
-        pass
+        """Retrieve stored model parameters."""
+        if self.model is None:
+            raise ValueError("Model has not been initialized yet. Call build_model() or bayesian_search() first.")
+        
+        return self.config

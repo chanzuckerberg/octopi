@@ -109,8 +109,9 @@ def cli():
     args = inference_parser(parser_description)
 
     # Set default values if not provided
+    args.seg_info = list(args.seg_info)  # Convert tuple to list
     if args.seg_info[1] is None:
-        args.seg_info[1] = "monai"
+        args.seg_info[1] = "DeepFindET"
 
     if args.seg_info[2] is None:
         args.seg_info[2] = "1"

@@ -1,11 +1,11 @@
 from model_explore.datasets import generators, multi_config_generator
 from monai.losses import DiceLoss, FocalLoss, TverskyLoss
 from model_explore.models import common as builder
+from monai.metrics import ConfusionMatrixMetric
 from model_explore.entry_points import common 
 from model_explore.pytorch import trainer 
 from model_explore import io, utils
-from monai.metrics import ConfusionMatrixMetric
-import torch, mlflow, os, argparse, json
+import torch, os, argparse
 from typing import List, Optional, Tuple
 import pprint
 
@@ -16,19 +16,16 @@ def train_model(
     voxel_size: float = 10,
     trainRunIDs: List[str] = None,
     validateRunIDs: List[str] = None,    
-    channels: List[int] = [32,64,128,128],
-    strides: List[int] = [2,2,1],
-    res_units: int = 2,
-    Nclass: int = 3,
-    model_save_path: str = 'results',
     model_config: str = None,
     model_weights: Optional[str] = None,
-    dim_in: int = 96,
+    model_save_path: str = 'results',
     num_tomo_crops: int = 16,
     tomo_batch_size: int = 15,
     lr: float = 1e-3,
     tversky_alpha: float = 0.5,
     num_epochs: int = 100,  
+    val_interval: int = 5,
+    best_metric: str = 'avg_f1'
     ):
 
     # Initialize the data generator to manage training and validation datasets
@@ -37,23 +34,23 @@ def train_model(
         # Multi-config training
         data_generator = multi_config_generator.MultiConfigTrainLoaderManager(
             copick_config_path, 
-            target_name, 
-            target_session_id = target_session_id,
-            target_user_id = target_user_id,
+            target_info[0], 
+            target_session_id = target_info[2],
+            target_user_id = target_info[1],
             tomo_algorithm = tomo_algorithm,
             voxel_size = voxel_size,
-            Nclasses = Nclass,
+            Nclasses = model_config['num_classes'],
             tomo_batch_size = tomo_batch_size )
     else:
         # Single-config training
         data_generator = generators.TrainLoaderManager(
             copick_config_path, 
-            target_name, 
-            target_session_id = target_session_id,
-            target_user_id = target_user_id,
+            target_info[0], 
+            target_session_id = target_info[2],
+            target_user_id = target_info[1],
             tomo_algorithm = tomo_algorithm,
             voxel_size = voxel_size,
-            Nclasses = Nclass,
+            Nclasses = model_config['num_classes'],
             tomo_batch_size = tomo_batch_size ) 
     
     # Get the data splits
@@ -68,39 +65,35 @@ def train_model(
     beta = 1 - alpha
     loss_function = TverskyLoss(include_background=True, to_onehot_y=True, softmax=True, alpha=alpha, beta=beta)  
     metrics_function = ConfusionMatrixMetric(include_background=False, metric_name=["recall",'precision','f1 score'], reduction="none")
-
-    # Create UNet Model and Load Weights
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     
-    channels = [int(channel) for channel in channels.split(',')]
-    strides = [int(stride) for stride in strides.split(',')]
-    model_builder = builder.get_model(Nclass, device, model_type)
-    if model_type == "Unet":            model_builder.build_model(channels, strides, res_units)
-    elif model_type == "AttentionUnet": model_builder.build_model(channels, strides)
-    model = model_builder.model.to(device)
+    # Build the Model
+    model_builder = builder.get_model(model_config['architecture'])
+    model = model_builder.build_model(model_config)
+    
+    # Load the Model Weights if Provided 
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     if model_weights: 
-        model.load_state_dict(torch.load(model_weights, weights_only=True))     
+        state_dict = torch.load(model_weights, map_location=device, weights_only=True)
+        model.load_state_dict(state_dict)     
+    model.to(device) 
 
     # Optimizer
-    # optimizer = torch.optim.Adam(model.parameters(), lr)
-    optimizer = torch.optim.AdamW(model.parameters(), lr, weight_decay=1e-3)
+    optimizer = torch.optim.AdamW(model.parameters(), lr, weight_decay=1e-4)
 
     # Create UNet-Trainer
     model_trainer = trainer.ModelTrainer(model, device, loss_function, metrics_function, optimizer)
 
     results = model_trainer.train(
         data_generator, model_save_path, max_epochs=num_epochs,
-        crop_size=dim_in, my_num_samples=num_tomo_crops,
-        val_interval=val_interval, verbose=True
+        crop_size=model_config['dim_in'], my_num_samples=num_tomo_crops,
+        val_interval=val_interval, best_metric=best_metric, verbose=True
     )
-
-    # parameters_save_name = os.path.join(model_save_path, "training_parameters.json")
-    # io.save_parameters_to_json(model, model_trainer, data_generator, parameters_save_name)
     
     # Save parameters and results
-    parameters_save_name = os.path.join(model_save_path, "training_parameters.yaml")
-    io.save_parameters_to_yaml(model, model_trainer, data_generator, parameters_save_name)
+    parameters_save_name = os.path.join(model_save_path, "model_config.yaml")
+    io.save_parameters_to_yaml(model_builder, model_trainer, data_generator, parameters_save_name)
 
+    # TODO: Write Results to Zarr or Another File Format? 
     results_save_name = os.path.join(model_save_path, "results.json")
     io.save_results_to_json(results, results_save_name)
 
@@ -115,14 +108,18 @@ def train_model_parser(parser_description, add_slurm: bool = False):
     # Input Arguments
     input_group = parser.add_argument_group("Input Arguments")
     common.add_config(input_group, single_config=False)
-    input_group.add_argument("--target-info", type=utils.parse_target, help="Target information, e.g., name,user_id,session_id")
+    input_group.add_argument("--target-info", type=utils.parse_target, help="Target information, e.g., 'name' or 'name,user_id,session_id'")
     input_group.add_argument("--tomo-algorithm", default='wbp', help="Tomogram algorithm used for training")
     input_group.add_argument("--trainRunIDs", type=utils.parse_list, help="List of training run IDs, e.g., run1,run2,run3")
     input_group.add_argument("--validateRunIDs", type=utils.parse_list, help="List of validation run IDs, e.g., run4,run5,run6")
     
+    fine_tune_group = parser.add_argument_group("Fine-Tuning Arguments")
+    fine_tune_group.add_argument('--model-config', type=str, help="Path to the model configuration file (typically used for fine-tuning)")
+    fine_tune_group.add_argument('--model-weights', type=str, help="Path to the model weights file (typically used for fine-tuning)") 
+
     # Model Arguments
     model_group = parser.add_argument_group("UNet-Model Arguments")
-    common.add_model_parameters(model_group)
+    common.add_model_parameters(model_group)   
     
     # Training Arguments
     train_group = parser.add_argument_group("Training Arguments")
@@ -143,15 +140,17 @@ def cli():
     """
 
     # Parse the arguments
-    parser_description = "Train 3D CNN models"
+    parser_description = "Train 3D CNN U-Net models"
     args = train_model_parser(parser_description)
 
     # Parse the CoPick configuration paths
     if len(args.config) > 1:    copick_configs = utils.parse_copick_configs(args.config)
     else:                       copick_configs = args.config[0]
 
-    # Save JSON with Parameters
-    # save_parameters_json(args, 'train.json')
+    if args.model_config:
+        model_config = utils.load_yaml(args.model_config)
+    else:
+        model_config = get_model_config(args.channels, args.strides, args.res_units, args.Nclass, args.dim_in)
 
     # Call the training function
     train_model(
@@ -159,70 +158,34 @@ def cli():
         target_info=args.target_info,
         tomo_algorithm=args.tomo_algorithm,
         voxel_size=args.voxel_size,
-        channels=args.channels,
-        strides=args.strides,
-        res_units=args.res_units,
-        Nclass=args.Nclass,
+        model_config=model_config,
+        model_weights=args.model_weights,
         model_save_path=args.model_save_path,
-        dim_in=args.dim_in,
         num_tomo_crops=args.num_tomo_crops,
         tomo_batch_size=args.tomo_batch_size,
         lr=args.lr,
         tversky_alpha=args.tversky_alpha,
         num_epochs=args.num_epochs,
         val_interval=args.val_interval,
+        best_metric=args.best_metric,
         trainRunIDs=args.trainRunIDs,
-        validateRunIDs=args.validateRunIDs,       
+        validateRunIDs=args.validateRunIDs
     )
 
-# def save_parameters(
-#     args: argparse.Namespace, output_path: str ):    
-#     """
-#     Save the training parameters to a JSON file.
-#     Args:
-#         args: Parsed arguments from argparse.
-#         output_path: Path to save the JSON file.
-#     """
-#     # Organize parameters into categories
-#     params = {
-#         "input": {
-#             "copick_config_path": args.config,
-#             "target_info": args.target_info,
-#             "tomo_algorithm": args.tomo_algorithm,
-#             "voxel_size": args.voxel_size,            
-#         },
-#         "model": {
-#             "Nclass": args.Nclass,
-#             "dim_in": args.dim_in,
-#             "channels": args.channels,
-#             "strides": args.strides,
-#             "res_units": args.res_units,
-#         },
-#         "training": {
-#             "num_tomo_crops": args.num_tomo_crops,
-#             "tomo_batch_size": args.tomo_batch_size,
-#             "lr": args.lr,
-#             "tversky_alpha": args.tversky_alpha,
-#             "num_epochs": args.num_epochs,
-#             "val_interval": args.val_interval,
-#             "trainRunIDs": args.trainRunIDs,
-#             "validateRunIDs": args.validateRunIDs,
-#         },
-#         "output": {
-#             "model_save_path": args.model_save_path
-#         },
-#     }
-
-#     # Print the parameters
-#     print(f"\nParameters for Training:")
-#     pprint.pprint(params); print()
-
-#     # Save to YAML file
-#     utils.save_parameters_yaml(params, output_path)
-
-#     # Save to JSON file
-#     with open(output_path, 'w') as f:
-#         json.dump(params, f, indent=4)    
+def get_model_config(channels, strides, res_units, Nclass, dim_in):
+    """
+        Create a model configuration dictionary if no model configuration file is provided.
+    """
+    model_config = {
+        'architecture': 'Unet',
+        'channels': channels,
+        'strides': strides,
+        'num_res_units': res_units, 
+        'num_classes': Nclass,
+        'dropout': 0.1,
+        'dim_in': dim_in
+    }
+    return model_config
 
 if __name__ == "__main__":
     cli()

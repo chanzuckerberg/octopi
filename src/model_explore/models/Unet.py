@@ -11,6 +11,7 @@ class myUNet:
     def build_model( self, config: dict ):
         """Creates the Unet model based on provided parameters."""
         
+        self.config = config
         self.model = UNet(
             spatial_dims=3,
             in_channels=1,
@@ -20,8 +21,9 @@ class myUNet:
             num_res_units=config['num_res_units'],
             dropout=config['dropout']
         )
+        return self.model
     
-    def bayesian_search(self, trial):
+    def bayesian_search(self, trial, num_classes: int):
         """Defines the Bayesian optimization search space and builds the model with suggested parameters."""
         
         # Define the search space
@@ -40,7 +42,7 @@ class myUNet:
         # Create config dictionary
         self.config = {
             'architecture': 'UNet',
-            'num_classes': self.num_classes,
+            'num_classes': num_classes,
             'channels': channels,
             'strides': strides,
             'num_res_units': num_res_units,

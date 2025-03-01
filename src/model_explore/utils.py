@@ -187,7 +187,7 @@ def save_parameters_yaml(params: dict, output_path: str):
     """
     InlineListDumper.add_representer(list, InlineListDumper.represent_list)
     with open(output_path, 'w') as f:
-        yaml.dump(params, f, Dumper=InlineListDumper, default_flow_style=False)
+        yaml.dump(params, f, Dumper=InlineListDumper, default_flow_style=False, sort_keys=False)
 
 def load_yaml(path: str) -> dict:
     """

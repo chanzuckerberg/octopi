@@ -31,7 +31,7 @@ class Predictor:
         model_config = utils.load_yaml(model_config)
 
         self.Nclass = model_config['model']['num_classes']     
-        self.dim_in = model_config['optimizer']['dim_in']
+        self.dim_in = model_config['model']['dim_in']
         self.tomo_batch_size = tomo_batch_size
         
         # Get the number of GPUs available

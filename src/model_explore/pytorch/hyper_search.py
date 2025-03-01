@@ -17,6 +17,7 @@ class BayesianModelSearch:
             model_type (str): Type of model to build ("UNet", "AttentionUnet").
         """
         self.data_generator = data_generator
+        self.Nclasses = data_generator.Nclasses
         self.device = None
         self.model_type = model_type
         self.model = None
@@ -26,15 +27,16 @@ class BayesianModelSearch:
         self.parent_run_id = parent_run_id
         
         # Define results directory path
-        self.results_dir = f'explore_results_{self.model_type}'
-            
+        self.results_dir = f'explore_results_{self.model_type}'            
 
     def my_build_model(self, trial):
         """Builds and initializes a model based on Optuna-suggested parameters."""
        
-        self.model_builder = common.get_model(self.data_generator.Nclasses, self.device, self.model_type) 
-        self.model_builder.bayesian_search(trial)
+        # Build the model
+        self.model_builder = common.get_model(self.model_type)
+        self.model_builder.bayesian_search(trial, self.Nclasses)
         self.model = self.model_builder.model.to(self.device)
+        self.config = self.model_builder.config
 
         # Define loss function
         self.loss_function = common.get_loss_function(trial)
@@ -51,6 +53,7 @@ class BayesianModelSearch:
             'crop_size': trial.suggest_int("crop_size", 48, 160, step=16),
             'num_samples': 8
         }
+        self.config['dim_in'] = self.sampling['crop_size']
 
     def _define_optimizer(self):
         # Define optimizer
@@ -96,9 +99,6 @@ class BayesianModelSearch:
             
             # Build model
             self.my_build_model(trial)
-
-            # Set the input dimension of the model
-            self.model.dim_in = self.sampling['crop_size']
 
             # Create trainer
             self._define_optimizer()
