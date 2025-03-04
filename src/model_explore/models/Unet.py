@@ -41,7 +41,7 @@ class myUNet:
 
         # Create config dictionary
         self.config = {
-            'architecture': 'UNet',
+            'architecture': 'Unet',
             'num_classes': num_classes,
             'channels': channels,
             'strides': strides,

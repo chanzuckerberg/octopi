@@ -2,12 +2,15 @@ from monai.inferers import sliding_window_inference
 from monai.data import decollate_batch
 from torch.multiprocessing import Pool
 from monai.networks.nets import UNet
+from monai.data import MetaTensor
 from monai.transforms import (
-    Compose, 
-    Activationsd,
-    AsDiscreted
+    Compose, Activationsd, 
+    apply_transform,
+    Flip, Rotate,
+    AsDiscreted,
+    AsDiscrete, Activations
 )
-import torch, copick, gc, yaml, os
+import torch, copick, gc, os
 from model_explore.models import common
 from model_explore import io, utils
 from copick_utils.writers import write
@@ -21,6 +24,7 @@ class Predictor:
                  config: str,
                  model_config: str,
                  model_weights: str,
+                 apply_tta: bool = False,
                  tomo_batch_size: int = 48,
                  device: Optional[str] = None):
 
@@ -57,26 +61,66 @@ class Predictor:
         state_dict = torch.load(model_weights, map_location=self.device, weights_only=True)
         self.model.load_state_dict(state_dict)
         self.model.to(self.device)
+        self.model.eval()
 
         # Define the post-processing transforms
         self.post_transforms = Compose([
-            Activationsd(keys="pred", softmax=True),
-            AsDiscreted(keys="pred", argmax=True)
+            Activations(softmax=True),
+            AsDiscrete(argmax=True)
         ])    
 
+       # Initialize TTA if enabled
+        self.apply_tta = apply_tta
+        if self.apply_tta: self.create_tta_augmentations() 
+        
     def _run_inference(self, input):
         """Apply sliding window inference to the input."""
-        def _compute(input):
-            return sliding_window_inference(
+        with torch.no_grad():
+            predictions = sliding_window_inference(
                 inputs=input,
                 roi_size=(self.dim_in, self.dim_in, self.dim_in),
                 sw_batch_size=4,  # one window is proecessed at a time
                 predictor=self.model,
                 overlap=0.5,
             )
+            return [self.post_transforms(i) for i in decollate_batch(predictions)]
 
-        with torch.cuda.amp.autocast():
-            return _compute(input)           
+    def _run_inference_tta(self, input_data):
+        """Apply test-time augmentation (TTA) with sliding window inference using a running average to minimize memory usage."""
+        
+        # Initialize running sum of predictions
+        running_sum = torch.zeros_like(input_data, dtype=torch.float32, device=self.device)
+        
+        with torch.no_grad():
+            for tta_transform, inverse_transform in zip(self.tta_transforms, self.inverse_tta_transforms):
+                
+                # Apply transform to each instance separately
+                augmented_data = torch.stack([tta_transform(img) for img in input_data]) 
+
+                # Run inference
+                predictions = sliding_window_inference(
+                    inputs=augmented_data,
+                    roi_size=(self.dim_in, self.dim_in, self.dim_in),
+                    sw_batch_size=4,
+                    predictor=self.model,
+                    overlap=0.5,
+                )
+
+                # Apply inverse transform instance-wise
+                predictions = [inverse_transform(MetaTensor(self.post_transforms(i))) for i in decollate_batch(predictions)]
+                predictions = torch.stack(predictions)
+
+                # Accumulate sum for running average
+                running_sum += predictions
+            
+                # # Free memory from previous iterations
+                # del augmented_data, predictions
+                # torch.cuda.empty_cache()
+
+        # Compute final averaged prediction
+        final_pred = running_sum / len(self.tta_transforms)
+        
+        return final_pred        
         
     def predict_on_gpu(self, 
                         runIDs: List[str],
@@ -93,10 +137,10 @@ class Predictor:
         with torch.no_grad():
             for data in tqdm(test_loader):
                 tomogram = data['image'].to(self.device)
-                data["pred"] = self._run_inference(tomogram)
-                data = [self.post_transforms(i) for i in decollate_batch(data)]
-                for b in data:
-                    predictions.append(b['pred'].squeeze(0).numpy(force=True)) 
+                if self.apply_tta: data['pred'] = self._run_inference_tta(tomogram)
+                else:              data['pred']  = self._run_inference(tomogram)
+                for idx in range(len(data['image'])):
+                    predictions.append(data['pred'][idx].squeeze(0).numpy(force=True)) 
 
         return predictions
 
@@ -138,6 +182,32 @@ class Predictor:
             gc.collect()  # Trigger garbage collection for CPU memory
 
         print('Predictions Complete!')
+
+    def create_tta_augmentations(self):
+        """Define TTA augmentations and inverse transforms."""
+
+        self.tta_transforms = [
+            lambda x: x,                 # Identity (no augmentation)
+            Flip(spatial_axis=0),         # Flip along x-axis (depth)
+            Flip(spatial_axis=1),         # Flip along y-axis (height)
+            Flip(spatial_axis=2),         # Flip along z-axis (width)
+            Flip(spatial_axis=(0, 1)),    # Flip along x and y axes
+            Flip(spatial_axis=(0, 2)),    # Flip along x and z axes
+            Flip(spatial_axis=(1, 2)),    # Flip along y and z axes
+            Flip(spatial_axis=(0, 1, 2)), # Flip along all three axes
+        ]
+
+        # Define inverse transformations (flip back to original orientation)
+        self.inverse_tta_transforms = [
+            lambda x: x,                 # Identity (no transformation needed)
+            Flip(spatial_axis=0),         # Undo Flip along x-axis
+            Flip(spatial_axis=1),         # Undo Flip along y-axis
+            Flip(spatial_axis=2),         # Undo Flip along z-axis
+            Flip(spatial_axis=(0, 1)),    # Undo Flip along x and y axes
+            Flip(spatial_axis=(0, 2)),    # Undo Flip along x and z axes
+            Flip(spatial_axis=(1, 2)),    # Undo Flip along y and z axes
+            Flip(spatial_axis=(0, 1, 2)), # Undo Flip along all three axes
+        ]
 
 ###################################################################################################################################################
 
