@@ -36,7 +36,7 @@ class myAttentionUnet:
         hidden_channels = [downsampling_channels[-1]] * hidden_layers
         channels = downsampling_channels + hidden_channels
         strides = [2] * (num_layers - 1) + [1] * hidden_layers
-        dropout = trial.suggest_float("dropout", 0.0, 0.5)
+        dropout = trial.suggest_float("dropout", 0.0, 0.2)
         
         config = {
             'architecture': 'AttentionUnet',

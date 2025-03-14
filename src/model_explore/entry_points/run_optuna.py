@@ -106,9 +106,11 @@ class ModelSearchSubmit:
         # Split datasets into training and validation
         self.data_generator.get_data_splits(
             trainRunIDs=self.trainRunIDs,
-            validateRunIDs=self.validateRunIDs
+            validateRunIDs=self.validateRunIDs,
+            train_ratio = 0.9, val_ratio = 0.1, test_ratio = 0.0,
+            create_test_dataset = False
         )
-
+        
         # Get the reload frequency
         self.data_generator.get_reload_frequency(self.num_epochs)
 

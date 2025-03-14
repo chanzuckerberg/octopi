@@ -54,8 +54,11 @@ def train_model(
             tomo_batch_size = tomo_batch_size ) 
     
     # Get the data splits
-    data_generator.get_data_splits(trainRunIDs = trainRunIDs,
-                                   validateRunIDs = validateRunIDs)
+    data_generator.get_data_splits(
+        trainRunIDs = trainRunIDs,
+        validateRunIDs = validateRunIDs,
+        train_ratio = 0.9, val_ratio = 0.1, test_ratio = 0.0,
+        create_test_dataset = False)
     
     # Get the reload frequency
     data_generator.get_reload_frequency(num_epochs)

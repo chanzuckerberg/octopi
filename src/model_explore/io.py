@@ -222,6 +222,17 @@ def get_copick_coordinates(run,                    # CoPick run object containin
 
 ##############################################################################################################################
 
+def adjust_to_multiple(value, multiple = 16):
+    return int((value // multiple) * multiple)
+
+def get_input_dimensions(dataset, crop_size: int):
+    nx = dataset[0]['image'].shape[1]
+    if crop_size > nx:
+        first_dim = adjust_to_multiple(nx/2)
+        return first_dim, crop_size, crop_size
+    else:
+        return crop_size, crop_size, crop_size
+
 def get_num_classes(copick_config_path: str):
 
     root = copick.from_file(copick_config_path)
@@ -282,7 +293,7 @@ def split_multiclass_dataset(runIDs,
                 testRunIDs.extend(test_items)
             else:
                 valRunIDs.extend(remaining)
-                testRunIDs = None
+                testRunIDs = []
     else:
         # If no categories, split as a 1D list
         trainRunIDs, remaining = train_test_split(runIDs, test_size=(1 - train_ratio), random_state=random_state)
@@ -294,7 +305,7 @@ def split_multiclass_dataset(runIDs,
             )
         else:
             valRunIDs = remaining
-            testRunIDs = None
+            testRunIDs = []
 
     return trainRunIDs, valRunIDs, testRunIDs    
 

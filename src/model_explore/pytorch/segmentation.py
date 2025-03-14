@@ -36,6 +36,7 @@ class Predictor:
 
         self.Nclass = model_config['model']['num_classes']     
         self.dim_in = model_config['model']['dim_in']
+        self.input_dim = None
         self.tomo_batch_size = tomo_batch_size
         
         # Get the number of GPUs available
@@ -100,7 +101,7 @@ class Predictor:
                 # Run inference
                 predictions = sliding_window_inference(
                     inputs=augmented_data,
-                    roi_size=(self.dim_in, self.dim_in, self.dim_in),
+                    roi_size=(self.dim_in[0], self.dim_in[1], self.dim_in[2]),
                     sw_batch_size=4,
                     predictor=self.model,
                     overlap=0.5,
@@ -112,10 +113,6 @@ class Predictor:
 
                 # Accumulate sum for running average
                 running_sum += predictions
-            
-                # # Free memory from previous iterations
-                # del augmented_data, predictions
-                # torch.cuda.empty_cache()
 
         # Compute final averaged prediction
         final_pred = running_sum / len(self.tta_transforms)
@@ -132,6 +129,10 @@ class Predictor:
                                                    voxel_spacing,
                                                    tomo_algorithm,
                                                    runIDs)
+        
+        # Determine Input Crop Size.
+        if self.input_dim is None:
+            self.input_dim = io.get_input_dimensions(test_loader, self.dim_in)
         
         predictions = []
         with torch.no_grad():
@@ -186,6 +187,7 @@ class Predictor:
     def create_tta_augmentations(self):
         """Define TTA augmentations and inverse transforms."""
 
+        # Instead of Flip lets rotate around the first axis 3 times (90,180,270)
         self.tta_transforms = [
             lambda x: x,                 # Identity (no augmentation)
             Flip(spatial_axis=0),         # Flip along x-axis (depth)

@@ -48,6 +48,11 @@ class MultiConfigTrainLoaderManager(TrainLoaderManager):
         # Initialize Run IDs placeholder
         self.myRunIDs = {}
 
+        # Initialize the input dimensions   
+        self.nx = None
+        self.ny = None
+        self.nz = None        
+
     def get_available_runIDs(self):
         """
         Identify and return a combined list of run IDs with available segmentations 
@@ -97,7 +102,8 @@ class MultiConfigTrainLoaderManager(TrainLoaderManager):
         return super().get_data_splits(trainRunIDs = runIDs, 
                                        train_ratio = train_ratio, 
                                        val_ratio = val_ratio, 
-                                       test_ratio = test_ratio)
+                                       test_ratio = test_ratio, 
+                                       create_test_dataset = create_test_dataset)
 
     def _initialize_train_iterators(self):
         """
@@ -158,10 +164,14 @@ class MultiConfigTrainLoaderManager(TrainLoaderManager):
             # Create the cached dataset with non-random transforms
             train_ds = CacheDataset(data=train_files, transform=augment.get_transforms(), cache_rate=1.0)
 
+            # I need to read (nx,ny,nz) and scale the crop size to make sure it isnt larger than nx.
+            if self.nx is None: (self.nx,self.ny,self.nz) = train_ds[0]['image'].shape[1:]
+            self.input_dim = io.get_input_dimensions(train_ds, my_crop_size)
+
             # Wrap the cached dataset to apply random transforms during iteration
             self.dynamic_train_dataset = dataset.DynamicDataset(
                 data=train_ds, 
-                transform=augment.get_random_transforms(my_crop_size, my_num_samples, self.Nclasses)
+                transform=augment.get_random_transforms(self.input_dim, my_num_samples, self.Nclasses)
             ) 
 
             self.train_loader = DataLoader(
@@ -187,13 +197,17 @@ class MultiConfigTrainLoaderManager(TrainLoaderManager):
             val_files  = self._load_data(validateRunIDs)    
 
             # Create validation dataset
-            val_ds = CacheDataset(data=val_files, transform=augment.get_transforms(), cache_rate=1.0)
+            val_ds = CacheDataset(data=val_files, transform=augment.get_transforms(), cache_rate=1.0)            
+
+            # # I need to read (nx,ny,nz) and scale the crop size to make sure it isnt larger than nx.
+            # if self.nx is None:
+            #     (self.nx,self.ny,self.nz) = val_ds[0]['image'].shape[1:]
+
+            # if crop_size > self.nx: self.input_dim = (self.nx, crop_size, crop_size)
+            # else:                   self.input_dim = (crop_size, crop_size, crop_size)
 
             # Wrap the cached dataset to apply random transforms during iteration
-            self.dynamic_validation_dataset = dataset.DynamicDataset(
-                data=val_ds, 
-                # transform=augment.get_validation_transforms(my_crop_size, my_num_samples, self.Nclasses) 
-            )
+            self.dynamic_validation_dataset = dataset.DynamicDataset( data=val_ds )
 
             # Create validation DataLoader
             self.val_loader  = DataLoader(

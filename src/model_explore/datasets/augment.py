@@ -24,25 +24,39 @@ def get_transforms():
         Orientationd(keys=["image", "label"], axcodes="RAS")
     ])
 
-def get_random_transforms( crop_size, num_samples, Nclasses):
+def get_random_transforms( input_dim, num_samples, Nclasses):
     """
+    Input:
+        input_dim: tuple of (nx, ny, nz)
+        num_samples: int
+        Nclasses: int
+
     Returns random transforms.
+    
+    For data with a missing wedge along the first axis (causing smearing in that direction),
+    we avoid rotations that would move this artifact to other axes. We only rotate around
+    the first axis (spatial_axes=[1, 2]) and avoid flipping along the first axis.
     """
     return Compose([
         RandCropByLabelClassesd(
             keys=["image", "label"],
             label_key="label",
-            spatial_size=[crop_size, crop_size, crop_size],
+            spatial_size=[input_dim[0], input_dim[1], input_dim[2]],     
             num_classes=Nclasses,
             num_samples=num_samples
         ),
+        # Only rotate around the first axis (keeping the missing wedge orientation consistent)
+        RandRotate90d(keys=["image", "label"], prob=0.5, spatial_axes=[1, 2], max_k=3),            
         RandomOrder([
-            RandRotate90d(keys=["image", "label"], prob=0.5, spatial_axes=[0, 2]),
-            RandFlipd(keys=["image", "label"], prob=0.5, spatial_axis=0),
-            RandScaleIntensityd(keys="image", prob=0.5, factors=(0.9, 1.1)),
-            RandShiftIntensityd(keys="image", prob=0.5, offsets=(-0.1, 0.1)),
-            RandAdjustContrastd(keys="image", prob=0.5, gamma=(0.9, 1.1)),
-            RandGaussianNoised(keys="image", prob=0.5, mean=0.0, std=0.1),
+            # Avoid flipping along the first axis (where the missing wedge is)
+            RandFlipd(keys=["image", "label"], prob=0.3, spatial_axis=0),  # Removed
+            RandFlipd(keys=["image", "label"], prob=0.3, spatial_axis=1),
+            RandFlipd(keys=["image", "label"], prob=0.3, spatial_axis=2),
+            # Intensity augmentations are still appropriate
+            RandScaleIntensityd(keys="image", prob=0.5, factors=(0.85, 1.15)),
+            RandShiftIntensityd(keys="image", prob=0.5, offsets=(-0.15, 0.15)),
+            RandAdjustContrastd(keys="image", prob=0.5, gamma=(0.85, 1.15)),
+            RandGaussianNoised(keys="image", prob=0.5, mean=0.0, std=0.5),  # Reduced noise std
         ]),
     ]) 
 
@@ -59,14 +73,6 @@ def get_random_transforms( crop_size, num_samples, Nclasses):
     #     prob=0.5,                      # Probability of applying the transform
     #     padding_mode="border"          # Handle out-of-bounds values
     # )    
-
-def get_validation_transforms( crop_size, num_samples, Nclasses):
-    """
-    Returns validation transforms for full volume inference.
-    Since the non-random transforms (e.g., EnsureChannelFirstd, NormalizeIntensityd, Orientationd)
-    are already applied in the caching transform, we don't need to crop the volume here.
-    """
-    return Compose([])  # No additional spatial cropping
 
 def get_predict_transforms():
     """

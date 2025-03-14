@@ -1,4 +1,3 @@
-
 from monai.transforms import AsDiscrete, Compose, Activationsd, AsDiscreted
 from model_explore import visualization_tools as viz
 from monai.inferers import sliding_window_inference
@@ -7,6 +6,8 @@ from typing import List, Optional
 import torch, os, mlflow, re
 from tqdm import tqdm 
 import numpy as np
+
+from ignite.handlers import EMAHandler
 
 # Not Ideal, but Necessary if Class is Missing From Dataset
 import warnings
@@ -34,6 +35,11 @@ class ModelTrainer:
         # Default F-Beta Value
         self.beta = 3
 
+        # Initialize EMAHandler for the model
+        self.ema_experiment = False
+        if self.ema_experiment:
+            self.ema_handler = EMAHandler(self.model)
+
     def set_parallel_mlflow(self, 
                             client,
                             trial_run_id):
@@ -57,6 +63,10 @@ class ModelTrainer:
             loss.backward()
             self.optimizer.step()
 
+            # Update EMA weights
+            if self.ema_experiment:
+                self.ema_handler.update()
+
             # Update running epoch loss
             epoch_loss += loss.item()
         
@@ -69,6 +79,10 @@ class ModelTrainer:
         Perform validation and compute metrics, including validation loss.
         """        
 
+        if self.ema_experiment:
+            self.ema_handler.apply_shadow()
+
+        # Set model to evaluation mode
         self.model.eval()
         val_loss = 0
         with torch.no_grad():
@@ -79,7 +93,7 @@ class ModelTrainer:
                 # Apply sliding window inference
                 val_outputs = sliding_window_inference(
                     inputs=val_inputs, 
-                    roi_size=(self.crop_size, self.crop_size, self.crop_size), 
+                    roi_size=self.input_dim, 
                     sw_batch_size=4,
                     predictor=self.model, 
                     overlap=0.5,
@@ -95,7 +109,11 @@ class ModelTrainer:
                 metric_val_labels = [self.post_label(i) for i in decollate_batch(val_labels)]                             
                 
                 # Compute metrics
-                self.metrics_function(y_pred=metric_val_outputs, y=metric_val_labels)                
+                self.metrics_function(y_pred=metric_val_outputs, y=metric_val_labels)             
+
+        # Restore original weights so training can continue
+        if self.ema_experiment:
+            self.ema_handler.restore()   
 
         # # Contains recall, precision, and f1 for each class
         metric_values = self.metrics_function.aggregate(reduction='mean_batch')
@@ -121,7 +139,6 @@ class ModelTrainer:
     ):
 
         # best lr scheduler options are cosine or reduce
-
         self.warmup_epochs = 5
         self.warmup_lr_factor = 0.1
         self.min_lr = 1e-7
@@ -148,7 +165,7 @@ class ModelTrainer:
         if re.match(pattern, best_metric) or best_metric in self.metric_names:
             self.beta = int(best_metric[5:])
             best_metric = 'avg_fbeta'
-            print(f'\nTracking {best_metric} as the best metric\n')
+            print(f'\nTracking {best_metric} = {self.beta} as the best metric\n')
         else:
             print(f'\n{best_metric} is not a valid metric! Tracking avg_f1 as the best metric\n')
             best_metric = 'avg_f1'
@@ -158,6 +175,7 @@ class ModelTrainer:
 
         # Produce Dataloaders for the First Training Iteration
         self.train_loader, self.val_loader = data_load_gen.create_train_dataloaders(crop_size=crop_size, num_samples=my_num_samples)
+        self.input_dim = data_load_gen.input_dim
 
         # Save the original learning rate
         original_lr = self.optimizer.param_groups[0]['lr']
@@ -209,14 +227,23 @@ class ModelTrainer:
                 if self.results[best_metric][-1][1] > self.results["best_metric"]:
                     self.results["best_metric"] = self.results[best_metric][-1][1]
                     self.results["best_metric_epoch"] = epoch + 1
+
+                    # apply shadow before saving (EMA)
+                    if self.ema_experiment:
+                        self.ema_handler.apply_shadow()
+
+                    # Read Model Weights and Save
                     self.model_weights = self.model.state_dict()
-                    if model_save_path is not None: 
-                        torch.save(self.model.state_dict(), os.path.join(model_save_path, "best_model.pth"))    
+                    if model_save_path is not None:
+                        torch.save(self.model.state_dict(), os.path.join(model_save_path, "best_model.pth"))
+                    
+                    # restore after saving (EMA)
+                    if self.ema_experiment:
+                        self.ema_handler.restore()
 
                 # Save plot if Local Training Call
                 if not self.use_mlflow:
                     viz.plot_training_results(self.results, save_plot=os.path.join(model_save_path, "net_train_history.png"))
-                    # self.plot_results(save_plot=os.path.join(model_save_path, "net_train_history.png"))
 
             # Run the learning rate scheduler
             early_stop = self.run_scheduler(data_load_gen, original_lr, epoch, val_interval, lr_scheduler_type)

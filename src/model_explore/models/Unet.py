@@ -31,7 +31,7 @@ class myUNet:
         hidden_layers = trial.suggest_int("hidden_layers", 1, 3)
         base_channel = trial.suggest_categorical("base_channel", [8, 16, 32])
         num_res_units = trial.suggest_int("num_res_units", 1, 3)
-        dropout = trial.suggest_float("dropout", 0.0, 0.5)
+        dropout = trial.suggest_float("dropout", 0.0, 0.3)
         
         # Create channel sizes and strides
         downsampling_channels = [base_channel * (2 ** i) for i in range(num_layers)]

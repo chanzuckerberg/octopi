@@ -57,7 +57,7 @@ class BayesianModelSearch:
 
     def _define_optimizer(self):
         # Define optimizer
-        self.optimizer = torch.optim.Adam(self.model.parameters(), lr=5e-4)
+        self.optimizer = torch.optim.Adam(self.model.parameters(), lr=1e-3, weight_decay=1e-5)
 
     def _train_model(self, trial, model_trainer, epochs, val_interval, crop_size, num_samples, best_metric):
         """Handles model training and error handling."""
@@ -108,7 +108,7 @@ class BayesianModelSearch:
             score = self._train_model(
                 trial, model_trainer, epochs, val_interval, 
                 self.sampling['crop_size'], self.sampling['num_samples'], 
-                best_metric)
+                best_metric)               
 
             # Log parameters and metrics
             params = {
@@ -119,7 +119,7 @@ class BayesianModelSearch:
 
             # Explicitly set the parent run ID
             mlflow.log_param("parent_run_id", self.parent_run_id)
-            mlflow.log_param("parent_run_name", self.parent_run_name)            
+            mlflow.log_param("parent_run_name", self.parent_run_name)         
 
             # Save best model
             self._save_best_model(trial, model_trainer, score)
@@ -206,9 +206,21 @@ class BayesianModelSearch:
 
     def cleanup(self, model_trainer, optimizer):
         """Handles cleanup of resources."""
-        model_trainer = None
-        optimizer = None
-        device = None
+
+        # Delete the trainer and optimizer objects
+        del model_trainer, optimizer
+
+        # If the model object holds GPU memory, delete it explicitly and set it to None
+        if hasattr(self, "model"):
+            del self.model
+            self.model = None
+
+        # Optional: If your model_builder or other objects hold GPU references, delete them too
+        if hasattr(self, "model_builder"):
+            del self.model_builder
+            self.model_builder = None
+
+        # Clear the CUDA cache and force garbage collection
         torch.cuda.empty_cache()
         gc.collect()
 
