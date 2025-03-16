@@ -125,14 +125,14 @@ class Predictor:
                         tomo_algorithm: str ):
 
         # Load data for the current batch
-        test_loader = io.create_predict_dataloader(self.root,
-                                                   voxel_spacing,
-                                                   tomo_algorithm,
-                                                   runIDs)
+        test_loader, test_dataset = io.create_predict_dataloader(
+            self.root,
+            voxel_spacing, tomo_algorithm,
+            runIDs)
         
         # Determine Input Crop Size.
         if self.input_dim is None:
-            self.input_dim = io.get_input_dimensions(test_loader, self.dim_in)
+            self.input_dim = io.get_input_dimensions(test_dataset, self.dim_in)
         
         predictions = []
         with torch.no_grad():

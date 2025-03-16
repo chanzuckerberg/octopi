@@ -80,7 +80,7 @@ def create_predict_dataloader(
                             shuffle=False, 
                             num_workers=4, 
                             pin_memory=torch.cuda.is_available())
-    return test_loader
+    return test_loader, test_ds
 
 ##############################################################################################################################
 
