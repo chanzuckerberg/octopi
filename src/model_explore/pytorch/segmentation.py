@@ -1,14 +1,9 @@
 from monai.inferers import sliding_window_inference
 from monai.data import decollate_batch
 from torch.multiprocessing import Pool
-from monai.networks.nets import UNet
 from monai.data import MetaTensor
 from monai.transforms import (
-    Compose, Activationsd, 
-    apply_transform,
-    Flip, Rotate,
-    AsDiscreted,
-    AsDiscrete, Activations
+    Compose, AsDiscrete, Activations
 )
 import torch, copick, gc, os
 from model_explore.models import common
@@ -189,26 +184,24 @@ class Predictor:
 
         # Instead of Flip lets rotate around the first axis 3 times (90,180,270)
         self.tta_transforms = [
-            lambda x: x,                 # Identity (no augmentation)
-            Flip(spatial_axis=0),         # Flip along x-axis (depth)
-            Flip(spatial_axis=1),         # Flip along y-axis (height)
-            Flip(spatial_axis=2),         # Flip along z-axis (width)
-            Flip(spatial_axis=(0, 1)),    # Flip along x and y axes
-            Flip(spatial_axis=(0, 2)),    # Flip along x and z axes
-            Flip(spatial_axis=(1, 2)),    # Flip along y and z axes
-            Flip(spatial_axis=(0, 1, 2)), # Flip along all three axes
+            lambda x: x,                    # Identity (no augmentation)
+            lambda x: torch.rot90(x, k=1, dims=(1, 2)),  # 90° rotation
+            lambda x: torch.rot90(x, k=2, dims=(1, 2)),  # 180° rotation
+            lambda x: torch.rot90(x, k=3, dims=(1, 2)),  # 270° rotation
+            # Flip(spatial_axis=0),         # Flip along x-axis (depth)
+            # Flip(spatial_axis=1),         # Flip along y-axis (height)
+            # Flip(spatial_axis=2),         # Flip along z-axis (width)
         ]
 
         # Define inverse transformations (flip back to original orientation)
         self.inverse_tta_transforms = [
-            lambda x: x,                 # Identity (no transformation needed)
-            Flip(spatial_axis=0),         # Undo Flip along x-axis
-            Flip(spatial_axis=1),         # Undo Flip along y-axis
-            Flip(spatial_axis=2),         # Undo Flip along z-axis
-            Flip(spatial_axis=(0, 1)),    # Undo Flip along x and y axes
-            Flip(spatial_axis=(0, 2)),    # Undo Flip along x and z axes
-            Flip(spatial_axis=(1, 2)),    # Undo Flip along y and z axes
-            Flip(spatial_axis=(0, 1, 2)), # Undo Flip along all three axes
+            lambda x: x,                           # Identity (no transformation needed)
+            lambda x: torch.rot90(x, k=-1, dims=(1, 2)),  # Inverse of 90° (i.e. -90°)
+            lambda x: torch.rot90(x, k=-2, dims=(1, 2)),  # Inverse of 180° (i.e. -180°)
+            lambda x: torch.rot90(x, k=-3, dims=(1, 2)),  # Inverse of 270° (i.e. -270°)
+            # Flip(spatial_axis=0),         # Undo Flip along x-axis
+            # Flip(spatial_axis=1),         # Undo Flip along y-axis
+            # Flip(spatial_axis=2),         # Undo Flip along z-axis
         ]
 
 ###################################################################################################################################################
