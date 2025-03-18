@@ -19,7 +19,7 @@ class Predictor:
                  config: str,
                  model_config: str,
                  model_weights: str,
-                 apply_tta: bool = False,
+                 apply_tta: bool = True,
                  tomo_batch_size: int = 48,
                  device: Optional[str] = None):
 
@@ -59,15 +59,20 @@ class Predictor:
         self.model.to(self.device)
         self.model.eval()
 
-        # Define the post-processing transforms
-        self.post_transforms = Compose([
-            Activations(softmax=True),
-            AsDiscrete(argmax=True)
-        ])    
-
        # Initialize TTA if enabled
         self.apply_tta = apply_tta
-        if self.apply_tta: self.create_tta_augmentations() 
+        if self.apply_tta: 
+            self.create_tta_augmentations() 
+            self.post_transforms = Compose([
+                Activations(softmax=True)  # Keep probability output
+            ])
+        else:
+            # Define the post-processing transforms
+            self.post_transforms = Compose([
+                Activations(softmax=True),
+                AsDiscrete(argmax=True)
+            ])
+            
         
     def _run_inference(self, input):
         """Apply sliding window inference to the input."""
@@ -85,7 +90,11 @@ class Predictor:
         """Apply test-time augmentation (TTA) with sliding window inference using a running average to minimize memory usage."""
         
         # Initialize running sum of predictions
-        running_sum = torch.zeros_like(input_data, dtype=torch.float32, device=self.device)
+        # running_sum = torch.zeros_like(input_data, dtype=torch.float32, device=self.device)
+        running_sum = torch.zeros(
+            (input_data.shape[0], self.Nclass, *input_data.shape[2:]), 
+            dtype=torch.float32, device=self.device
+        )
         
         with torch.no_grad():
             for tta_transform, inverse_transform in zip(self.tta_transforms, self.inverse_tta_transforms):
@@ -96,7 +105,7 @@ class Predictor:
                 # Run inference
                 predictions = sliding_window_inference(
                     inputs=augmented_data,
-                    roi_size=(self.dim_in[0], self.dim_in[1], self.dim_in[2]),
+                    roi_size=(self.dim_in, self.dim_in, self.dim_in),
                     sw_batch_size=4,
                     predictor=self.model,
                     overlap=0.5,
@@ -110,9 +119,16 @@ class Predictor:
                 running_sum += predictions
 
         # Compute final averaged prediction
-        final_pred = running_sum / len(self.tta_transforms)
+        running_sum = running_sum / len(self.tta_transforms)
         
-        return final_pred        
+        # Convert probabilities to final predictions (argmax here, after averaging)
+        running_sum = torch.argmax(running_sum, dim=1)
+        
+        # Free memory
+        del predictions 
+        torch.cuda.empty_cache()
+        
+        return running_sum
         
     def predict_on_gpu(self, 
                         runIDs: List[str],
