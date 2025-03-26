@@ -1,13 +1,11 @@
-from monai.transforms import AsDiscrete, Compose, Activationsd, AsDiscreted
 from model_explore import visualization_tools as viz
 from monai.inferers import sliding_window_inference
+from monai.transforms import AsDiscrete
 from monai.data import decollate_batch
-from typing import List, Optional
 import torch, os, mlflow, re
+import torch_ema as ema
 from tqdm import tqdm 
 import numpy as np
-
-from ignite.handlers import EMAHandler
 
 # Not Ideal, but Necessary if Class is Missing From Dataset
 import warnings
@@ -20,7 +18,8 @@ class ModelTrainer:
                  device,
                  loss_function, 
                  metrics_function, 
-                 optimizer):
+                 optimizer, 
+                 use_ema: bool = True):
 
         self.model = model
         self.device = device
@@ -36,9 +35,9 @@ class ModelTrainer:
         self.beta = 3
 
         # Initialize EMAHandler for the model
-        self.ema_experiment = False
+        self.ema_experiment = use_ema
         if self.ema_experiment:
-            self.ema_handler = EMAHandler(self.model)
+            self.ema_handler = ema.ExponentialMovingAverage(self.model.parameters(), decay=0.99)
 
     def set_parallel_mlflow(self, 
                             client,
@@ -79,9 +78,6 @@ class ModelTrainer:
         Perform validation and compute metrics, including validation loss.
         """        
 
-        if self.ema_experiment:
-            self.ema_handler.apply_shadow()
-
         # Set model to evaluation mode
         self.model.eval()
         val_loss = 0
@@ -110,10 +106,6 @@ class ModelTrainer:
                 
                 # Compute metrics
                 self.metrics_function(y_pred=metric_val_outputs, y=metric_val_labels)             
-
-        # Restore original weights so training can continue
-        if self.ema_experiment:
-            self.ema_handler.restore()   
 
         # # Contains recall, precision, and f1 for each class
         metric_values = self.metrics_function.aggregate(reduction='mean_batch')
@@ -208,7 +200,12 @@ class ModelTrainer:
                 if verbose:
                     tqdm.write(f"Epoch {epoch + 1}/{max_epochs}, avg_train_loss: {epoch_loss:.4f}")
 
-                metric_values = self.validate_update()
+                # Validate the Model with or without EMA
+                if self.ema_experiment:
+                    with self.ema_handler.average_parameters():
+                        metric_values = self.validate_update()
+                else:
+                    metric_values = self.validate_update()
 
                 # Log all metrics
                 self.my_log_metrics( metrics_dict=metric_values, curr_step=epoch + 1 )
@@ -228,18 +225,12 @@ class ModelTrainer:
                     self.results["best_metric"] = self.results[best_metric][-1][1]
                     self.results["best_metric_epoch"] = epoch + 1
 
-                    # apply shadow before saving (EMA)
-                    if self.ema_experiment:
-                        self.ema_handler.apply_shadow()
-
                     # Read Model Weights and Save
-                    self.model_weights = self.model.state_dict()
-                    if model_save_path is not None:
-                        torch.save(self.model.state_dict(), os.path.join(model_save_path, "best_model.pth"))
-                    
-                    # restore after saving (EMA)
                     if self.ema_experiment:
-                        self.ema_handler.restore()
+                        with self.ema_handler.average_parameters():
+                            self.save_model(model_save_path)
+                    else:
+                        self.save_model(model_save_path)
 
                 # Save plot if Local Training Call
                 if not self.use_mlflow:
@@ -312,31 +303,7 @@ class ModelTrainer:
             return True  # Indicate early stopping
 
         return False  # Continue training
-
-        # # Apply warm-up learning rate if within warm-up period
-        # if (epoch + 1) % data_load_gen.reload_frequency < self.warmup_epochs:
-        #     if isinstance(self.lr_scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau):
-        #         # No scheduler step during warm-up for ReduceLROnPlateau
-        #         return
-        # else:
-        #     # Restore original learning rate after warm-up
-        #     for param_group in self.optimizer.param_groups:
-        #         param_group['lr'] = original_lr
-
-        #     # Step the scheduler
-        #     if isinstance(self.lr_scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau) and (epoch + 1) % val_interval == 0:
-        #         metric_value = self.results['val_loss'][-1][1]
-        #         self.lr_scheduler.step(metric_value)  # Step with validation loss
-        #     else:
-        #         self.lr_scheduler.step()  # Step for other schedulers
-
-        # # Check learning rate for early stopping
-        # current_lr = self.optimizer.param_groups[0]['lr']
-        # if current_lr < self.min_lr and type != 'onecycle':
-        #     print(f"Early stopping triggered at epoch {epoch + 1} as learning rate fell below {self.min_lr}.")
-        #     return True  # Indicate early stopping
-        # return False # Continue training
-
+    
     def check_for_early_stopping(self, epoch_loss: float):
         # Check for NaN in the loss
         if np.isnan(epoch_loss):
@@ -346,6 +313,15 @@ class ModelTrainer:
         else:
             self.nan_counter = 0  # Reset the counter if loss is valid
             return False
+        
+    def save_model(self, model_save_path: str):
+
+        # Store Model Weights as Member Variable
+        self.model_weights = self.model.state_dict()
+
+        # Save Model Weights to *.pth file
+        if model_save_path is not None:
+            torch.save(self.model_weights, os.path.join(model_save_path, "best_model.pth"))
 
     def create_results_dictionary(self, Nclass: int):
 
@@ -426,16 +402,10 @@ class ModelTrainer:
         params_dict: dict, 
         ):
 
-        # self.results["params"] = params_dict
-
-        # if self.client is not None and self.trial_run_id is not None:
-        #     self.client.log_params(run_id=self.trial_run_id, params=params_dict)
-        # elif self.use_mlflow:
-        #     mlflow.log_params(params_dict)
         if self.client is not None and self.trial_run_id is not None:
             for key, value in params_dict.items():
                 self.client.log_param(run_id=self.trial_run_id, key=key, value=value)
         else:
-            mlflow.log_params(params_dict)                 
-    
+            mlflow.log_params(params_dict)  
+
     
