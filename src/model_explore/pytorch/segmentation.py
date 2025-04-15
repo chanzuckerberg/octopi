@@ -63,9 +63,15 @@ class Predictor:
         self.apply_tta = apply_tta
         if self.apply_tta: 
             self.create_tta_augmentations() 
-            self.post_transforms = Compose([
+            # self.post_transforms = Compose([
+            #     Activations(softmax=True)  # Keep probability output
+            # ])
+            self.softmax_transform = Compose([
                 Activations(softmax=True)  # Keep probability output
             ])
+            
+            # Create the final discretization transform
+            self.discretize_transform = AsDiscrete(argmax=True)
         else:
             # Define the post-processing transforms
             self.post_transforms = Compose([
@@ -87,48 +93,68 @@ class Predictor:
             return [self.post_transforms(i) for i in decollate_batch(predictions)]
 
     def _run_inference_tta(self, input_data):
-        """Apply test-time augmentation (TTA) with sliding window inference using a running average to minimize memory usage."""
+        """Memory-efficient TTA implementation that returns proper discrete segmentation maps."""
         
-        # Initialize running sum of predictions
-        # running_sum = torch.zeros_like(input_data, dtype=torch.float32, device=self.device)
-        running_sum = torch.zeros(
-            (input_data.shape[0], self.Nclass, *input_data.shape[2:]), 
-            dtype=torch.float32, device=self.device
-        )
+        batch_size = input_data.shape[0]
+        results = []
         
-        with torch.no_grad():
-            for tta_transform, inverse_transform in zip(self.tta_transforms, self.inverse_tta_transforms):
-                
-                # Apply transform to each instance separately
-                augmented_data = torch.stack([tta_transform(img) for img in input_data]) 
-
-                # Run inference
-                predictions = sliding_window_inference(
-                    inputs=augmented_data,
-                    roi_size=(self.dim_in, self.dim_in, self.dim_in),
-                    sw_batch_size=4,
-                    predictor=self.model,
-                    overlap=0.5,
-                )
-
-                # Apply inverse transform instance-wise
-                predictions = [inverse_transform(MetaTensor(self.post_transforms(i))) for i in decollate_batch(predictions)]
-                predictions = torch.stack(predictions)
-
-                # Accumulate sum for running average
-                running_sum += predictions
-
-        # Compute final averaged prediction
-        running_sum = running_sum / len(self.tta_transforms)
+        # Process one sample at a time
+        for sample_idx in range(batch_size):
+            # Extract single sample
+            single_sample = input_data[sample_idx:sample_idx+1]
+            
+            # Initialize probability accumulator for this sample
+            # Shape: [1, Nclass, Z, Y, X]
+            acc_probs = torch.zeros(
+                (1, self.Nclass, *single_sample.shape[2:]), 
+                dtype=torch.float32, device=self.device
+            )
+            
+            # Process each augmentation
+            with torch.no_grad():
+                for tta_transform, inverse_transform in zip(self.tta_transforms, self.inverse_tta_transforms):
+                    # Apply transform to single sample
+                    aug_sample = tta_transform(single_sample)
+                    
+                    # Free memory
+                    torch.cuda.empty_cache()
+                    
+                    # Run inference (one sample at a time)
+                    predictions = sliding_window_inference(
+                        inputs=aug_sample,
+                        roi_size=(self.dim_in, self.dim_in, self.dim_in),
+                        sw_batch_size=4,  # Process one window at a time
+                        predictor=self.model,
+                        overlap=0.5,
+                    )
+                    
+                    # Get softmax probabilities
+                    probs = self.softmax_transform(predictions[0])  # Get first (only) item
+                    
+                    # Apply inverse transform with correct dimensions
+                    inv_probs = inverse_transform(probs)
+                    
+                    # Accumulate probabilities
+                    acc_probs[0] += inv_probs
+                    
+                    # Clear memory
+                    del predictions, probs, inv_probs, aug_sample
+            
+            # Average accumulated probabilities
+            acc_probs = acc_probs / len(self.tta_transforms)
+            
+            # Convert to discrete prediction - get argmax along class dimension
+            # This gives us a tensor of shape [1, Z, Y, X] with discrete class indices
+            discrete_pred = torch.argmax(acc_probs, dim=1)
+            
+            # Add to results - keeping only the spatial dimensions [Z, Y, X]
+            results.append(discrete_pred[0])
+            
+            # Clear memory
+            del acc_probs, discrete_pred
+            torch.cuda.empty_cache()
         
-        # Convert probabilities to final predictions (argmax here, after averaging)
-        running_sum = torch.argmax(running_sum, dim=1)
-        
-        # Free memory
-        del predictions 
-        torch.cuda.empty_cache()
-        
-        return running_sum
+        return results
         
     def predict_on_gpu(self, 
                         runIDs: List[str],
@@ -184,7 +210,6 @@ class Predictor:
             for ind in range(len(batch_ids)):
                 run = self.root.get_run(batch_ids[ind])
                 seg = predictions[ind]
-                
                 write.segmentation(run, seg, segmentation_user_id, segmentation_name, 
                                    segmentation_session_id, voxel_spacing)
 
@@ -201,9 +226,9 @@ class Predictor:
         # Instead of Flip lets rotate around the first axis 3 times (90,180,270)
         self.tta_transforms = [
             lambda x: x,                    # Identity (no augmentation)
-            lambda x: torch.rot90(x, k=1, dims=(1, 2)),  # 90° rotation
-            lambda x: torch.rot90(x, k=2, dims=(1, 2)),  # 180° rotation
-            lambda x: torch.rot90(x, k=3, dims=(1, 2)),  # 270° rotation
+            lambda x: torch.rot90(x, k=1, dims=(3, 4)),  # 90° rotation
+            lambda x: torch.rot90(x, k=2, dims=(3, 4)),  # 180° rotation
+            lambda x: torch.rot90(x, k=3, dims=(3, 4)),  # 270° rotation
             # Flip(spatial_axis=0),         # Flip along x-axis (depth)
             # Flip(spatial_axis=1),         # Flip along y-axis (height)
             # Flip(spatial_axis=2),         # Flip along z-axis (width)
@@ -212,9 +237,9 @@ class Predictor:
         # Define inverse transformations (flip back to original orientation)
         self.inverse_tta_transforms = [
             lambda x: x,                           # Identity (no transformation needed)
-            lambda x: torch.rot90(x, k=-1, dims=(1, 2)),  # Inverse of 90° (i.e. -90°)
-            lambda x: torch.rot90(x, k=-2, dims=(1, 2)),  # Inverse of 180° (i.e. -180°)
-            lambda x: torch.rot90(x, k=-3, dims=(1, 2)),  # Inverse of 270° (i.e. -270°)
+            lambda x: torch.rot90(x, k=-1, dims=(2, 3)),  # Inverse of 90° (i.e. -90°)
+            lambda x: torch.rot90(x, k=-2, dims=(2, 3)),  # Inverse of 180° (i.e. -180°)
+            lambda x: torch.rot90(x, k=-3, dims=(2, 3)),  # Inverse of 270° (i.e. -270°)
             # Flip(spatial_axis=0),         # Undo Flip along x-axis
             # Flip(spatial_axis=1),         # Undo Flip along y-axis
             # Flip(spatial_axis=2),         # Undo Flip along z-axis

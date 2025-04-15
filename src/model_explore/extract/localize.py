@@ -16,7 +16,7 @@ def processs_localization(run,
                           seg_info: Tuple[str, str, str],
                           method: str = 'com', 
                           voxel_size: float = 10,
-                          filter_size: float = None,
+                          filter_size: int = None,
                           radius_min_scale: float = 0.5, 
                           radius_max_scale: float = 1.5,
                           pick_session_id: str = '1',
@@ -33,6 +33,9 @@ def processs_localization(run,
                                     user_id=seg_info[1], 
                                     session_id=seg_info[2],
                                     raise_error=False)
+
+    # Preprocess Segmentation
+    seg = preprocess_segmentation(seg, voxel_size, objects)
 
     # If No Segmentation is Found, Return
     if seg is None:
@@ -125,7 +128,25 @@ def extract_particle_centroids_via_watershed(
     all_centroids = []
     for region in regionprops(watershed_labels):
         if min_particle_size <= region.area <= max_particle_size:
-            all_centroids.append(region.centroid)
+            # Option 1: Use all centroids
+            # all_centroids.append(region.centroid)
+
+            # Option 2: Use only elongated and dense particles
+            add_centroid = True
+            
+            # Check circularity if possible
+            if hasattr(region, 'major_axis_length') and region.major_axis_length > 0:
+                circularity = region.minor_axis_length / region.major_axis_length
+                if circularity < 0.5:  # Filters elongated objects
+                    add_centroid = False
+                    
+            # Check solidity if possible
+            if hasattr(region, 'solidity'):
+                if region.solidity < 0.7:  # Filters hollow objects
+                    add_centroid = False
+            
+            if add_centroid:
+                all_centroids.append(region.centroid)
 
     return all_centroids
 
@@ -187,3 +208,60 @@ def remove_repeated_picks(coordinates, distanceThreshold, pixelSize = 1):
         unique_coordinates[i-1] = np.mean(coordinates[clusters == i], axis=0)
 
     return unique_coordinates
+
+def preprocess_segmentation(segmentation, voxel_size, particle_info):
+    """
+    Remove tiny fragments that aren't real particles
+    
+    Args:
+        segmentation (np.ndarray): The multilabel segmentation array
+        particle_info (list): List of tuples containing (name, segment_id, radius)
+        
+    Returns:
+        np.ndarray: Processed segmentation with small fragments removed
+    """
+    import numpy as np
+    from skimage.morphology import remove_small_objects
+    
+    processed_seg = segmentation.copy()
+    
+    # Map segment IDs to particle types and their minimum sizes
+    segment_to_info = {}
+    for name, segment_id, radius in particle_info:
+        # # For small particles, use a larger minimum size
+        # if radius < 135:
+        #     scale = 0.65
+        # # Normal threshold for other particles
+        # else:
+        #     scale = 0.4
+        scale = 0.5
+        radius = radius / voxel_size
+        min_size = (4/3) * np.pi * ((radius * 0.5) ** 3)
+        
+        segment_to_info[segment_id] = {
+            'name': name,
+            'min_size': min_size
+        }
+    
+    # Get unique labels
+    unique_labels = np.unique(segmentation)
+    unique_labels = unique_labels[unique_labels > 0]  # Skip background
+    
+    # Process each label
+    for label in unique_labels:
+        if label not in segment_to_info:
+            continue
+            
+        # Create binary mask for this label
+        mask = segmentation == label
+        
+        # Get minimum size for this particle type
+        min_size = segment_to_info[label]['min_size']
+        
+        # Remove small objects
+        cleaned_mask = remove_small_objects(mask, min_size=min_size * scale)
+        
+        # Update segmentation
+        processed_seg[mask & ~cleaned_mask] = 0
+    
+    return processed_seg
