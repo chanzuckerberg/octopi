@@ -1,5 +1,6 @@
 from model_explore import visualization_tools as viz
 from monai.inferers import sliding_window_inference
+from model_explore import stopping_criteria
 from monai.transforms import AsDiscrete
 from monai.data import decollate_batch
 import torch, os, mlflow, re
@@ -55,9 +56,9 @@ class ModelTrainer:
         for batch_data in self.train_loader:
             step += 1
             inputs = batch_data["image"].to(self.device)  # Shape: [B, C, H, W, D]
-            labels = batch_data["label"].to(self.device)  # Shape: [B, C, H, W, D]            
+            labels = batch_data["label"].to(self.device)  # Shape: [B, C, H, W, D]
             self.optimizer.zero_grad()
-            outputs = self.model(inputs)    # Output shape: [B, num_classes, H, W, D]          
+            outputs = self.model(inputs)    # Output shape: [B, num_classes, H, W, D] 
             loss = self.loss_function(outputs, labels)
             loss.backward()
             self.optimizer.step()
@@ -134,7 +135,7 @@ class ModelTrainer:
         # best lr scheduler options are cosine or reduce
         self.warmup_epochs = 5
         self.warmup_lr_factor = 0.1
-        self.min_lr = 1e-7
+        self.min_lr = 1e-6
 
         self.max_epochs = max_epochs
         self.crop_size = crop_size
@@ -142,9 +143,12 @@ class ModelTrainer:
         self.val_interval = val_interval
         self.use_mlflow = use_mlflow
 
-        # Early Stopping Parameters
-        self.nan_counter = 0
-        self.max_nan_epochs = 10
+        # # Early Stopping Parameters
+        # self.nan_counter = 0
+        # self.max_nan_epochs = 10
+
+        # Stopping Criteria
+        self.stopping_criteria = stopping_criteria.EarlyStoppingChecker(monitor_metric=best_metric, val_interval=val_interval)
 
         # Create Save Folder if It Doesn't Exist
         if model_save_path is not None:
@@ -188,8 +192,8 @@ class ModelTrainer:
             epoch_loss = self.train_update()
 
             # Check for NaN in the loss
-            if self.check_for_early_stopping(epoch_loss):
-                tqdm.write(f"Training stopped early due to NaN values in loss for more than {self.max_nan_epochs} epochs.")
+            if self.stopping_criteria.should_stop_training(epoch_loss):
+                tqdm.write(f"Training stopped early due to {self.stopping_criteria.get_stopped_reason()}")
                 break
 
             current_lr = self.optimizer.param_groups[0]['lr']
@@ -237,6 +241,11 @@ class ModelTrainer:
                 if not self.use_mlflow:
                     viz.plot_training_results(self.results, save_plot=os.path.join(model_save_path, "net_train_history.png"))
 
+                # After Validation Metrics are Logged, Check for Early Stopping
+                if self.stopping_criteria.should_stop_training(epoch_loss, results=self.results, check_metrics=True):
+                    tqdm.write(f"Training stopped early due to {self.stopping_criteria.get_stopped_reason()}")
+                    break
+
             # Run the learning rate scheduler
             early_stop = self.run_scheduler(data_load_gen, original_lr, epoch, val_interval, lr_scheduler_type)
             if early_stop:
@@ -250,9 +259,8 @@ class ModelTrainer:
         """
         # Configure learning rate scheduler based on the type
         if type == "cosine":
-            eta_min = 1e-6
             self.lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
-                self.optimizer, T_max=self.max_epochs, eta_min=eta_min )
+                self.optimizer, T_max=self.max_epochs, eta_min=self.min_lr )
         elif type == "onecyle":
             max_lr = 1e-3
             steps_per_epoch = len(self.train_loader)
@@ -305,15 +313,16 @@ class ModelTrainer:
 
         return False  # Continue training
     
-    def check_for_early_stopping(self, epoch_loss: float):
-        # Check for NaN in the loss
-        if np.isnan(epoch_loss):
-            self.nan_counter += 1
-            if self.nan_counter > self.max_nan_epochs:
-                return True
-        else:
-            self.nan_counter = 0  # Reset the counter if loss is valid
-            return False
+    # def check_for_early_stopping(self, epoch_loss: float):
+    #     # # Check for NaN in the loss
+    #     # if np.isnan(epoch_loss):
+    #     #     self.nan_counter += 1
+    #     #     if self.nan_counter > self.max_nan_epochs:
+    #     #         return True
+    #     # else:
+    #     #     self.nan_counter = 0  # Reset the counter if loss is valid
+    #     #     return False
+    #     return stopping_criteria.check_for_nan(self.results, self.nan_counter, self.max_nan_epochs)
         
     def save_model(self, model_save_path: str):
 
