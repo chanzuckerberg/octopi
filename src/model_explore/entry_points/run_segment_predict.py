@@ -1,20 +1,16 @@
 from model_explore.pytorch import segmentation
 from model_explore.entry_points import common
-import torch, argparse, json, pprint
+import torch, argparse, json, pprint, yaml, os
+from model_explore import utils
 from typing import List, Tuple
 
 def inference(
     copick_config_path: str,
     model_weights: str, 
-    model_type: str,
+    model_config: str,
     seg_info: Tuple[str,str,str],
     voxel_size: float,
     tomo_algorithm: str,
-    channels: List[int],
-    strides: List[int],
-    res_units: int,
-    dim_in: int,
-    nclass: int,    
     tomo_batch_size: int,
     run_ids: List[str],
     ):
@@ -42,13 +38,8 @@ def inference(
         print("Using Multi-GPU Predictor.")
         predict = segmentation.MultiGPUPredictor(
             copick_config_path,
-            model_weights,
-            model_type=model_type,
-            my_channels=channels,
-            my_strides=strides,
-            my_num_res_units=res_units,
-            my_nclass=nclass,
-            dim_in=dim_in
+            model_config,
+            model_weights
         )
 
         # Run Multi-GPU inference
@@ -66,13 +57,8 @@ def inference(
         print("Using Single-GPU Predictor.")
         predict = segmentation.Predictor(
             copick_config_path,
+            model_config,
             model_weights,
-            model_type=model_type,
-            my_channels=channels,
-            my_strides=strides,
-            my_num_res_units=res_units,
-            my_nclass=nclass,
-            dim_in=dim_in
         )
 
         # Run batch prediction
@@ -98,15 +84,16 @@ def inference_parser(parser_description, add_slurm: bool = False):
     )
     input_group = parser.add_argument_group("Input Arguments")
     common.add_config(input_group, single_config=True)
+
     model_group = parser.add_argument_group("Model Arguments")
-    common.add_model_parameters(model_group)
+    common.inference_model_parameters(model_group)
 
     inference_group = parser.add_argument_group("Inference Arguments")
     common.add_inference_parameters(inference_group)
 
     if add_slurm:
         slurm_group = parser.add_argument_group("SLURM Arguments")
-        common.add_slurm_parameters(slurm_group, 'segment_predict')
+        common.add_slurm_parameters(slurm_group, 'segment_predict', gpus = 2)
 
     args = parser.parse_args()
     return args
@@ -122,42 +109,42 @@ def cli():
     args = inference_parser(parser_description)
 
     # Set default values if not provided
+    args.seg_info = list(args.seg_info)  # Convert tuple to list
     if args.seg_info[1] is None:
-        args.seg_info[1] = "monai"
+        args.seg_info[1] = "DeepFindET"
 
     if args.seg_info[2] is None:
         args.seg_info[2] = "1"
 
     # Save JSON with Parameters
-    output_json = f'segment-predict_{args.seg_info[1]}_{args.seg_info[2]}_{args.seg_info[0]}.json'
-    save_parameters_json(args, output_json)
+    output_json = f'segment-predict_{args.seg_info[1]}_{args.seg_info[2]}_{args.seg_info[0]}.yaml'
+    save_parameters(args, output_json)
 
     # Call the inference function with parsed arguments
     inference(
         copick_config_path=args.config,
         model_weights=args.model_weights,
-        model_type=args.model_type,
-        channels=args.channels,
-        strides=args.strides,
-        res_units=args.res_units,
-        nclass=args.Nclass,
-        dim_in=args.dim_in,
-        voxel_size=args.voxel_size,
-        tomo_algorithm=args.tomogram_algorithm,
+        model_config=args.model_config,
         seg_info=args.seg_info,
+        voxel_size=args.voxel_size,
+        tomo_algorithm=args.tomo_algorithm,
         tomo_batch_size=args.tomo_batch_size,
         run_ids=args.run_ids,
     )
 
-def save_parameters_json(args: argparse.Namespace, 
-                         output_path: str):    
+def save_parameters(args: argparse.Namespace, 
+                    output_path: str):  
+
+    # Load the model config
+    model_config = utils.load_yaml(args.model_config)
 
     # Create parameters dictionary
     params = {
         "inputs": {
             "config": args.config,
+            "model_config": args.model_config,
             "model_weights": args.model_weights,
-            "tomo_algorithm": args.tomogram_algorithm,
+            "tomo_algorithm": args.tomo_algorithm,
             "voxel_size": args.voxel_size
         },
         "outputs": {
@@ -165,24 +152,15 @@ def save_parameters_json(args: argparse.Namespace,
             "segmentation_user_id": args.seg_info[1],
             "segmentation_session_id": args.seg_info[2]
         },
-        "model": {
-            "model_type": args.model_type,
-            "channels": args.channels,
-            "strides": args.strides,
-            "res_units": args.res_units,
-            "nclass": args.Nclass,
-            "dim_in": args.dim_in,
-            "run_ids": args.run_ids
-        }
+        'model': model_config['model']
     }            
 
     # Print the parameters
     print(f"\nParameters for Inference (Segment Prediction):")
     pprint.pprint(params); print()
 
-    # Save to JSON file
-    with open(output_path, 'w') as f:
-        json.dump(params, f, indent=4)    
+    # Save to YAML file
+    utils.save_parameters_yaml(params, output_path)
 
 if __name__ == "__main__":
     cli()

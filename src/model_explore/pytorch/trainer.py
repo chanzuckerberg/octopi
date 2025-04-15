@@ -1,10 +1,9 @@
-
-from monai.transforms import AsDiscrete, Compose, Activationsd, AsDiscreted
+from model_explore import visualization_tools as viz
 from monai.inferers import sliding_window_inference
+from monai.transforms import AsDiscrete
 from monai.data import decollate_batch
-from typing import List, Optional
-import matplotlib.pyplot as plt
-import torch, os, mlflow
+import torch, os, mlflow, re
+import torch_ema as ema
 from tqdm import tqdm 
 import numpy as np
 
@@ -19,7 +18,8 @@ class ModelTrainer:
                  device,
                  loss_function, 
                  metrics_function, 
-                 optimizer):
+                 optimizer, 
+                 use_ema: bool = True):
 
         self.model = model
         self.device = device
@@ -33,6 +33,11 @@ class ModelTrainer:
 
         # Default F-Beta Value
         self.beta = 3
+
+        # Initialize EMAHandler for the model
+        self.ema_experiment = use_ema
+        if self.ema_experiment:
+            self.ema_handler = ema.ExponentialMovingAverage(self.model.parameters(), decay=0.99)
 
     def set_parallel_mlflow(self, 
                             client,
@@ -57,6 +62,10 @@ class ModelTrainer:
             loss.backward()
             self.optimizer.step()
 
+            # Update EMA weights
+            if self.ema_experiment:
+                self.ema_handler.update()
+
             # Update running epoch loss
             epoch_loss += loss.item()
         
@@ -69,6 +78,7 @@ class ModelTrainer:
         Perform validation and compute metrics, including validation loss.
         """        
 
+        # Set model to evaluation mode
         self.model.eval()
         val_loss = 0
         with torch.no_grad():
@@ -77,9 +87,10 @@ class ModelTrainer:
                 val_labels = val_data["label"].to(self.device)
                 
                 # Apply sliding window inference
+                # roi_size=self.input_dim, # try setting a set size of 128, 144 or 160? 
                 val_outputs = sliding_window_inference(
                     inputs=val_inputs, 
-                    roi_size=(self.crop_size, self.crop_size, self.crop_size), 
+                    roi_size=(144,144,144),
                     sw_batch_size=4,
                     predictor=self.model, 
                     overlap=0.5,
@@ -95,7 +106,7 @@ class ModelTrainer:
                 metric_val_labels = [self.post_label(i) for i in decollate_batch(val_labels)]                             
                 
                 # Compute metrics
-                self.metrics_function(y_pred=metric_val_outputs, y=metric_val_labels)                
+                self.metrics_function(y_pred=metric_val_outputs, y=metric_val_labels)             
 
         # # Contains recall, precision, and f1 for each class
         metric_values = self.metrics_function.aggregate(reduction='mean_batch')
@@ -119,8 +130,8 @@ class ModelTrainer:
         use_mlflow: bool = False,
         verbose: bool = False
     ):
-        # best lr scheduler options are cosine or reduce
 
+        # best lr scheduler options are cosine or reduce
         self.warmup_epochs = 5
         self.warmup_lr_factor = 0.1
         self.min_lr = 1e-7
@@ -141,12 +152,23 @@ class ModelTrainer:
 
         Nclass = data_load_gen.Nclasses
         self.create_results_dictionary(Nclass)  
-        
+
+        # Regex pattern for fBetaN and fBetaN_classM (Still need to handle fBetaN_classM)
+        pattern = r"^fBeta[1-9]\d*(?:_class[1-9]\d*)?$"
+        if re.match(pattern, best_metric) or best_metric in self.metric_names:
+            self.beta = int(best_metric[5:])
+            best_metric = 'avg_fbeta'
+            print(f'\nTracking {best_metric} = {self.beta} as the best metric\n')
+        else:
+            print(f'\n{best_metric} is not a valid metric! Tracking avg_f1 as the best metric\n')
+            best_metric = 'avg_f1'
+
         self.post_pred = AsDiscrete(argmax=True, to_onehot=Nclass)
         self.post_label = AsDiscrete(to_onehot=Nclass)                             
 
         # Produce Dataloaders for the First Training Iteration
         self.train_loader, self.val_loader = data_load_gen.create_train_dataloaders(crop_size=crop_size, num_samples=my_num_samples)
+        self.input_dim = data_load_gen.input_dim
 
         # Save the original learning rate
         original_lr = self.optimizer.param_groups[0]['lr']
@@ -179,7 +201,12 @@ class ModelTrainer:
                 if verbose:
                     tqdm.write(f"Epoch {epoch + 1}/{max_epochs}, avg_train_loss: {epoch_loss:.4f}")
 
-                metric_values = self.validate_update()
+                # Validate the Model with or without EMA
+                if self.ema_experiment:
+                    with self.ema_handler.average_parameters():
+                        metric_values = self.validate_update()
+                else:
+                    metric_values = self.validate_update()
 
                 # Log all metrics
                 self.my_log_metrics( metrics_dict=metric_values, curr_step=epoch + 1 )
@@ -198,13 +225,17 @@ class ModelTrainer:
                 if self.results[best_metric][-1][1] > self.results["best_metric"]:
                     self.results["best_metric"] = self.results[best_metric][-1][1]
                     self.results["best_metric_epoch"] = epoch + 1
-                    self.model_weights = self.model.state_dict()
-                    if model_save_path is not None: 
-                        torch.save(self.model.state_dict(), os.path.join(model_save_path, "best_metric_model.pth"))    
+
+                    # Read Model Weights and Save
+                    if self.ema_experiment:
+                        with self.ema_handler.average_parameters():
+                            self.save_model(model_save_path)
+                    else:
+                        self.save_model(model_save_path)
 
                 # Save plot if Local Training Call
                 if not self.use_mlflow:
-                    self.plot_results(save_plot=os.path.join(model_save_path, "net_train_history.png"))
+                    viz.plot_training_results(self.results, save_plot=os.path.join(model_save_path, "net_train_history.png"))
 
             # Run the learning rate scheduler
             early_stop = self.run_scheduler(data_load_gen, original_lr, epoch, val_interval, lr_scheduler_type)
@@ -219,7 +250,7 @@ class ModelTrainer:
         """
         # Configure learning rate scheduler based on the type
         if type == "cosine":
-            eta_min = 1e-7
+            eta_min = 1e-6
             self.lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
                 self.optimizer, T_max=self.max_epochs, eta_min=eta_min )
         elif type == "onecyle":
@@ -273,31 +304,7 @@ class ModelTrainer:
             return True  # Indicate early stopping
 
         return False  # Continue training
-
-        # # Apply warm-up learning rate if within warm-up period
-        # if (epoch + 1) % data_load_gen.reload_frequency < self.warmup_epochs:
-        #     if isinstance(self.lr_scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau):
-        #         # No scheduler step during warm-up for ReduceLROnPlateau
-        #         return
-        # else:
-        #     # Restore original learning rate after warm-up
-        #     for param_group in self.optimizer.param_groups:
-        #         param_group['lr'] = original_lr
-
-        #     # Step the scheduler
-        #     if isinstance(self.lr_scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau) and (epoch + 1) % val_interval == 0:
-        #         metric_value = self.results['val_loss'][-1][1]
-        #         self.lr_scheduler.step(metric_value)  # Step with validation loss
-        #     else:
-        #         self.lr_scheduler.step()  # Step for other schedulers
-
-        # # Check learning rate for early stopping
-        # current_lr = self.optimizer.param_groups[0]['lr']
-        # if current_lr < self.min_lr and type != 'onecycle':
-        #     print(f"Early stopping triggered at epoch {epoch + 1} as learning rate fell below {self.min_lr}.")
-        #     return True  # Indicate early stopping
-        # return False # Continue training
-
+    
     def check_for_early_stopping(self, epoch_loss: float):
         # Check for NaN in the loss
         if np.isnan(epoch_loss):
@@ -307,6 +314,15 @@ class ModelTrainer:
         else:
             self.nan_counter = 0  # Reset the counter if loss is valid
             return False
+        
+    def save_model(self, model_save_path: str):
+
+        # Store Model Weights as Member Variable
+        self.model_weights = self.model.state_dict()
+
+        # Save Model Weights to *.pth file
+        if model_save_path is not None:
+            torch.save(self.model_weights, os.path.join(model_save_path, "best_model.pth"))
 
     def create_results_dictionary(self, Nclass: int):
 
@@ -322,9 +338,12 @@ class ModelTrainer:
         }
 
         for i in range(Nclass-1):
+            self.results[f'fbeta_class{i+1}'] = []
             self.results[f'f1_class{i+1}'] = []
             self.results[f'recall_class{i+1}'] = []
             self.results[f'precision_class{i+1}'] = []
+
+        self.metric_names = self.results.keys()
 
     def my_log_metrics(
         self,
@@ -345,6 +364,7 @@ class ModelTrainer:
                 metrics_to_log[f"recall_class{i+1}"] = rec.item()
                 metrics_to_log[f"precision_class{i+1}"] = prec.item()
                 metrics_to_log[f"f1_class{i+1}"] = f1.item()
+                metrics_to_log[f"fbeta_class{i+1}"] = self.fbeta(prec, rec).item()
 
             # Prepare average metrics
             metrics_to_log["avg_recall"] = recall.mean().cpu().item()
@@ -383,84 +403,10 @@ class ModelTrainer:
         params_dict: dict, 
         ):
 
-        # self.results["params"] = params_dict
-
-        # if self.client is not None and self.trial_run_id is not None:
-        #     self.client.log_params(run_id=self.trial_run_id, params=params_dict)
-        # elif self.use_mlflow:
-        #     mlflow.log_params(params_dict)
         if self.client is not None and self.trial_run_id is not None:
             for key, value in params_dict.items():
                 self.client.log_param(run_id=self.trial_run_id, key=key, value=value)
         else:
-            mlflow.log_params(params_dict)                 
+            mlflow.log_params(params_dict)  
+
     
-    def plot_results(self, 
-                     class_names: Optional[List[str]] = None,
-                     save_plot: str = None):
-
-        # Create a 2x2 subplot layout
-        fig, axs = plt.subplots(2, 2, figsize=(12, 10))
-        fig.suptitle("Metrics Over Epochs", fontsize=16)
-
-        # Unpack the data for loss (logged every epoch)
-        epochs_loss = [epoch for epoch, _ in self.results['loss']]
-        loss = [value for _, value in self.results['loss']]
-        val_epochs_loss = [epoch for epoch, _ in self.results['val_loss']]
-        val_loss = [value for _,value in self.results['val_loss']]
-
-        # Plot Training Loss in the top-left
-        axs[0, 0].plot(epochs_loss, loss, label="Training Loss")
-        axs[0, 0].plot(val_epochs_loss, val_loss, label='Validation Loss')
-        axs[0, 0].set_xlabel("Epochs")
-        axs[0, 0].set_ylabel("Loss")
-        axs[0, 0].set_title("Training Loss")
-        axs[0, 0].legend()
-        axs[0, 0].tick_params(axis='both', direction='in', top=True, right=True, length=6, width=1)
-
-        # For metrics that are logged every `val_interval` epochs
-        epochs_metrics = [epoch for epoch, _ in self.results['avg_recall']]
-        
-        # Determine the number of classes and names
-        num_classes = len([key for key in self.results.keys() if key.startswith('recall_class')])
-
-        if class_names is None or len(class_names) != num_classes - 1:
-            class_names = [f"Class {i+1}" for i in range(num_classes)]
-
-        # Plot Recall in the top-right
-        for class_idx in range(num_classes):
-            recall_class = [value for _, value in self.results[f'recall_class{class_idx+1}']]
-            axs[0, 1].plot(epochs_metrics, recall_class, label=f"{class_names[class_idx]}")
-        axs[0, 1].set_xlabel("Epochs")
-        axs[0, 1].set_ylabel("Recall")
-        axs[0, 1].set_title("Recall per Class")
-        # axs[0, 1].legend()
-        axs[0, 1].tick_params(axis='both', direction='in', top=True, right=True, length=6, width=1)
-
-        # Plot Precision in the bottom-left
-        for class_idx in range(num_classes):
-            precision_class = [value for _, value in self.results[f'precision_class{class_idx+1}']]
-            axs[1, 0].plot(epochs_metrics, precision_class, label=f"{class_names[class_idx]}")
-        axs[1, 0].set_xlabel("Epochs")
-        axs[1, 0].set_ylabel("Precision")
-        axs[1, 0].set_title("Precision per Class")
-        axs[1, 0].legend()
-        axs[1, 0].tick_params(axis='both', direction='in', top=True, right=True, length=6, width=1)
-
-        # Plot F1 Score in the bottom-right
-        for class_idx in range(num_classes):
-            f1_class = [value for _, value in self.results[f'f1_class{class_idx+1}']]
-            axs[1, 1].plot(epochs_metrics, f1_class, label=f"{class_names[class_idx]}")
-        axs[1, 1].set_xlabel("Epochs")
-        axs[1, 1].set_ylabel("F1 Score")
-        axs[1, 1].set_title("F1 Score per Class")
-        # axs[1, 1].legend()
-        axs[1, 1].tick_params(axis='both', direction='in', top=True, right=True, length=6, width=1)
-
-        # Adjust layout and show plot
-        plt.tight_layout(rect=[0, 0, 1, 0.96])  # Leave space for the main title
-
-        if save_plot: 
-            fig.savefig(save_plot)
-        else:
-            plt.show()

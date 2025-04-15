@@ -1,8 +1,24 @@
 from monai.losses import FocalLoss, TverskyLoss
 from model_explore import losses
 from model_explore.models import (
-    Unet, AttentionUnet
+    Unet, AttentionUnet, MedNeXt, SegResNet
 )
+
+def get_model(architecture):
+
+    # Initialize model based on architecture
+    if architecture == "Unet":
+        model = Unet.myUNet()
+    elif architecture == "AttentionUnet":
+        model = AttentionUnet.myAttentionUnet()
+    elif architecture == "MedNeXt":
+        model = MedNeXt.myMedNeXt()
+    elif architecture == "SegResNet":
+        model = SegResNet.mySegResNet()
+    else:
+        raise ValueError(f"Model type {architecture} not supported!!")
+
+    return model
 
 def get_loss_function(trial, loss_name = None):
 
@@ -10,20 +26,20 @@ def get_loss_function(trial, loss_name = None):
     if loss_name is None:
         loss_name = trial.suggest_categorical(
             "loss_function", 
-            ["FocalLoss", "TverskyLoss", 'WeightedFocalTverskyLoss', 'FocalTverskyLoss'])
+            ["FocalLoss", "WeightedFocalTverskyLoss", 'FocalTverskyLoss'])
 
     if loss_name == "FocalLoss":
-        gamma = round(trial.suggest_float("gamma", 0.1, 4), 3)
+        gamma = round(trial.suggest_float("gamma", 0.1, 2), 3)
         loss_function = FocalLoss(include_background=True, to_onehot_y=True, use_softmax=True, gamma=gamma)
 
     elif loss_name == "TverskyLoss":
-        alpha = round(trial.suggest_float("alpha", 0.15, 0.75), 3)
+        alpha = round(trial.suggest_float("alpha", 0.1, 0.5), 3)
         beta = 1.0 - alpha
         loss_function = TverskyLoss(include_background=True, to_onehot_y=True, softmax=True, alpha=alpha, beta=beta)
 
     elif loss_name == 'WeightedFocalTverskyLoss':
-        gamma = round(trial.suggest_float("gamma", 0.1, 4), 3)
-        alpha = round(trial.suggest_float("alpha", 0.15, 0.75), 3)
+        gamma = round(trial.suggest_float("gamma", 0.1, 2), 3)
+        alpha = round(trial.suggest_float("alpha", 0.1, 0.5), 3)
         beta = 1.0 - alpha
         weight_tversky = round(trial.suggest_float("weight_tversky", 0.1, 0.9), 3)
         weight_focal = 1.0 - weight_tversky
@@ -33,23 +49,12 @@ def get_loss_function(trial, loss_name = None):
         )
 
     elif loss_name == 'FocalTverskyLoss':
-        gamma = round(trial.suggest_float("gamma", 0.1, 4.0), 3)
-        alpha = round(trial.suggest_float("alpha", 0.15, 0.85), 3)
+        gamma = round(trial.suggest_float("gamma", 0.1, 2), 3)
+        alpha = round(trial.suggest_float("alpha", 0.1, 0.5), 3)
         beta = 1.0 - alpha
         loss_function = losses.FocalTverskyLoss(gamma=gamma, alpha=alpha, beta=beta)
 
     return loss_function
-
-def get_model(num_classes, device, model_type):
-
-    if model_type == "Unet":
-        model = Unet.myUNet(num_classes, device)
-    elif model_type == "AttentionUnet":
-        model = AttentionUnet.myAttentionUnet(num_classes, device)
-    else:
-        raise ValueError(f"Model type {model_type} not supported!!")
-
-    return model
 
 
 #### TODO : Models to try Adding? 

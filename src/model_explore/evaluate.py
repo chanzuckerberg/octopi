@@ -13,6 +13,7 @@ class evaluator:
                  prediction_user_id: str,
                  predict_session_id: str,
                  voxel_size: float = 10,
+                 beta: float = 3,
                  object_names: List[str] = None):
         
         self.root = copick.from_file(copick_config)
@@ -23,7 +24,7 @@ class evaluator:
         self.prediction_user_id = prediction_user_id
         self.predict_session_id = predict_session_id
         self.voxel_size = voxel_size
-
+        self.beta = beta
         print(f'\nGround Truth Query: \nUserID: {ground_truth_user_id}, SessionID: {ground_truth_session_id}')
         print(f'\nSubmitted Picks: \nUserID: {prediction_user_id}, SessionID: {predict_session_id}\n')
 
@@ -70,7 +71,7 @@ class evaluator:
         print('\nRunning Metrics Evaluation on the Following RunIDs: ', run_ids)
 
         metrics = {}
-        summary_metrics = {name: {'precision': [], 'recall': [], 'f1_score': [], 'accuracy': [], 
+        summary_metrics = {name: {'precision': [], 'recall': [], 'f1_score': [], 'fbeta_score': [], 'accuracy': [], 
                                   'true_positives': [], 'false_positives': [], 'false_negatives': []} for name, _ in self.objects}
 
         for runID in run_ids:
@@ -80,11 +81,12 @@ class evaluator:
             run = self.root.get_run(runID)
 
             for name, radius in self.objects:
-
+                
+                # Get Ground Truth and Predicted Coordinates
                 gt_coordinates = io.get_copick_coordinates(
                     run, name, 
                     self.ground_truth_user_id, self.ground_truth_session_id, 
-                    self.voxel_size, raise_error=True
+                    self.voxel_size, raise_error=False
                 )
                 pred_coordinates = io.get_copick_coordinates(
                     run, name,
@@ -92,6 +94,7 @@ class evaluator:
                     self.voxel_size, raise_error=False
                 )
 
+                # Skip if either ground truth or predicted coordinates are None
                 if gt_coordinates is None or pred_coordinates is None:
                     continue
 
@@ -156,23 +159,42 @@ class evaluator:
         pred_points = np.array(pred_points)
         
         # Calculate distances
-        dist_matrix = distance.cdist(pred_points, gt_points, 'euclidean')
+        if gt_points.shape[0] == 0:
+            # No ground truth points: all predictions are false positives
+            fp = pred_points.shape[0]
+            fn = 0
+            tp = 0
+        elif pred_points.shape[0] == 0:
+            # No predictions: all ground truth points are false negatives
+            fp = 0
+            fn = gt_points.shape[0]
+            tp = 0
+        else:    
+            # Calculate distances
+            dist_matrix = distance.cdist(pred_points, gt_points, 'euclidean')
 
-        # Determine matches within the threshold
-        tp = np.sum(np.min(dist_matrix, axis=1) < threshold)
-        fp = np.sum(np.min(dist_matrix, axis=1) >= threshold)
-        fn = np.sum(np.min(dist_matrix, axis=0) >= threshold)
+            # Determine matches within the threshold
+            tp = np.sum(np.min(dist_matrix, axis=1) < threshold)
+            fp = np.sum(np.min(dist_matrix, axis=1) >= threshold)
+            fn = np.sum(np.min(dist_matrix, axis=0) >= threshold)
         
         # Precision, Recall, F1 Score
         precision = tp / (tp + fp) if tp + fp > 0 else 0
         recall = tp / (tp + fn) if tp + fn > 0 else 0
         f1_score = 2 * (precision * recall) / (precision + recall) if precision + recall > 0 else 0
         accuracy = tp / (tp + fp + fn)  # Note: TN not considered here
+
+         # Compute F_beta using the formula
+        if (self.beta**2 * precision + recall) > 0:
+            fbeta = (1 + self.beta**2) * (precision * recall) / (self.beta**2 * precision + recall)
+        else:
+            fbeta = 0
         
         return {
             'precision': precision,
             'recall': recall,
             'f1_score': f1_score,
+            'fbeta_score': fbeta,
             'accuracy': accuracy, 
             'true_positives': int(tp),
             'false_positives': int(fp),
@@ -184,6 +206,7 @@ class evaluator:
             recall = metrics['recall']
             precision = metrics['precision']
             f1_score = metrics['f1_score']
+            fbeta_score = metrics['fbeta_score']
             false_positives = metrics['false_positives']
             false_negatives = metrics['false_negatives']
             
@@ -192,6 +215,7 @@ class evaluator:
                 f"Recall: {recall['mean']:.3f} ± {recall['std']:.3f}, "
                 f"Precision: {precision['mean']:.3f} ± {precision['std']:.3f}, "
                 f"F1 Score: {f1_score['mean']:.3f} ± {f1_score['std']:.3f}, "
+                f"F_beta Score: {fbeta_score['mean']:.3f} ± {fbeta_score['std']:.3f}, "
                 f"False_Positives: {false_positives['mean']:.1f} ± {false_positives['std']:.1f}, "
                 f"False_Negatives: {false_negatives['mean']:.1f} ± {false_negatives['std']:.1f}"
             )

@@ -3,24 +3,14 @@ import torch.nn as nn
 import torch
 
 class mySegResNet:
-    def __init__(self, num_classes, device):
-        self.device = device
-        self.num_classes = num_classes
-        
-        # Placeholder for the model
-        self.model = None        
+    def __init__(self):
+        # Placeholder for the model and config
+        self.model = None
+        self.config = None
 
     def build_model(
         self,
-        init_filters=32,
-        blocks_down=(1, 2, 2, 4),
-        dsdepth=1,
-        act='relu',
-        norm='batch',
-        blocks_up=None,
-        upsample_mode='deconv',
-        resolution=None,
-        preprocess=None
+        config: dict
     ):
         """
         Creates the SegResNetDS model based on provided parameters.
@@ -41,17 +31,17 @@ class mySegResNet:
         """
         self.model = SegResNetDS(
             spatial_dims=3,
-            init_filters=init_filters,
+            init_filters=config['init_filters'],
             in_channels=1,
-            out_channels=self.num_classes,
-            act=act,
-            norm=norm,
-            blocks_down=blocks_down,
-            blocks_up=blocks_up,
-            dsdepth=dsdepth,
-            preprocess=preprocess,
-            upsample_mode=upsample_mode,
-            resolution=resolution
+            out_channels=config['num_classes'],
+            act=config['act'],
+            norm=config['norm'],
+            blocks_down=config['blocks_down'],
+            blocks_up=config['blocks_up'],
+            dsdepth=config['dsdepth'],
+            preprocess=config['preprocess'],
+            upsample_mode=config['upsample_mode'],
+            resolution=config['resolution']
         )
         return self.model.to(self.device)
     
@@ -73,18 +63,18 @@ class mySegResNet:
         norm = trial.suggest_categorical("norm", ['batch', 'instance'])
         upsample_mode = trial.suggest_categorical("upsample_mode", ['deconv', 'trilinear'])
         
-        model = self.build_model(
-            init_filters=init_filters,
-            blocks_down=blocks_down,
-            dsdepth=dsdepth,
-            act=act,
-            norm=norm,
-            blocks_up=None,  # using default upsampling blocks
-            upsample_mode=upsample_mode,
-            resolution=None,
-            preprocess=None
-        )
-        return model
+        self.config = {
+            'init_filters': init_filters,
+            'blocks_down': blocks_down,
+            'dsdepth': dsdepth,
+            'act': act,
+            'norm': norm,
+            'blocks_up': None,  # using default upsampling blocks
+            'upsample_mode': upsample_mode,
+            'resolution': None,
+            'preprocess': None
+        }
+        return self.build_model(self.config)
 
     def get_model_parameters(self):
         """
@@ -99,11 +89,4 @@ class mySegResNet:
         if self.model is None:
             raise ValueError("Model has not been initialized yet. Call build_model() or bayesian_search() first.")
         
-        return {
-            "init_filters": self.model.init_filters,
-            "dsdepth": self.model.dsdepth,
-            "blocks_down": self.model.blocks_down,
-            "act": self.model.act,
-            "norm": self.model.norm,
-            "upsample_mode": self.model.upsample_mode
-        }
+        return self.config

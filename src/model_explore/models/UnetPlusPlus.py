@@ -39,6 +39,7 @@ class myUNetPlusPlus:
     
     def get_model_parameters(self):
         return {
+            'model_name': 'UnetPlusPlus',
             'features': self.features,
             'dropout': self.dropout,
             'upsample': self.upsample,

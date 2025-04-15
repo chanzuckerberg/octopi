@@ -17,6 +17,7 @@ class BayesianModelSearch:
             model_type (str): Type of model to build ("UNet", "AttentionUnet").
         """
         self.data_generator = data_generator
+        self.Nclasses = data_generator.Nclasses
         self.device = None
         self.model_type = model_type
         self.model = None
@@ -26,15 +27,16 @@ class BayesianModelSearch:
         self.parent_run_id = parent_run_id
         
         # Define results directory path
-        self.results_dir = f'explore_results_{self.model_type}'
-            
+        self.results_dir = f'explore_results_{self.model_type}'            
 
     def my_build_model(self, trial):
         """Builds and initializes a model based on Optuna-suggested parameters."""
        
-        self.model_builder = common.get_model(self.data_generator.Nclasses, self.device, self.model_type) 
-        self.model_builder.bayesian_search(trial)
+        # Build the model
+        self.model_builder = common.get_model(self.model_type)
+        self.model_builder.bayesian_search(trial, self.Nclasses)
         self.model = self.model_builder.model.to(self.device)
+        self.config = self.model_builder.config
 
         # Define loss function
         self.loss_function = common.get_loss_function(trial)
@@ -51,10 +53,12 @@ class BayesianModelSearch:
             'crop_size': trial.suggest_int("crop_size", 48, 160, step=16),
             'num_samples': 8
         }
+        self.config['dim_in'] = self.sampling['crop_size']
 
     def _define_optimizer(self):
         # Define optimizer
-        self.optimizer = torch.optim.Adam(self.model.parameters(), lr=5e-4)
+        lr0 = 1e-3
+        self.optimizer = torch.optim.Adam(self.model.parameters(), lr=lr0, weight_decay=1e-5)
 
     def _train_model(self, trial, model_trainer, epochs, val_interval, crop_size, num_samples, best_metric):
         """Handles model training and error handling."""
@@ -105,7 +109,7 @@ class BayesianModelSearch:
             score = self._train_model(
                 trial, model_trainer, epochs, val_interval, 
                 self.sampling['crop_size'], self.sampling['num_samples'], 
-                best_metric)
+                best_metric)               
 
             # Log parameters and metrics
             params = {
@@ -116,7 +120,7 @@ class BayesianModelSearch:
 
             # Explicitly set the parent run ID
             mlflow.log_param("parent_run_id", self.parent_run_id)
-            mlflow.log_param("parent_run_name", self.parent_run_name)            
+            mlflow.log_param("parent_run_name", self.parent_run_name)         
 
             # Save best model
             self._save_best_model(trial, model_trainer, score)
@@ -190,9 +194,9 @@ class BayesianModelSearch:
         """Saves the best model if it improves upon previous scores."""
         best_score_so_far = self.get_best_score(trial)
         if score > best_score_so_far:
-            torch.save(model_trainer.model_weights, f'{self.results_dir}/best_metric_model.pth')
-            io.save_parameters_to_json(self.model_builder, model_trainer, self.data_generator, 
-                                    f'{self.results_dir}/training_parameters.json')
+            torch.save(model_trainer.model_weights, f'{self.results_dir}/best_model.pth')
+            io.save_parameters_to_yaml(self.model_builder, model_trainer, self.data_generator, 
+                                    f'{self.results_dir}/best_model_config.yaml')
 
     def get_best_score(self, trial):
         """Retrieve the best score from the trial."""
@@ -203,9 +207,21 @@ class BayesianModelSearch:
 
     def cleanup(self, model_trainer, optimizer):
         """Handles cleanup of resources."""
-        model_trainer = None
-        optimizer = None
-        device = None
+
+        # Delete the trainer and optimizer objects
+        del model_trainer, optimizer
+
+        # If the model object holds GPU memory, delete it explicitly and set it to None
+        if hasattr(self, "model"):
+            del self.model
+            self.model = None
+
+        # Optional: If your model_builder or other objects hold GPU references, delete them too
+        if hasattr(self, "model_builder"):
+            del self.model_builder
+            self.model_builder = None
+
+        # Clear the CUDA cache and force garbage collection
         torch.cuda.empty_cache()
         gc.collect()
 

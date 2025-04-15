@@ -2,7 +2,7 @@ from monai.networks.nets import UNet, AttentionUnet
 from typing import List, Tuple, Union
 from dotenv import load_dotenv
 import argparse, model_explore
-import torch, random, os
+import torch, random, os, yaml
 from typing import List
 import numpy as np
 
@@ -174,37 +174,27 @@ def parse_copick_configs(config_entries: List[str]):
 
 ##############################################################################################################################
 
-def create_model(model_type, n_classes, channels, strides_pattern, num_res_units, device):
+# Create a custom dumper that uses flow style for lists only.
+class InlineListDumper(yaml.SafeDumper):
+    def represent_list(self, data):
+        node = super().represent_list(data)
+        node.flow_style = True  # Use inline style for lists
+        return node
+
+def save_parameters_yaml(params: dict, output_path: str):
     """
-    Create either a UNet or AttentionUnet model based on trial parameters.
-    
-    Args:
-        trial: Optuna trial object
-        n_classes: Number of output classes
-        channels: List of channel sizes
-        strides_pattern: List of stride values
-        num_res_units: Number of residual units (only used for UNet)
-        device: torch device to place model on
+    Save parameters to a YAML file.
     """
-    
-    if model_type == "Unet":
-        model = UNet(
-            spatial_dims=3,
-            in_channels=1,
-            out_channels=n_classes,
-            channels=channels,
-            strides=strides_pattern,
-            num_res_units=num_res_units,
-        )
-    elif model_type == "AttentionUnet":  # AttentionUnet
-        model = AttentionUnet(
-            spatial_dims=3,
-            in_channels=1,
-            out_channels=n_classes,
-            channels=channels,
-            strides=strides_pattern,
-        )
+    InlineListDumper.add_representer(list, InlineListDumper.represent_list)
+    with open(output_path, 'w') as f:
+        yaml.dump(params, f, Dumper=InlineListDumper, default_flow_style=False, sort_keys=False)
+
+def load_yaml(path: str) -> dict:
+    """
+    Load a YAML file and return the contents as a dictionary.
+    """
+    if os.path.exists(path):
+        with open(path, 'r') as f:
+            return yaml.safe_load(f)
     else:
-        raise ValueError(f"Unsupported model type: {model_type}, Available models are: 'Unet', 'AttentionUnet'")
-    
-    return model.to(device)
+        raise FileNotFoundError(f"File not found: {path}")

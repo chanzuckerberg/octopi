@@ -1,4 +1,5 @@
 import matplotlib.colors as mcolors
+from typing import Optional, List
 import matplotlib.pyplot as plt
 from model_explore import io
 import numpy as np
@@ -113,3 +114,74 @@ def compare_tomo_points(tomo, run, objects, vol_slice, user_id1, user_id2,
 
     plt.axis('off')
     plt.show()
+
+def plot_training_results(
+    results, 
+    class_names: Optional[List[str]] = None,
+    save_plot: str = None):
+
+    # Create a 2x2 subplot layout
+    fig, axs = plt.subplots(2, 2, figsize=(12, 10))
+    fig.suptitle("Metrics Over Epochs", fontsize=16)
+
+    # Unpack the data for loss (logged every epoch)
+    epochs_loss = [epoch for epoch, _ in results['loss']]
+    loss = [value for _, value in results['loss']]
+    val_epochs_loss = [epoch for epoch, _ in results['val_loss']]
+    val_loss = [value for _,value in results['val_loss']]
+
+    # Plot Training Loss in the top-left
+    axs[0, 0].plot(epochs_loss, loss, label="Training Loss")
+    axs[0, 0].plot(val_epochs_loss, val_loss, label='Validation Loss')
+    axs[0, 0].set_xlabel("Epochs")
+    axs[0, 0].set_ylabel("Loss")
+    axs[0, 0].set_title("Training Loss")
+    axs[0, 0].legend()
+    axs[0, 0].tick_params(axis='both', direction='in', top=True, right=True, length=6, width=1)
+
+    # For metrics that are logged every `val_interval` epochs
+    epochs_metrics = [epoch for epoch, _ in results['avg_recall']]
+    
+    # Determine the number of classes and names
+    num_classes = len([key for key in results.keys() if key.startswith('recall_class')])
+
+    if class_names is None or len(class_names) != num_classes - 1:
+        class_names = [f"Class {i+1}" for i in range(num_classes)]
+
+    # Plot Recall in the top-right
+    for class_idx in range(num_classes):
+        recall_class = [value for _, value in results[f'recall_class{class_idx+1}']]
+        axs[0, 1].plot(epochs_metrics, recall_class, label=f"{class_names[class_idx]}")
+    axs[0, 1].set_xlabel("Epochs")
+    axs[0, 1].set_ylabel("Recall")
+    axs[0, 1].set_title("Recall per Class")
+    # axs[0, 1].legend()
+    axs[0, 1].tick_params(axis='both', direction='in', top=True, right=True, length=6, width=1)
+
+    # Plot Precision in the bottom-left
+    for class_idx in range(num_classes):
+        precision_class = [value for _, value in results[f'precision_class{class_idx+1}']]
+        axs[1, 0].plot(epochs_metrics, precision_class, label=f"{class_names[class_idx]}")
+    axs[1, 0].set_xlabel("Epochs")
+    axs[1, 0].set_ylabel("Precision")
+    axs[1, 0].set_title("Precision per Class")
+    axs[1, 0].legend()
+    axs[1, 0].tick_params(axis='both', direction='in', top=True, right=True, length=6, width=1)
+
+    # Plot F1 Score in the bottom-right
+    for class_idx in range(num_classes):
+        f1_class = [value for _, value in results[f'f1_class{class_idx+1}']]
+        axs[1, 1].plot(epochs_metrics, f1_class, label=f"{class_names[class_idx]}")
+    axs[1, 1].set_xlabel("Epochs")
+    axs[1, 1].set_ylabel("F1 Score")
+    axs[1, 1].set_title("F1 Score per Class")
+    # axs[1, 1].legend()
+    axs[1, 1].tick_params(axis='both', direction='in', top=True, right=True, length=6, width=1)
+
+    # Adjust layout and show plot
+    plt.tight_layout(rect=[0, 0, 1, 0.96])  # Leave space for the main title
+
+    if save_plot: 
+        fig.savefig(save_plot)
+    else:
+        plt.show()

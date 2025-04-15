@@ -6,7 +6,7 @@ def my_evaluator(
     copick_config_path: str,
     ground_truth_user_id: str,
     ground_truth_session_id: str,
-    prediction_user_id: str,
+    predict_user_id: str,
     predict_session_id: str,
     save_path: str,
     distance_threshold_scale: float,
@@ -18,7 +18,7 @@ def my_evaluator(
         copick_config_path,
         ground_truth_user_id,
         ground_truth_session_id,
-        prediction_user_id,
+        predict_user_id,
         predict_session_id, 
         object_names=object_names
     )
@@ -38,7 +38,7 @@ def cli():
     parser.add_argument('--config', type=str, required=True, help='Path to the copick configuration file')
     parser.add_argument('--ground-truth-user-id', type=str, required=True, help='User ID for ground truth data')
     parser.add_argument('--ground-truth-session-id', type=str, required=False, default= None, help='Session ID for ground truth data')
-    parser.add_argument('--prediction-user-id', type=str, required=True, help='User ID for prediction data')
+    parser.add_argument('--predict-user-id', type=str, required=True, help='User ID for prediction data')
     parser.add_argument('--predict-session-id', type=str, required=False, default= None, help='Session ID for prediction data')
     parser.add_argument('--save-path', type=str, required=False, default= None, help='Path to save evaluation results')
     parser.add_argument('--distance-threshold-scale', type=float, required=False, default = 0.8, help='Compute Distance Threshold Based on Particle Radius')
@@ -52,7 +52,7 @@ def cli():
         copick_config_path=args.config,
         ground_truth_user_id=args.ground_truth_user_id,
         ground_truth_session_id=args.ground_truth_session_id,
-        prediction_user_id=args.prediction_user_id,
+        predict_user_id=args.predict_user_id,
         predict_session_id=args.predict_session_id,
         save_path=args.save_path,
         distance_threshold_scale=args.distance_threshold_scale,

@@ -6,8 +6,9 @@ from monai.transforms import (
 )
 from sklearn.model_selection import train_test_split
 import copick, torch, os, json, random
-from typing import List, Dict, Any
 from collections import defaultdict
+from model_explore import utils
+from typing import List
 from tqdm import tqdm
 import numpy as np
 
@@ -79,7 +80,7 @@ def create_predict_dataloader(
                             shuffle=False, 
                             num_workers=4, 
                             pin_memory=torch.cuda.is_available())
-    return test_loader
+    return test_loader, test_ds
 
 ##############################################################################################################################
 
@@ -221,6 +222,17 @@ def get_copick_coordinates(run,                    # CoPick run object containin
 
 ##############################################################################################################################
 
+def adjust_to_multiple(value, multiple = 16):
+    return int((value // multiple) * multiple)
+
+def get_input_dimensions(dataset, crop_size: int):
+    nx = dataset[0]['image'].shape[1]
+    if crop_size > nx:
+        first_dim = adjust_to_multiple(nx/2)
+        return first_dim, crop_size, crop_size
+    else:
+        return crop_size, crop_size, crop_size
+
 def get_num_classes(copick_config_path: str):
 
     root = copick.from_file(copick_config_path)
@@ -281,7 +293,7 @@ def split_multiclass_dataset(runIDs,
                 testRunIDs.extend(test_items)
             else:
                 valRunIDs.extend(remaining)
-                testRunIDs = None
+                testRunIDs = []
     else:
         # If no categories, split as a 1D list
         trainRunIDs, remaining = train_test_split(runIDs, test_size=(1 - train_ratio), random_state=random_state)
@@ -293,7 +305,7 @@ def split_multiclass_dataset(runIDs,
             )
         else:
             valRunIDs = remaining
-            testRunIDs = None
+            testRunIDs = []
 
     return trainRunIDs, valRunIDs, testRunIDs    
 
@@ -304,7 +316,7 @@ def load_copick_config(path: str):
     if os.path.isfile(path):
         root = copick.from_file(path)
     else:
-        raise FileNotFoundError(f"Path does not exist: {path}")
+        raise FileNotFoundError(f"Copick Config Path does not exist: {path}")
     
     return root
 
@@ -334,29 +346,9 @@ def prepare_for_inline_json(data):
                 data['model'][key] = f"[{', '.join(map(repr, data['model'][key]))}]"
     return data
 
-# def get_model_parameters(model):
-
-#     model_name = model.__class__.__name__
-#     model_parameters = {
-#         'model_name': model.__class__.__name__, 
-#         'Nclasses': model.out_channels
-#     }
-
-#     if model_name == 'AttentionUnet' or model_name == 'UNet':
-#         model_parameters['channels'] = model.channels
-#         model_parameters['strides'] = model.strides
-
-#     if model_name == 'UNet':
-#         model_parameters['res_units'] = model.num_res_units
-
-#     # Parameters for UNet++
-
-#     return model_parameters
-
 def get_optimizer_parameters(trainer):
 
     optimizer_parameters = {
-        'dim_in': trainer.crop_size,
         'my_num_samples': trainer.num_samples,  
         'val_interval': trainer.val_interval,
         'lr': trainer.optimizer.param_groups[0]['lr'],
@@ -380,17 +372,15 @@ def get_optimizer_parameters(trainer):
 
     return optimizer_parameters
 
-def save_parameters_to_json(model, trainer, dataloader, filename: str):
+def save_parameters_to_yaml(model, trainer, dataloader, filename: str):
 
     parameters = {
         'model': model.get_model_parameters(),
         'optimizer': get_optimizer_parameters(trainer),
         'dataloader': dataloader.get_dataloader_parameters()
     }
-    parameters = prepare_for_inline_json(parameters)
 
-    with open(os.path.join(filename), "w") as json_file:
-        json.dump( parameters, json_file, indent=4 )
+    utils.save_parameters_yaml(parameters, filename)
     print(f"Training Parameters saved to {filename}")
 
 def prepare_inline_results_json(results):
@@ -411,6 +401,19 @@ def save_results_to_json(results, filename: str):
     print(f"Training Results saved to {filename}")
 
 ##############################################################################################################################
+
+# def save_parameters_to_json(model, trainer, dataloader, filename: str):
+
+#     parameters = {
+#         'model': model.get_model_parameters(),
+#         'optimizer': get_optimizer_parameters(trainer),
+#         'dataloader': dataloader.get_dataloader_parameters()
+#     }
+#     parameters = prepare_for_inline_json(parameters)
+
+#     with open(os.path.join(filename), "w") as json_file:
+#         json.dump( parameters, json_file, indent=4 )
+#     print(f"Training Parameters saved to {filename}")
 
 # def split_datasets(runIDs, 
 #                    train_ratio: float = 0.7, 

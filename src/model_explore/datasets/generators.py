@@ -38,6 +38,11 @@ class TrainLoaderManager:
         self.val_loader = None
         self.train_loader = None
 
+        # Initialize the input dimensions   
+        self.nx = None
+        self.ny = None
+        self.nz = None
+
     def get_available_runIDs(self):
         """
         Identify and return a list of run IDs that have segmentations available for the target.
@@ -97,7 +102,8 @@ class TrainLoaderManager:
         # Option 1: Only TrainRunIDs are Provided, Split into Train, Validate and Test (Optional)
         if trainRunIDs is not None and validateRunIDs is None:
             trainRunIDs, validateRunIDs, testRunIDs = io.split_multiclass_dataset(
-                trainRunIDs, train_ratio, val_ratio, test_ratio, create_test_dataset
+                trainRunIDs, train_ratio, val_ratio, test_ratio, 
+                return_test_dataset = create_test_dataset
             )
         # Option 2: TrainRunIDs and ValidateRunIDs are Provided, No Need to Split
         elif trainRunIDs is not None and validateRunIDs is not None:
@@ -106,11 +112,12 @@ class TrainLoaderManager:
         else:
             runIDs = self.get_available_runIDs()          
             trainRunIDs, validateRunIDs, testRunIDs = io.split_multiclass_dataset(
-                runIDs, train_ratio, val_ratio, test_ratio, create_test_dataset
+                runIDs, train_ratio, val_ratio, test_ratio, 
+                return_test_dataset = create_test_dataset
             )
 
         # Swap if Test Runs is Larger than Validation Runs
-        if len(testRunIDs) > len(validateRunIDs):
+        if create_test_dataset and len(testRunIDs) > len(validateRunIDs):
             testRunIDs, validateRunIDs = validateRunIDs, testRunIDs
 
         # Determine if datasets fit entirely in memory based on the batch size
@@ -216,10 +223,14 @@ class TrainLoaderManager:
             # Create the cached dataset with non-random transforms
             train_ds = CacheDataset(data=train_files, transform=augment.get_transforms(), cache_rate=1.0)
 
+            # I need to read (nx,ny,nz) and scale the crop size to make sure it isnt larger than nx.
+            if self.nx is None: (self.nx,self.ny,self.nz) = train_ds[0]['image'].shape[1:]
+            self.input_dim = io.get_input_dimensions(train_ds, crop_size)
+
             # Wrap the cached dataset to apply random transforms during iteration
             self.dynamic_train_dataset = dataset.DynamicDataset(
                 data=train_ds, 
-                transform=augment.get_random_transforms(crop_size, num_samples, self.Nclasses)
+                transform=augment.get_random_transforms(self.input_dim, num_samples, self.Nclasses)
             )
 
             # Define the number of processes for the DataLoader
@@ -229,7 +240,7 @@ class TrainLoaderManager:
             self.train_loader = DataLoader(
                 self.dynamic_train_dataset,
                 batch_size=train_batch_size,
-                shuffle=True,
+                shuffle=False,
                 num_workers=n_procs,
                 pin_memory=torch.cuda.is_available()
             )
@@ -256,16 +267,20 @@ class TrainLoaderManager:
             self._check_max_label_value(val_files)
 
             # Create validation dataset
-            val_ds = CacheDataset(data=val_files, transform=augment.get_predict_transforms(), cache_rate=1.0)
+            val_ds = CacheDataset(data=val_files, transform=augment.get_transforms(), cache_rate=1.0)
+
+            # # I need to read (nx,ny,nz) and scale the crop size to make sure it isnt larger than nx.
+            # if self.nx is None:
+            #     (self.nx,self.ny,self.nz) = val_ds[0]['image'].shape[1:]
+
+            # if crop_size > self.nx: self.input_dim = (self.nx, crop_size, crop_size)
+            # else:                   self.input_dim = (crop_size, crop_size, crop_size)
 
             # Wrap the cached dataset to apply random transforms during iteration
-            self.dynamic_validation_dataset = dataset.DynamicDataset(
-                data=val_ds, transform=augment.get_validation_transforms(crop_size, num_samples, self.Nclasses)
-            )
+            self.dynamic_validation_dataset = dataset.DynamicDataset( data=val_ds )
 
             dataset_size = len(self.dynamic_validation_dataset)
             n_procs = min(mp.cpu_count(), 8)
-            # n_procs = min(mp.cpu_count(), max(1, dataset_size // 1000))  # Adjust threshold as needed
 
             # Create validation DataLoader
             self.val_loader  = DataLoader(
@@ -358,6 +373,11 @@ class PredictLoaderManager:
         self.Nclasses = Nclasses
         self.tomo_batch_size = tomo_batch_size 
 
+        # Initialize the input dimensions   
+        self.nx = None
+        self.ny = None
+        self.nz = None
+
 
     def create_predict_dataloader(
         self, 
@@ -368,9 +388,18 @@ class PredictLoaderManager:
         # Split trainRunIDs, validateRunIDs, testRunIDs
         if runIDs is None:
             runIDs = [run.name for run in self.root.runs]
+            
+        # Load the test data
         test_files = io.load_predict_data(self.root, runIDs, voxel_spacing, tomo_algorithm)  
 
+        # Create the cached dataset with non-random transforms
         test_ds = CacheDataset(data=test_files, transform=augment.get_predict_transforms())
+
+        # Read (nx,ny,nz) for input tomograms.
+        if self.nx is None:
+            (self.nx,self.ny,self.nz) = test_ds[0]['image'].shape[1:]
+
+        # Create the DataLoader
         test_loader = DataLoader(test_ds, 
                                 batch_size=4, 
                                 shuffle=False, 
