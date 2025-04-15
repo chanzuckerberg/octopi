@@ -57,7 +57,8 @@ class BayesianModelSearch:
 
     def _define_optimizer(self):
         # Define optimizer
-        self.optimizer = torch.optim.Adam(self.model.parameters(), lr=1e-3, weight_decay=1e-5)
+        lr0 = 1e-3
+        self.optimizer = torch.optim.Adam(self.model.parameters(), lr=lr0, weight_decay=1e-5)
 
     def _train_model(self, trial, model_trainer, epochs, val_interval, crop_size, num_samples, best_metric):
         """Handles model training and error handling."""

@@ -87,9 +87,10 @@ class ModelTrainer:
                 val_labels = val_data["label"].to(self.device)
                 
                 # Apply sliding window inference
+                # roi_size=self.input_dim, # try setting a set size of 128, 144 or 160? 
                 val_outputs = sliding_window_inference(
                     inputs=val_inputs, 
-                    roi_size=self.input_dim, 
+                    roi_size=(144,144,144),
                     sw_batch_size=4,
                     predictor=self.model, 
                     overlap=0.5,
@@ -249,7 +250,7 @@ class ModelTrainer:
         """
         # Configure learning rate scheduler based on the type
         if type == "cosine":
-            eta_min = 1e-7
+            eta_min = 1e-6
             self.lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
                 self.optimizer, T_max=self.max_epochs, eta_min=eta_min )
         elif type == "onecyle":
