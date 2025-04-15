@@ -1,10 +1,21 @@
 # cziimaginginstitute-model-exploration
-Codebase for CZII's 3d particle picking model exploration project.
+A deep learning framework for Cryo-ET 3D particle picking with autonomous model exploration capabilities.
 
+## Introduction
 
-## Run codes via ssh
+DeepFindET addresses a critical bottleneck in cryo-electron tomography (cryo-ET) research: the efficient identification and extraction of proteins within complex cellular environments. As advances in cryo-ET enable the collection of thousands of tomograms, the need for automated, accurate particle picking has become increasingly urgent.
+
+Our deep learning-based pipeline streamlines the training and execution of 3D autoencoder models specifically designed for cryo-ET particle picking. Built on [copick](https://github.com/copick/copick), a storage-agnostic API, DeepFindET seamlessly accesses tomograms and segmentations across local and remote environments. 
+
+A key feature of DeepFindET is its automatic model architecture search using Bayesian optimization, allowing researchers to discover optimal neural network architectures for their specific datasets without manual trial and error.
+
+Integration with our [ChimeraX plugin](https://github.com/copick/chimerax-copick) enables researchers to easily annotate new tomograms and visualize segmentation results or particle coordinates.
+
+DeepFindET empowers researchers to navigate the dense, intricate landscapes of cryo-ET datasets with unprecedented precision and efficiency.
+
+## Run codes via CLI
 ### Installation and setup the environment
-Inside the directory, run `pip install -e .` 
+Inside the directory, run `pip install -e .` (eventually this package will be available on PyPI).  
 
 To use CZI cloud MLflow tracker, add a `.env` in the root directory like below. You can get a CZI MLflow access token from [here](https://mlflow.cw.use4-prod.si.czi.technology/api/2.0/mlflow/users/access-token) (note that a new token will be generated everytime you open this site).
 ```
@@ -15,73 +26,58 @@ MLFLOW_TRACKING_PASSWORD = <Your_mlflow_access_token>
 ### Prepare the dataset 
 Generate picks segmentations for dataset 10439 from the CZ cryoET Dataportal (only need to run this step once). 
 ```
-python3 /src/model_explore/segmentation_from_picks.py 
-    --copick_config_path copick_config_dataportal_10439.json \
-    --copick_user_name user0 \
-    --copick_segmentation_name paintedPicks
+create-targets \
+    --config config.json \
+    --target apoferritin --target beta-galactosidase,slabpick,1 \
+    --target ribosome,pytom,0 --target virus-like-particle,pytom,0 \
+    --seg-target membrane \
+    --tomogram-algorithm wbp --voxel-size 10 \
+    --target-session-id 1 --target-segmentation-name remotetargets \
+    --target-user-id train-deepfindET
 ```
 
-### Training a 3d U-Net model with generic PyTorch  
+### Training a single 3D U-Net model  
 ```
-python3 /src/model_explore/train.py 
-    --copick_config_path copick_config_dataportal_10439.json \
-    --copick_user_name user0 \
-    --copick_segmentation_name paintedPicks \
-    --train_batch_size 1 \
-    --val_batch_size 1 \
-    --num_random_samples_per_batch 16 \
-    --learning_rate 1e-4 \
-    --num_epochs 100
+train-model \
+    --config experiment,config1.json \
+    --config simulation,config2.json \
+    --voxel-size 10 --tomo-algorithm wbp --Nclass 8 \
+    --tomo-batch-size 50 --num-epochs 100 --val-interval 10 \
+    --target-info remotetargets,train-deepfindET,1
 ```
 
-### Training a 3d U-Net model with PyTorch Lighting (distributed training)
+### Model hyperparameter exploration with Optuna
 ```
-python3 /src/model_explore/train_pl.py 
-    --copick_config_path copick_config_dataportal_10439.json \
-    --copick_user_name user0 \
-    --copick_segmentation_name paintedPicks \
-    --train_batch_size 1 \
-    --val_batch_size 1 \
-    --num_random_samples_per_batch 16 \
-    --learning_rate 1e-4 \
-    --num_gpus 4 \
-    --num_epochs 100 
-```
-
-### Model hyperparameter tuning with Optuna and PyTorch Lightning 
-```
-python3 /src/model_explore/optuna_pl_ddp.py 
-    --copick_config_path copick_config_dataportal_10439.json \
-    --copick_user_name user0 \
-    --copick_segmentation_name paintedPicks \
-    --train_batch_size 1 \
-    --val_batch_size 1 \
-    --num_random_samples_per_batch 16 \
-    --learning_rate 1e-4 \
-    --num_gpus 4 \
-    --num_epochs 100 \
-    --num_optuna_trials 50 
-```
-
-## Submit a container on Coreweave  
-```
-runai submit --name <job_name> -i ghcr.io/chanzuckerberg/cziimaginginstitute-model-exploration:<tag> 
-             --command "python3 src/model_explore/optuna_pl_ddp.py --num_gpus 4" 
-             -e MLFLOW_TRACKING_USERNAME=<Your_CZ_email> -e MLFLOW_TRACKING_PASSWORD=<Your_mlflow_access_token> -g 4 
-             --preemptible --interactive --existing-pvc claimname=autonomous-3d-particle-picking-pvc,path=/usr/app/data 
+model-explore \
+    --config experiment,/mnt/dataportal/ml_challenge/config.json \
+    --config simulation,/mnt/dataportal/synthetic_ml_challenge/config.json \
+    --voxel-size 10 --tomo-algorithm wbp --Nclass 8 \
+    --model-save-path train_results
 ```
  
 ## MLflow tracking   
 To view the tracking results, go to the CZI [mlflow server](https://mlflow.cw.use4-prod.si.czi.technology/). Note the project name needs to be registered first.
 
 
-## Example results   
-We optimized 3d U-Net architecture with 8 tomograms from dataset 10439, 25 Optuna trials, and 100 epoch for each trial.  
+### Inference (Segmentation)
 ```
-[I 2024-10-23 20:59:47,927] Trial 69 finished with value: 0.10366249829530716 and parameters: {'num_layers': 4, 'base_channel': 64, 'num_downsampling_layers': 2, 'num_res_units': 3}. Best is trial 65 with value: 0.11890766769647598.   
-Best trial: 0.11890766769647598   
-Best hyperparameters: {'num_layers': 4, 'base_channel': 64, 'num_downsampling_layers': 2, 'num_res_units': 3}   
-```  
-This gives the model structure: `channels [64, 128, 256, 512], strides [2, 2, 1], num_res_units 3`.
+inference \
+    --config config.json \
+    --seg-info predict,unet,1 \
+    --model-config train_results/best_model_config.yaml \
+    --model-weights train_results/best_model.pth \
+    --voxel-size 10 --tomo-algorithm wbp --tomo-batch-size 25
+```
+
+### Inference (Localization)
+```
+localize \
+    --config config.json \
+    --pick-session-id 1 --pick-user-id unet \
+    --seg-info predict,unet,1
+```
+
+
+
 
 
