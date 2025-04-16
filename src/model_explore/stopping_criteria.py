@@ -6,10 +6,10 @@ class EarlyStoppingChecker:
     """
     
     def __init__(self, 
-                 max_nan_epochs=10, 
-                 plateau_patience=10, 
+                 max_nan_epochs=15, 
+                 plateau_patience=20, 
                  plateau_min_delta=0.001,
-                 stagnation_patience=10, 
+                 stagnation_patience=20, 
                  convergence_window=5, 
                  convergence_threshold=0.005,
                  val_interval=15,
@@ -60,11 +60,13 @@ class EarlyStoppingChecker:
             
         # Get the last 'patience' number of validation points
         recent_values = [x[1] for x in results[self.monitor_metric][-self.plateau_patience:]]
+        # Find the max value in the window
         max_value = max(recent_values)
-        last_value = recent_values[-1]
+        # Find the min value in the window
+        min_value = min(recent_values)
         
-        # Check if improvement is less than min_delta
-        if max_value - last_value < self.plateau_min_delta and max_value > last_value:
+        # If the range of values is small, consider it a plateau
+        if max_value - min_value < self.plateau_min_delta:
             self.stopped_reason = f"{self.monitor_metric} plateaued for {self.plateau_patience} validations"
             return True
         
@@ -86,21 +88,21 @@ class EarlyStoppingChecker:
             
         return False
 
-    def check_convergence_rate(self, results):
-        """Stop when improvement rate slows below threshold."""
-        if len(results[self.monitor_metric]) < self.convergence_window + 1:
-            return False
+    # def check_convergence_rate(self, results):
+    #     """Stop when improvement rate slows below threshold."""
+    #     if len(results[self.monitor_metric]) < self.convergence_window + 1:
+    #         return False
         
-        # Calculate average improvement rate over window
-        recent_values = [x[1] for x in results[self.monitor_metric][-(self.convergence_window+1):]]
-        improvements = [recent_values[i+1] - recent_values[i] for i in range(self.convergence_window)]
-        avg_improvement = sum(improvements) / self.convergence_window
+    #     # Calculate average improvement rate over window
+    #     recent_values = [x[1] for x in results[self.monitor_metric][-(self.convergence_window+1):]]
+    #     improvements = [recent_values[i+1] - recent_values[i] for i in range(self.convergence_window)]
+    #     avg_improvement = sum(improvements) / self.convergence_window
         
-        if avg_improvement < self.convergence_threshold and avg_improvement > 0:
-            self.stopped_reason = f"Convergence rate ({avg_improvement:.6f}) below threshold"
-            return True
+    #     if avg_improvement < self.convergence_threshold and avg_improvement > 0:
+    #         self.stopped_reason = f"Convergence rate ({avg_improvement:.6f}) below threshold"
+    #         return True
             
-        return False
+    #     return False
 
     def should_stop_training(self, epoch_loss, results=None, check_metrics=False):
         """
@@ -128,9 +130,9 @@ class EarlyStoppingChecker:
             if self.check_best_metric_stagnation(results):
                 return True
                 
-            # Check if convergence rate has slowed down
-            if self.check_convergence_rate(results):
-                return True
+            # # Check if convergence rate has slowed down
+            # if self.check_convergence_rate(results):
+            #     return True
                 
         return False
     

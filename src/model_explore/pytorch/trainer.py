@@ -143,13 +143,6 @@ class ModelTrainer:
         self.val_interval = val_interval
         self.use_mlflow = use_mlflow
 
-        # # Early Stopping Parameters
-        # self.nan_counter = 0
-        # self.max_nan_epochs = 10
-
-        # Stopping Criteria
-        self.stopping_criteria = stopping_criteria.EarlyStoppingChecker(monitor_metric=best_metric, val_interval=val_interval)
-
         # Create Save Folder if It Doesn't Exist
         if model_save_path is not None:
             os.makedirs(model_save_path, exist_ok=True)  
@@ -162,10 +155,16 @@ class ModelTrainer:
         if re.match(pattern, best_metric) or best_metric in self.metric_names:
             self.beta = int(best_metric[5:])
             best_metric = 'avg_fbeta'
-            print(f'\nTracking {best_metric} = {self.beta} as the best metric\n')
         else:
             print(f'\n{best_metric} is not a valid metric! Tracking avg_f1 as the best metric\n')
             best_metric = 'avg_f1'
+
+        # # Early Stopping Parameters
+        # self.nan_counter = 0
+        # self.max_nan_epochs = 10
+
+        # Stopping Criteria
+        self.stopping_criteria = stopping_criteria.EarlyStoppingChecker(monitor_metric=best_metric, val_interval=val_interval)            
 
         self.post_pred = AsDiscrete(argmax=True, to_onehot=Nclass)
         self.post_label = AsDiscrete(to_onehot=Nclass)                             
@@ -405,7 +404,18 @@ class ModelTrainer:
                 mlflow.log_metric(metric_name, value, step=curr_step)
 
     def fbeta(self, precision, recall):
-        return (1 + self.beta**2) * (precision * recall) / ((self.beta**2 * precision) + recall)
+
+        # Handle division by zero
+        numerator = (1 + self.beta**2) * (precision * recall)
+        denominator = (self.beta**2 * precision) + recall
+        
+        # Use torch.where to handle zero cases
+        result = torch.where(
+            denominator > 0,
+            numerator / denominator,
+            torch.zeros_like(precision)
+        )
+        return result
 
     def my_log_params(
         self,

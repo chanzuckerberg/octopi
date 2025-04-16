@@ -169,12 +169,23 @@ class BayesianModelSearch:
         model_trainer = trainer.ModelTrainer(self.model, self.device, self.loss_function, self.metrics_function, self.optimizer)
         model_trainer.set_parallel_mlflow(self.client, self.target_run_id)
 
-        # Train model
-        score = self._train_model(
-            trial, model_trainer, epochs, val_interval, 
-            self.sampling['crop_size'], self.sampling['num_samples'], 
-            best_metric)
+        # # Train model
+        # score = self._train_model(
+        #     trial, model_trainer, epochs, val_interval, 
+        #     self.sampling['crop_size'], self.sampling['num_samples'], 
+        #     best_metric)
 
+        # Train Model, with error handling
+        try:
+            score = self._train_model(
+                trial, model_trainer, epochs, val_interval, 
+                self.sampling['crop_size'], self.sampling['num_samples'], 
+                best_metric)
+        except Exception as e:
+            print(f"[Trial Failed] Unexpected error: {e}")
+            trial.set_user_attr("error", str(e))
+            raise optuna.TrialPruned()
+        
         # Log training parameters
         params = {
             'model': self.model_builder.get_model_parameters(),

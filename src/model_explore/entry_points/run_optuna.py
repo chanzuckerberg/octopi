@@ -136,7 +136,15 @@ class ModelSearchSubmit:
             pass
 
         mlflow.set_experiment(self.mlflow_experiment_name)
-        self.storage = f"sqlite:///explore_results_{self.model_type}/trials.db"
+    
+        # Create a storage object with heartbeat configuration
+        storage_url = f"sqlite:///explore_results_{self.model_type}/trials.db"
+        self.storage = optuna.storages.RDBStorage(
+            url=storage_url,
+            heartbeat_interval=60,  # Record heartbeat every minute
+            grace_period=600,       # 10 minutes grace period
+            failed_trial_callback=optuna.storages.RetryFailedTrialCallback(max_retry=1)
+        )
 
         # Detect GPU availability
         gpu_count = torch.cuda.device_count()
@@ -171,7 +179,7 @@ class ModelSearchSubmit:
                 lambda trial: model_search.objective(
                     trial, self.num_epochs, device,
                     val_interval=self.val_interval,
-                    best_metric=self.best_metric
+                    best_metric=self.best_metric,
                 ),
                 n_trials=self.num_trials
             )
