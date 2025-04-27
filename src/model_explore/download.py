@@ -1,63 +1,63 @@
+from model_explore.processing.downsample import FourierRescale
 from copick_utils.writers import write
 import copick, argparse
 from tqdm import tqdm
 
 def from_dataportal(
     config, 
-    method = 'wbp', 
-    processing = 'raw',
-    voxel_size = 10):
+    datasetID,
+    overlay_path,
+    dataportal_name,
+    target_tomo_type,
+    input_voxel_size = 10,
+    output_voxel_size = None):
     
-    root = copick.from_file(config)
+    if config is not None:
+        root = copick.from_file(config)
+    elif datasetID is not None and overlay_path is not None:
+        root = copick.from_czcdp_datasets([datasetID], overlay_root=overlay_path)
+    else:
+        raise ValueError('Either config or datasetID and overlay_path must be provided')
+
+    # If we want to save the tomograms at a different voxel size, we need to rescale the tomograms
+    if output_voxel_size is not None and output_voxel_size > input_voxel_size:
+        rescale = FourierRescale(input_voxel_size, output_voxel_size)
 
     # Create a directory for the tomograms
     for run in tqdm(root.runs):
 
         # Check if voxel spacing is available
-        vs = run.get_voxel_spacing(voxel_size)
+        vs = run.get_voxel_spacing(input_voxel_size)
 
         if vs is None:
-            print(f'No Voxel-Spacing Available for RunID: {run.name}, Voxel-Size: {voxel_size}')
+            print(f'No Voxel-Spacing Available for RunID: {run.name}, Voxel-Size: {input_voxel_size}')
             continue
         
         # Check if base reconstruction method is available
-        avail_tomos = vs.get_tomograms(method)
+        avail_tomos = vs.get_tomograms(dataportal_name)
         if avail_tomos is None: 
-            print('No Tomograms Available for RunID: {runID}, Voxel-Size: {voxel_size}, Tomo-Type: {method}')
+            print(f'No Tomograms Available for RunID: {run.name}, Voxel-Size: {input_voxel_size}, Tomo-Type: {dataportal_name}')
             continue
 
         # Download the tomogram
-        if processing == 'ctfdeconvolved':
-            # vol = avail_tomos[0].meta.portal_metadata.portal_metadata.processing
-            vol = [obj for obj in avail_tomos if obj.meta.portal_metadata.portal_metadata.processing == 'filtered']
-        elif processing == 'raw': # Assume we're looking for pure wbp tomograms
-            # vol = avail_tomos[1]
-            vol = [obj for obj in avail_tomos if obj.meta.portal_metadata.portal_metadata.processing == 'raw']
-            processing = 'wbp'
-        else:
-            vol = [obj for obj in avail_tomos if obj.meta.portal_metadata.portal_metadata.processing_software == processing]
+        if len(avail_tomos) > 0:
+            vol = avail_tomos[0].numpy()
 
-        if len(vol) == 0:
-            print(f'No Tomograms Available for RunID: {run.name}, Voxel-Size: {voxel_size}, Tomo-Type: {method}, Processing: {processing}')
-            continue
-        else:
-            vol = vol[0].numpy()
-
-        # Write the tomogram data
-        try: 
-            tomogram = vs.new_tomogram(tomo_type=processing)
-            tomogram.from_numpy(vol)
-        except Exception as e:
-            # How can I write a wbp tomogram?
-            print(f'Error writing tomogram: {e}')
-            tomogram = vs.get_tomograms(processing)[0]
-            tomogram.from_numpy(vol)
+            # If we want to save the tomograms at a different voxel size, we need to rescale the tomograms
+            if output_voxel_size is None:
+                write.tomogram(run, vol, input_voxel_size, target_tomo_type)
+            else:
+                vol = rescale.run(vol)
+                write.tomogram(run, vol, output_voxel_size, target_tomo_type)
 
 def cli():
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument('--config', type=str, required=True, help='Path to the config file')
-    parser.add_argument('--method', type=str, required=False, default='wbp', help='Tomogram method')
-    parser.add_argument('--processing', type=str, required=False, default='raw', help='Tomogram processing')
-    parser.add_argument('--voxel-size', type=float, required=False, default=10, help='Voxel size')
+    parser.add_argument('--config', type=str, required=False, default=None, help='Path to the config file')
+    parser.add_argument('--datasetID', type=int, required=False, default=None, help='Dataset ID')
+    parser.add_argument('--overlay-path', type=str, required=False, default=None, help='Path to the overlay file')
+    parser.add_argument('--dataportal-name', type=str, required=False, default='wbp', help='Dataportal name')
+    parser.add_argument('--target-tomo-type', type=str, required=False, default='wbp', help='Local name')
+    parser.add_argument('--input-voxel-size', type=float, required=False, default=10, help='Voxel size')
+    parser.add_argument('--output-voxel-size', type=float, required=False, default=None, help='Save voxel size')
     args = parser.parse_args()
-    from_dataportal(args.config, args.method, args.processing, args.voxel_size)
+    from_dataportal(args.config, args.datasetID, args.overlay_path, args.dataportal_name, args.target_tomo_type, args.input_voxel_size, args.output_voxel_size)

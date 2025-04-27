@@ -39,8 +39,15 @@ def process_membrane_bound_extract(run,
     coordinates = io.get_copick_coordinates(
         run, 
         picks_info[0], picks_info[1], picks_info[2],
-        voxel_size
+        voxel_size,
+        raise_error=False
     )
+
+    # If No Coordinates are Found, Return
+    if coordinates is None:
+        print(f'[Warning] RunID: {run.name} - No Coordinates Found for {picks_info[0]}, {picks_info[1]}, {picks_info[2]}')
+        return
+
     nPoints = len(coordinates)
 
     # Determine which Segmentation to Use for Filtering
@@ -124,16 +131,20 @@ def process_membrane_bound_extract(run,
         coordinates[:, [0, 2]] = coordinates[:, [2, 0]]
         coordinates = coordinates * voxel_size
         
+        # Save the close points in CoPick project
         if len(close_indices) > 0:
-            # Save the close points in CoPick project
-            close_picks = run.new_picks(object_name=picks_info[0], user_id=save_user_id, session_id=save_session_id)
+            try:
+                close_picks = run.new_picks(object_name=picks_info[0], user_id=save_user_id, session_id=save_session_id)
+            except:
+                close_picks = run.get_picks(object_name=picks_info[0], user_id=save_user_id, session_id=save_session_id)[0]
             close_picks.from_numpy(coordinates[close_indices], orientations[close_indices])
 
-        # Save the far points Coordiantes
-        if len(far_indices) > 0:                        
-
-            # Save as another CoPick pick
-            far_picks = run.new_picks(object_name=picks_info[0], user_id=save_user_id, session_id=new_session_id)
+        # Save the far points Coordinates in another CoPick pick
+        if len(far_indices) > 0:                       
+            try:
+                far_picks = run.new_picks(object_name=picks_info[0], user_id=save_user_id, session_id=new_session_id)
+            except:
+                far_picks = run.get_picks(object_name=picks_info[0], user_id=save_user_id, session_id=new_session_id)[0]
 
             # Assume We Don't Know The Orientation for Anything Far From Membranes
             empty_orientations =  np.zeros(orientations[far_indices].shape)

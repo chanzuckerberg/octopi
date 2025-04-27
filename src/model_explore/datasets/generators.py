@@ -1,9 +1,9 @@
-from monai.data import DataLoader, CacheDataset, Dataset
-from model_explore.datasets import dataset, augment
+from model_explore.datasets import dataset, augment, cached_datset
+from monai.data import DataLoader, SmartCacheDataset, CacheDataset, Dataset
 from typing import List, Optional
 from model_explore import io
+import torch, os, random, gc
 import multiprocess as mp
-import torch, os, random
 
 class TrainLoaderManager:
 
@@ -200,7 +200,7 @@ class TrainLoaderManager:
     def create_train_dataloaders(
         self,
         crop_size: int = 96,
-        num_samples: int = 16):
+        num_samples: int = 64):
 
         train_batch_size = 1
         val_batch_size = 1
@@ -223,6 +223,10 @@ class TrainLoaderManager:
             # Create the cached dataset with non-random transforms
             train_ds = CacheDataset(data=train_files, transform=augment.get_transforms(), cache_rate=1.0)
 
+            # Delete the training files to free memory
+            train_files = None
+            gc.collect()
+
             # I need to read (nx,ny,nz) and scale the crop size to make sure it isnt larger than nx.
             if self.nx is None: (self.nx,self.ny,self.nz) = train_ds[0]['image'].shape[1:]
             self.input_dim = io.get_input_dimensions(train_ds, crop_size)
@@ -242,7 +246,7 @@ class TrainLoaderManager:
                 batch_size=train_batch_size,
                 shuffle=False,
                 num_workers=n_procs,
-                pin_memory=torch.cuda.is_available()
+                pin_memory=torch.cuda.is_available(),
             )
 
         else:
@@ -269,6 +273,10 @@ class TrainLoaderManager:
             # Create validation dataset
             val_ds = CacheDataset(data=val_files, transform=augment.get_transforms(), cache_rate=1.0)
 
+            # Delete the validation files to free memory
+            val_files = None
+            gc.collect()
+
             # # I need to read (nx,ny,nz) and scale the crop size to make sure it isnt larger than nx.
             # if self.nx is None:
             #     (self.nx,self.ny,self.nz) = val_ds[0]['image'].shape[1:]
@@ -288,7 +296,7 @@ class TrainLoaderManager:
                 batch_size=val_batch_size,
                 num_workers=n_procs,
                 pin_memory=torch.cuda.is_available(),
-                shuffle=False,  # Ensure the data order remains consistent
+                shuffle=False,  # Ensure the data order remains consistent,            
             )
         else:
             validateRunIDs = self._extract_run_ids('val_data_iter', self._initialize_val_iterators)             

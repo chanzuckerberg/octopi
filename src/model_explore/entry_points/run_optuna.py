@@ -107,13 +107,13 @@ class ModelSearchSubmit:
         self.data_generator.get_data_splits(
             trainRunIDs=self.trainRunIDs,
             validateRunIDs=self.validateRunIDs,
-            train_ratio = 0.9, val_ratio = 0.1, test_ratio = 0.0,
+            train_ratio = 0.8, val_ratio = 0.2, test_ratio = 0.0,
             create_test_dataset = False
         )
         
         # Get the reload frequency
         self.data_generator.get_reload_frequency(self.num_epochs)
-
+        
     def _print_input_configs(self):
         """Prints training configuration for debugging purposes."""
         print(f'\nTraining with:')

@@ -18,7 +18,7 @@ def processs_localization(run,
                           voxel_size: float = 10,
                           filter_size: int = None,
                           radius_min_scale: float = 0.5, 
-                          radius_max_scale: float = 1.5,
+                          radius_max_scale: float = 1.0,
                           pick_session_id: str = '1',
                           pick_user_id: str = 'monai'): 
 
@@ -35,7 +35,7 @@ def processs_localization(run,
                                     raise_error=False)
 
     # Preprocess Segmentation
-    seg = preprocess_segmentation(seg, voxel_size, objects)
+    # seg = preprocess_segmentation(seg, voxel_size, objects)
 
     # If No Segmentation is Found, Return
     if seg is None:
@@ -67,7 +67,10 @@ def processs_localization(run,
             points *= voxel_size
 
             # Save Picks
-            picks = run.new_picks(object_name = obj[0], session_id = pick_session_id, user_id=pick_user_id)
+            try:
+                picks = run.new_picks(object_name = obj[0], session_id = pick_session_id, user_id=pick_user_id)
+            except:
+                picks = run.get_picks(object_name = obj[0], session_id = pick_session_id, user_id=pick_user_id)[0]
 
             # Assign Identity As Orientation
             orientations = np.zeros([points.shape[0], 4, 4])
@@ -128,25 +131,9 @@ def extract_particle_centroids_via_watershed(
     all_centroids = []
     for region in regionprops(watershed_labels):
         if min_particle_size <= region.area <= max_particle_size:
-            # Option 1: Use all centroids
-            # all_centroids.append(region.centroid)
 
-            # Option 2: Use only elongated and dense particles
-            add_centroid = True
-            
-            # Check circularity if possible
-            if hasattr(region, 'major_axis_length') and region.major_axis_length > 0:
-                circularity = region.minor_axis_length / region.major_axis_length
-                if circularity < 0.5:  # Filters elongated objects
-                    add_centroid = False
-                    
-            # Check solidity if possible
-            if hasattr(region, 'solidity'):
-                if region.solidity < 0.7:  # Filters hollow objects
-                    add_centroid = False
-            
-            if add_centroid:
-                all_centroids.append(region.centroid)
+            # Option 1: Use all centroids
+            all_centroids.append(region.centroid)
 
     return all_centroids
 
@@ -181,13 +168,13 @@ def extract_particle_centroids_via_com(
     valid_objects = np.where((object_sizes > min_particle_size) & (object_sizes < max_particle_size))[0]                        
 
     # Estimate Coordiantes from CoM for LabelMaps
-    deepFinderCoords = []
+    octopusCoords = []
     for object_num in tqdm(valid_objects):
         com = ndi.center_of_mass(label_objs == object_num)
         swapped_com = (com[2], com[1], com[0])
-        deepFinderCoords.append(swapped_com)
+        octopusCoords.append(swapped_com)
    
-    return deepFinderCoords
+    return octopusCoords
 
 def remove_repeated_picks(coordinates, distanceThreshold, pixelSize = 1):
 
@@ -234,7 +221,7 @@ def preprocess_segmentation(segmentation, voxel_size, particle_info):
         # # Normal threshold for other particles
         # else:
         #     scale = 0.4
-        scale = 0.5
+        scale = 0.3
         radius = radius / voxel_size
         min_size = (4/3) * np.pi * ((radius * 0.5) ** 3)
         
