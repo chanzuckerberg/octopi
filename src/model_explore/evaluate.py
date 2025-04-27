@@ -13,7 +13,7 @@ class evaluator:
                  prediction_user_id: str,
                  predict_session_id: str,
                  voxel_size: float = 10,
-                 beta: float = 3,
+                 beta: float = 4,
                  object_names: List[str] = None):
         
         self.root = copick.from_file(copick_config)
@@ -58,11 +58,21 @@ class evaluator:
                 
         print('Using the following valid objects:', [name for name, _ in self.objects])
 
+        # Define object-specific weights
+        self.weights = {
+            "apo-ferritin": 1,
+            "beta-amylase": 0,  # Excluded from scoring
+            "beta-galactosidase": 2,
+            "ribosome": 1,
+            "thyroglobulin": 2,
+            "virus-like particle": 1,
+        }
+
     def run(self, 
             save_path: str = None,
             distance_threshold_scale: float = 0.8,
             runIDs: List[str] = None):
-        
+    
         # Type check for runIDs
         if runIDs is not None and not (isinstance(runIDs, list) and all(isinstance(x, str) for x in runIDs)):
             raise TypeError("runIDs must be a list of strings")
@@ -72,10 +82,12 @@ class evaluator:
 
         metrics = {}
         summary_metrics = {name: {'precision': [], 'recall': [], 'f1_score': [], 'fbeta_score': [], 'accuracy': [], 
-                                  'true_positives': [], 'false_positives': [], 'false_negatives': []} for name, _ in self.objects}
+                                'true_positives': [], 'false_positives': [], 'false_negatives': []} for name, _ in self.objects}
+        
+        # For storing the aggregated counts per particle type (across all runs)
+        aggregated_counts = {name: {'total_tp': 0, 'total_fp': 0, 'total_fn': 0} for name, _ in self.objects}
 
         for runID in run_ids:
-        
             # Initialize the nested dictionary for this runID
             metrics[runID] = {}
             run = self.root.get_run(runID)
@@ -93,41 +105,94 @@ class evaluator:
                     self.prediction_user_id, self.predict_session_id, 
                     self.voxel_size, raise_error=False
                 )
+                
+                # If no reference (GT) points, all candidate points are false positives
+                if gt_coordinates is None or len(gt_coordinates) == 0:
+                    num_pred_points = pred_coordinates.shape[0] if pred_coordinates is not None else 0
+                    metrics[runID][name] = {'precision': 0, 'recall': 0, 'fbeta_score': 0, 'true_positives': 0, 'false_positives': num_pred_points, 'false_negatives': 0}
+                    
+                    # Update aggregated counts
+                    aggregated_counts[name]['total_fp'] += num_pred_points
+                    
+                    continue
 
-                # Skip if either ground truth or predicted coordinates are None
-                if gt_coordinates is None or pred_coordinates is None:
+                # If no candidate (predicted) points, all reference points are false negatives
+                if pred_coordinates is None or len(pred_coordinates) == 0:
+                    num_gt_points = gt_coordinates.shape[0] if gt_coordinates is not None else 0
+                    metrics[runID][name] = {'precision': 0, 'recall': 0, 'fbeta_score': 0, 'true_positives': 0, 'false_positives': 0, 'false_negatives': num_gt_points}
+                    
+                    # Update aggregated counts
+                    aggregated_counts[name]['total_fn'] += num_gt_points
+                    
                     continue
 
                 # Compute Distance Threshold Based on Particle Radius
                 distance_threshold = (radius/self.voxel_size) * distance_threshold_scale
-                metrics[runID][name] = self.compute_metrics(gt_coordinates, pred_coordinates, distance_threshold)
+                metrics[runID][name] = self.compute_metrics(gt_coordinates, pred_coordinates, distance_threshold)         
 
                 # Collect metrics for summary statistics
                 for key in summary_metrics[name]:
                     summary_metrics[name][key].append(metrics[runID][name][key])
+                
+                # Update aggregated counts
+                aggregated_counts[name]['total_tp'] += metrics[runID][name]['true_positives']
+                aggregated_counts[name]['total_fp'] += metrics[runID][name]['false_positives']
+                aggregated_counts[name]['total_fn'] += metrics[runID][name]['false_negatives']
 
         # Create a new dictionary for summarized metrics
         final_summary_metrics = {}
 
         # Compute average metrics and standard deviations across runs for each object
         for name, _ in self.objects:
-
             # Initialize the final summary for the object
             final_summary_metrics[name] = {}
 
             for key in summary_metrics[name]:
-
                 mu_val = float(np.mean(summary_metrics[name][key]))
                 std_val = float(np.std(summary_metrics[name][key]))
 
-                # Populate the  new dictionary with structured data
+                # Populate the new dictionary with structured data
                 final_summary_metrics[name][key] = {
                     'mean': mu_val,
                     'std': std_val
                 }
 
         print('\nAverage Metrics Summary:')
-        self.print_metrics_summary(final_summary_metrics)            
+        self.print_metrics_summary(final_summary_metrics)          
+        
+        # Compute Final Kaggle Submission Score using reference approach
+        aggregate_fbeta = 0.0
+        total_weight = 0.0
+        
+        print('\nCalculating Final F-beta Score using per-particle approach:')
+        for name, counts in aggregated_counts.items():
+            tp = counts['total_tp']
+            fp = counts['total_fp']
+            fn = counts['total_fn']
+            
+            # Calculate precision and recall for this particle type
+            precision = tp / (tp + fp) if (tp + fp) > 0 else 0
+            recall = tp / (tp + fn) if (tp + fn) > 0 else 0
+            
+            # Calculate F-beta for this particle type
+            particle_fbeta = (1 + self.beta**2) * (precision * recall) / \
+                            ((self.beta**2 * precision) + recall) if \
+                            ((self.beta**2 * precision) + recall) > 0 else 0
+            
+            # Get the weight for this particle type
+            weight = self.weights.get(name, 1)
+            
+            # Accumulate weighted F-beta score
+            aggregate_fbeta += particle_fbeta * weight
+            total_weight += weight
+            
+            print(f"  {name}: TP={tp}, FP={fp}, FN={fn}, Precision={precision:.3f}, " + 
+                f"Recall={recall:.3f}, F-beta={particle_fbeta:.3f}, Weight={weight}")
+        
+        # Normalize by total weight
+        final_fbeta = aggregate_fbeta / total_weight if total_weight > 0 else 0
+        
+        print(f'\nFinal Kaggle Submission Score: {final_fbeta:.3f}')   
 
         # Save average and detailed metrics with parameters included        
         if save_path:
@@ -138,17 +203,16 @@ class evaluator:
             
             os.makedirs(save_path, exist_ok=True)
             summary_metrics = { "input": self.input_params, "parameters": self.parameters, 
-                                     "summary_metrics": final_summary_metrics }
+                                    "summary_metrics": final_summary_metrics }
             with open(os.path.join(save_path, 'average_metrics.json'), 'w') as f:
                 json.dump(summary_metrics, f, indent=4)
             print(f'\nAverage Metrics saved to {os.path.join(save_path, "average_metrics.json")}')
             
             detailed_metrics = { "input": self.input_params, "parameters": self.parameters, 
-                                 "metrics": metrics }
+                                "metrics": metrics }
             with open(os.path.join(save_path, 'metrics.json'), 'w') as f:
                 json.dump(detailed_metrics, f, indent=4)
             print(f'Metrics saved to {os.path.join(save_path, "metrics.json")}')
-
 
     def compute_metrics(self, 
                         gt_points, 

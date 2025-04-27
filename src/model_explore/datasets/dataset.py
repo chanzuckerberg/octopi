@@ -1,5 +1,4 @@
 from torch.utils.data import Dataset
-from monai.transforms import Compose
 
 class DynamicDataset(Dataset):
     def __init__(self, data, transform=None):

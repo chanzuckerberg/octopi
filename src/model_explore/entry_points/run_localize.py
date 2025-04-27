@@ -107,7 +107,7 @@ def localize_parser(parser_description, add_slurm: bool = False):
 
     localize_group = parser.add_argument_group("Localize Arguments")
     localize_group.add_argument("--radius-min-scale", type=float, default=0.5, required=False, help="Minimum radius scale for particles.")
-    localize_group.add_argument("--radius-max-scale", type=float, default=1.5, required=False, help="Maximum radius scale for particles.")
+    localize_group.add_argument("--radius-max-scale", type=float, default=1.0, required=False, help="Maximum radius scale for particles.")
     localize_group.add_argument("--filter-size", type=int, default=10, required=False, help="Filter size for localization.")
     localize_group.add_argument("--pick-objects", type=utils.parse_list, default=None, required=False, help="Specific Objects to Find Picks for.")
     localize_group.add_argument("--n-procs", type=int, default=None, required=False, help="Number of CPU processes to parallelize runs across. Defaults to the max number of cores available or available runs.")

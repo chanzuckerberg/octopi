@@ -118,7 +118,7 @@ def get_tomogram_array(run,
             print(message)
             return None
 
-    return tomogram.numpy()
+    return tomogram.numpy().astype(np.float32)
 
 ##############################################################################################################################
 
@@ -161,7 +161,7 @@ def get_segmentation_array(run,
               f'Defaulting to Loading: {seg[0]}\n')
     seg = seg[0]
 
-    return seg.numpy()
+    return seg.numpy().astype(np.int8)
 
 ##############################################################################################################################
 

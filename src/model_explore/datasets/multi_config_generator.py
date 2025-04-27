@@ -1,11 +1,11 @@
+from model_explore.datasets import dataset, augment, cached_datset
 from model_explore.datasets.generators import TrainLoaderManager
-from monai.data import DataLoader, CacheDataset, Dataset
-from model_explore.datasets import dataset, augment
+from monai.data import DataLoader, SmartCacheDataset, CacheDataset, Dataset
 from model_explore import io
 import multiprocess as mp
 from typing import List
 from tqdm import tqdm
-import torch
+import torch, gc
 
 class MultiConfigTrainLoaderManager(TrainLoaderManager):
 
@@ -63,7 +63,7 @@ class MultiConfigTrainLoaderManager(TrainLoaderManager):
         """
         available_runIDs = []  
         for name, root in self.roots.items():
-            runIDs = [run.name for run in root.runs]             
+            runIDs = [run.name for run in root.runs]                       
             for run in runIDs:
                 run = root.get_run(run)
                 seg = run.get_segmentations(
@@ -74,7 +74,7 @@ class MultiConfigTrainLoaderManager(TrainLoaderManager):
                 )
                 if len(seg) > 0:
                     available_runIDs.append((name, run.name))  # Include session name for disambiguation
-        
+
         # If No Segmentations are Found, Inform the User
         if len(available_runIDs) == 0:
             print(
@@ -129,6 +129,7 @@ class MultiConfigTrainLoaderManager(TrainLoaderManager):
         Returns:
             List: Combined dataset for the specified run IDs.
         """
+
         data = []
         for session_name, run_name in tqdm(runIDs):
             root = self.roots[session_name]
@@ -144,10 +145,7 @@ class MultiConfigTrainLoaderManager(TrainLoaderManager):
         Override data loading to fetch from multiple projects.
         """
         my_crop_size = kwargs.get("crop_size", 96)
-        my_num_samples = kwargs.get("num_samples", 16)
-
-        train_batch_size = 1
-        val_batch_size = 1  
+        my_num_samples = kwargs.get("num_samples", 128)
 
         # If reloads are disabled and loaders already exist, reuse them
         if self.reload_frequency < 0 and (self.train_loader is not None) and (self.val_loader is not None):
@@ -161,8 +159,17 @@ class MultiConfigTrainLoaderManager(TrainLoaderManager):
             trainRunIDs = self._extract_run_ids('train_data_iter', self._initialize_train_iterators)
             train_files = self._load_data(trainRunIDs)
 
+            # # Create the cached dataset with non-random transforms
+            train_ds = SmartCacheDataset(data=train_files, transform=augment.get_transforms(), cache_rate=0.5)
+
+            # # Delete the training files to free memory
+            train_files = None
+            gc.collect()
+
             # Create the cached dataset with non-random transforms
-            train_ds = CacheDataset(data=train_files, transform=augment.get_transforms(), cache_rate=1.0)
+            # train_ds = cached_datset.MultiConfigCacheDataset(
+            #     self, trainRunIDs, transform=augment.get_transforms(), cache_rate=1.0
+            # )
 
             # I need to read (nx,ny,nz) and scale the crop size to make sure it isnt larger than nx.
             if self.nx is None: (self.nx,self.ny,self.nz) = train_ds[0]['image'].shape[1:]
@@ -179,7 +186,7 @@ class MultiConfigTrainLoaderManager(TrainLoaderManager):
                 batch_size=1,
                 shuffle=True,
                 num_workers=n_procs,
-                pin_memory=torch.cuda.is_available()
+                pin_memory=torch.cuda.is_available(),             
             )
 
         else:
@@ -196,8 +203,17 @@ class MultiConfigTrainLoaderManager(TrainLoaderManager):
             validateRunIDs = self._extract_run_ids('val_data_iter', self._initialize_val_iterators)             
             val_files  = self._load_data(validateRunIDs)    
 
-            # Create validation dataset
-            val_ds = CacheDataset(data=val_files, transform=augment.get_transforms(), cache_rate=1.0)            
+            # # Create validation dataset
+            val_ds = SmartCacheDataset(data=val_files, transform=augment.get_transforms(), cache_rate=1.0)            
+
+            # # Delete the validation files to free memory
+            val_files = None
+            gc.collect()
+
+            # Create the cached dataset with non-random transforms
+            # val_ds = cached_datset.MultiConfigCacheDataset(
+            #     self, validateRunIDs, transform=augment.get_transforms(), cache_rate=1.0
+            # )
 
             # # I need to read (nx,ny,nz) and scale the crop size to make sure it isnt larger than nx.
             # if self.nx is None:
@@ -212,10 +228,10 @@ class MultiConfigTrainLoaderManager(TrainLoaderManager):
             # Create validation DataLoader
             self.val_loader  = DataLoader(
                 self.dynamic_validation_dataset,
-                batch_size=val_batch_size,
+                batch_size=1,
                 num_workers=n_procs,
                 pin_memory=torch.cuda.is_available(),
-                shuffle=False,  # Ensure the data order remains consistent
+                shuffle=False,  # Ensure the data order remains consistent            
             )
         else:
             validateRunIDs = self._extract_run_ids('val_data_iter', self._initialize_val_iterators)             

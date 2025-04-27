@@ -9,10 +9,10 @@ readme = "README.md"
 [tool.poetry.dependencies]
 python = "^3.9"
 requests = "^2.25.1"
-matplotlib = "^3.4.3"
-tqdm = "4.66.5"
+matplotlib = "*"
+tqdm = "*"
 copick = "*"
-nibabel = "5.2.1"
+nibabel = "*"
 mlflow = "2.17.0"
 optuna = "4.0.0"
 plotly = "*"
@@ -25,7 +25,7 @@ multiprocess = "*"
 python-dotenv = "*"
 pytorch-lightning = "2.4.0"
 monai-weekly = { version = "1.5.dev2448", allow-prereleases = true }
-optuna-integration = { version = "*", extras = ["pytorch_lightning"] }
+optuna-integration = { version = "*", extras = ["botorch", "pytorch_lightning"] }
 copick-utils = {git = "https://github.com/copick/copick-utils.git", branch = "main"}
 
 [tool.poetry.dev-dependencies]
