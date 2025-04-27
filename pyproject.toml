@@ -1,5 +1,5 @@
 [tool.poetry]
-name = "model_explore"
+name = "octopus"
 version = "0.0.1"
 description = "Model architecture exploration for cryoET particle picking"
 authors = ["CZII autonomous 3d particle picking team"]
@@ -35,18 +35,18 @@ pre-commit = "^3.8.0"
 ruff = "^0.6.4"
 
 [tool.poetry.scripts]
-download-dataportal = "model_explore.download:cli"
-create-targets = "model_explore.entry_points.run_create_targets:cli"
-train-model = "model_explore.entry_points.run_train:cli"
-train-model-slurm = "model_explore.entry_points.run_create_shellsubmit:train_model_slurm"
-model-explore = "model_explore.entry_points.run_optuna:cli"
-inference = "model_explore.entry_points.run_segment_predict:cli"
-inference-slurm = "model_explore.entry_points.run_create_shellsubmit:inference_slurm"
-localize = "model_explore.entry_points.run_localize:cli"
-localize-slurm = "model_explore.entry_points.run_create_shellsubmit:localize_slurm"
-extract-membrane-picks = "model_explore.entry_points.run_extract_mb_picks:cli"
-extract-midpoint-picks = "model_explore.entry_points.run_extract_midpoint:cli"
-evaluate = "model_explore.entry_points.run_evaluate:cli"
+download-dataportal = "octopus.download:cli"
+create-targets = "octopus.entry_points.run_create_targets:cli"
+train-model = "octopus.entry_points.run_train:cli"
+train-model-slurm = "octopus.entry_points.run_create_shellsubmit:train_model_slurm"
+model-explore = "octopus.entry_points.run_optuna:cli"
+inference = "octopus.entry_points.run_segment_predict:cli"
+inference-slurm = "octopus.entry_points.run_create_shellsubmit:inference_slurm"
+localize = "octopus.entry_points.run_localize:cli"
+localize-slurm = "octopus.entry_points.run_create_shellsubmit:localize_slurm"
+extract-membrane-picks = "octopus.entry_points.run_extract_mb_picks:cli"
+extract-midpoint-picks = "octopus.entry_points.run_extract_midpoint:cli"
+evaluate = "octopus.entry_points.run_evaluate:cli"
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]

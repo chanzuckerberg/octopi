@@ -1,0 +1,408 @@
+from octopus.datasets import generators, multi_config_generator
+import torch, mlflow, optuna, argparse, os, pprint
+from octopus.pytorch import hyper_search
+from octopus.pytorch.hyper_search import BayesianModelSearch
+from octopus.entry_points import common
+from typing import List, Optional
+from octopus import utils
+import pandas as pd
+
+class ModelSearchSubmit:
+    def __init__(
+        self,
+        copick_config: str,
+        target_name: str,
+        target_user_id: str,
+        target_session_id: str,
+        tomo_algorithm: str,
+        voxel_size: float,
+        Nclass: int,
+        model_type: str,
+        mlflow_experiment_name: str,
+        random_seed: int,
+        num_epochs: int,
+        num_trials: int,
+        tomo_batch_size: int,
+        best_metric: str,
+        val_interval: int,
+        trainRunIDs: List[str],
+        validateRunIDs: List[str]
+    ):
+        """
+        Initialize the ModelSearch class for architecture search with Optuna.
+
+        Args:
+            copick_config (str or dict): Path to the CoPick configuration file or a dictionary for multi-config training.
+            target_name (str): Name of the target for segmentation.
+            target_user_id (str): Optional user ID for tracking.
+            target_session_id (str): Optional session ID for tracking.
+            tomo_algorithm (str): Tomogram algorithm to use.
+            voxel_size (float): Voxel size for tomograms.
+            Nclass (int): Number of prediction classes.
+            model_type (str): Type of model to use.
+            mlflow_experiment_name (str): MLflow experiment name.
+            random_seed (int): Seed for reproducibility.
+            num_epochs (int): Number of epochs per trial.
+            num_trials (int): Number of trials for hyperparameter optimization.
+            tomo_batch_size (int): Batch size for tomogram loading.
+            best_metric (str): Metric to optimize.
+            val_interval (int): Validation interval.
+            trainRunIDs (List[str]): List of training run IDs.
+            validateRunIDs (List[str]): List of validation run IDs.
+        """
+
+        self.copick_config = copick_config
+        self.target_name = target_name
+        self.target_user_id = target_user_id
+        self.target_session_id = target_session_id
+        self.tomo_algorithm = tomo_algorithm
+        self.voxel_size = voxel_size
+        self.Nclass = Nclass
+        self.model_type = model_type
+        self.mlflow_experiment_name = mlflow_experiment_name
+        self.random_seed = random_seed
+        self.num_epochs = num_epochs
+        self.num_trials = num_trials
+        self.tomo_batch_size = tomo_batch_size
+        self.best_metric = best_metric
+        self.val_interval = val_interval
+        self.trainRunIDs = trainRunIDs
+        self.validateRunIDs = validateRunIDs
+        self.data_generator = None
+
+        # Set random seed for reproducibility
+        utils.set_seed(self.random_seed)
+
+        # Initialize dataset generator
+        self._initialize_data_generator()
+
+    def _initialize_data_generator(self):
+        """Initializes the data generator for training and validation datasets."""
+        self._print_input_configs()
+
+        if isinstance(self.copick_config, dict):
+            self.data_generator = multi_config_generator.MultiConfigTrainLoaderManager(
+                self.copick_config,
+                self.target_name,
+                target_session_id=self.target_session_id,
+                target_user_id=self.target_user_id,
+                tomo_algorithm=self.tomo_algorithm,
+                voxel_size=self.voxel_size,
+                Nclasses=self.Nclass,
+                tomo_batch_size=self.tomo_batch_size
+            )
+        else:
+            self.data_generator = generators.TrainLoaderManager(
+                self.copick_config,
+                self.target_name,
+                target_session_id=self.target_session_id,
+                target_user_id=self.target_user_id,
+                tomo_algorithm=self.tomo_algorithm,
+                voxel_size=self.voxel_size,
+                Nclasses=self.Nclass,
+                tomo_batch_size=self.tomo_batch_size
+            )
+
+        # Split datasets into training and validation
+        self.data_generator.get_data_splits(
+            trainRunIDs=self.trainRunIDs,
+            validateRunIDs=self.validateRunIDs,
+            train_ratio = 0.8, val_ratio = 0.2, test_ratio = 0.0,
+            create_test_dataset = False
+        )
+        
+        # Get the reload frequency
+        self.data_generator.get_reload_frequency(self.num_epochs)
+        
+    def _print_input_configs(self):
+        """Prints training configuration for debugging purposes."""
+        print(f'\nTraining with:')
+        if isinstance(self.copick_config, dict):
+            for session, config in self.copick_config.items():
+                print(f'  {session}: {config}')
+        else:
+            print(f'  {self.copick_config}')
+        print()
+
+    def run_model_search(self):
+        """Performs model architecture search using Optuna and MLflow."""
+
+        # Set up MLflow tracking
+        try:
+            tracking_uri = utils.mlflow_setup()
+            mlflow.set_tracking_uri(tracking_uri)
+        except Exception as e:
+            print(f'Failed to set up MLflow tracking: {e}')
+            pass
+
+        mlflow.set_experiment(self.mlflow_experiment_name)
+    
+        # Create a storage object with heartbeat configuration
+        storage_url = f"sqlite:///explore_results_{self.model_type}/trials.db"
+        self.storage = optuna.storages.RDBStorage(
+            url=storage_url,
+            heartbeat_interval=60,  # Record heartbeat every minute
+            grace_period=600,       # 10 minutes grace period
+            failed_trial_callback=optuna.storages.RetryFailedTrialCallback(max_retry=1)
+        )
+
+        # Detect GPU availability
+        gpu_count = torch.cuda.device_count()
+        print(f'Running Architecture Search Over {gpu_count} GPUs\n')
+
+        # Initialize model search object
+        if gpu_count > 1:
+            self._multi_gpu_optuna(gpu_count)
+        else:
+            model_search = hyper_search.BayesianModelSearch(self.data_generator, self.model_type)
+            self._single_gpu_optuna(model_search)
+
+    def _single_gpu_optuna(self, model_search):
+        """Runs Optuna optimization on a single GPU."""
+        
+        with mlflow.start_run(nested=False) as parent_run:
+
+            model_search.parent_run_id = parent_run.info.run_id
+            model_search.parent_run_name = parent_run.info.run_name
+
+            # Log the experiment parameters
+            mlflow.log_params({"random_seed": self.random_seed})
+            mlflow.log_params(self.data_generator.get_dataloader_parameters())
+            mlflow.log_params({"parent_run_name": parent_run.info.run_name})
+
+            # Determine device
+            device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+            # Create the study and run the optimization
+            study = self.get_optuna_study()
+            study.optimize(
+                lambda trial: model_search.objective(
+                    trial, self.num_epochs, device,
+                    val_interval=self.val_interval,
+                    best_metric=self.best_metric,
+                ),
+                n_trials=self.num_trials
+            )
+
+            # Save contour plot
+            self.save_contour_plot_as_png(study)
+
+            print(f"Best trial: {study.best_trial.value}")
+            print(f"Best params: {study.best_params}")
+
+    def _multi_gpu_optuna(self, gpu_count):
+        """Runs Optuna optimization on multiple GPUs."""
+        with mlflow.start_run() as parent_run:
+
+            # Log the experiment parameters
+            mlflow.log_params({"random_seed": self.random_seed})
+            mlflow.log_params(self.data_generator.get_dataloader_parameters())
+            mlflow.log_params({"parent_run_name": parent_run.info.run_name})
+
+            # Run multi-GPU optimization
+            study = self.get_optuna_study()
+            study.optimize(
+                lambda trial: BayesianModelSearch(self.data_generator, self.model_type).multi_gpu_objective(
+                    parent_run, trial,
+                    self.num_epochs,
+                    best_metric=self.best_metric,
+                    val_interval=self.val_interval,
+                    gpu_count=gpu_count
+                ),
+                n_trials=self.num_trials,
+                n_jobs=gpu_count
+            )
+
+            # Save contour Plot
+            self.save_contour_plot_as_png(study)
+
+        print(f"Best trial: {study.best_trial.value}")
+        print(f"Best params: {study.best_params}")
+
+    def _get_optuna_sampler(self):
+        """Returns Optuna's TPE sampler with default settings."""
+        return optuna.samplers.TPESampler(
+            n_startup_trials=10,
+            n_ei_candidates=24,
+            multivariate=True
+        )
+        # return optuna.samplers.BoTorchSampler(
+        #     n_startup_trials=10,
+        #     multivariate=True
+        # )
+
+    def get_optuna_study(self):
+        """Returns the Optuna study object."""
+        return optuna.create_study(
+                storage=self.storage,
+                direction="maximize",
+                sampler=self._get_optuna_sampler(),
+                load_if_exists=True,
+                pruner=self._get_optuna_pruner()
+            )
+
+    def _get_optuna_pruner(self):
+        """Returns Optuna's pruning strategy."""
+        return optuna.pruners.MedianPruner()
+
+    def save_contour_plot_as_png(self, study):
+        """
+        Save the contour plot of hyperparameter interactions as a PNG, 
+        automatically extracting parameter names from the study object.
+
+        Args:
+            study: The Optuna study object.
+            output_path: Path to save the PNG file.
+        """
+        # Extract all parameter names from the study trials
+        all_params = set()
+        for trial in study.trials:
+            all_params.update(trial.params.keys())
+        all_params = list(all_params)  # Convert to a sorted list for consistency
+
+        # Generate the contour plot
+        fig = optuna.visualization.plot_contour(study, params=all_params) 
+
+        # Adjust figure size and font size
+        fig.update_layout(
+            width=6000, height=6000,  # Large figure size
+            font=dict(size=40)  # Increase font size for better readability
+        )
+
+        # Save the plot as a PNG file
+        fig.write_image(f'explore_results_{self.model_type}/contour_plot.png', scale=1)  
+
+        # Extract trial data
+        trials = [
+            {**trial.params, 'objective_value': trial.value}
+            for trial in study.trials if trial.state == optuna.trial.TrialState.COMPLETE
+        ]
+
+        # Convert to DataFrame
+        df = pd.DataFrame(trials)
+
+        # Save to CSV
+        df.to_csv(f"explore_results_{self.model_type}/optuna_results.csv", index=False)
+
+def optuna_parser(parser_description, add_slurm: bool = False):
+    
+    parser = argparse.ArgumentParser(
+        description=parser_description,
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter
+    )
+
+    # Input Arguments
+    input_group = parser.add_argument_group("Input Arguments")
+    common.add_config(input_group, single_config=False)
+    input_group.add_argument("--target-info", type=utils.parse_target, help="Target information, e.g., 'name' or 'name,user_id,session_id'")    
+    input_group.add_argument("--tomo-algorithm", default='wbp', 
+                             help="Tomogram algorithm used for training")
+    input_group.add_argument("--mlflow-experiment-name", type=str, default="model-search", required=False, 
+                             help="Name of the MLflow experiment (default: 'model-search').")
+    input_group.add_argument("--trainRunIDs", type=utils.parse_list, default=None, required=False, 
+                             help="List of training run IDs, e.g., run1,run2 or [run1,run2].")
+    input_group.add_argument("--validateRunIDs", type=utils.parse_list, default=None, required=False, 
+                             help="List of validation run IDs, e.g., run3,run4 or [run3,run4].")    
+
+    model_group = parser.add_argument_group("Model Arguments")
+    model_group.add_argument("--model-type", type=str, default='Unet', required=False, 
+                             choices=['Unet', 'AttentionUnet'],
+                             help="Model type to use for training")
+    model_group.add_argument("--Nclass", type=int, default=3, required=False, help="Number of prediction classes in the model")
+
+    train_group = parser.add_argument_group("Training Arguments")
+    common.add_train_parameters(train_group, octopus = True)
+    train_group.add_argument("--random-seed", type=int, default=42, required=False, 
+                             help="Random seed for reproducibility (default: 42).")
+
+    if add_slurm:
+        slurm_group = parser.add_argument_group("SLURM Arguments")
+        common.add_slurm_parameters(slurm_group, 'optuna')
+
+    args = parser.parse_args()
+    return args
+
+# Entry point with argparse
+def cli():
+    """
+    CLI entry point for running optuna model archetecture search.
+    """
+
+    description="Perform model architecture search with Optuna and MLflow integration."
+    args = optuna_parser(description)
+
+    # Parse the CoPick configuration paths
+    if len(args.config) > 1:    copick_configs = utils.parse_copick_configs(args.config)
+    else:                       copick_configs = args.config[0]
+
+    # Create the model exploration directory
+    os.makedirs(f'explore_results_{args.model_type}', exist_ok=True)
+
+    # Save JSON with Parameters
+    save_parameters(args, f'explore_results_{args.model_type}/octopus.yaml')
+
+    # Call the function with parsed arguments
+    search = ModelSearchSubmit(
+        copick_config=copick_configs,
+        target_name=args.target_info[0],
+        target_user_id=args.target_info[1],
+        target_session_id=args.target_info[2],
+        tomo_algorithm=args.tomo_algorithm,
+        voxel_size=args.voxel_size,
+        Nclass=args.Nclass,
+        model_type=args.model_type,
+        mlflow_experiment_name=args.mlflow_experiment_name,
+        random_seed=args.random_seed,
+        num_epochs=args.num_epochs,
+        num_trials=args.num_trials,
+        trainRunIDs=args.trainRunIDs,
+        validateRunIDs=args.validateRunIDs, 
+        tomo_batch_size=args.tomo_batch_size,
+        best_metric=args.best_metric,
+        val_interval=args.val_interval
+    )
+
+    # Run the model search
+    search.run_model_search()
+
+def save_parameters(args: argparse.Namespace, 
+                    output_path: str):
+    """
+    Save the Optuna search parameters to a JSON file.
+    Args:
+        args: Parsed arguments from argparse.
+        output_path: Path to save the JSON file.
+    """
+    # Organize parameters into categories
+    params = {
+        "input": {
+            "copick_config": args.config,
+            "target_info": args.target_info,
+            "tomo_algorithm": args.tomo_algorithm,
+            "voxel_size": args.voxel_size,
+            "Nclass": args.Nclass,            
+        },
+        "optimization": {
+            "model_type": args.model_type,
+            "mlflow_experiment_name": args.mlflow_experiment_name,
+            "random_seed": args.random_seed,
+            "num_trials": args.num_trials,
+            "best_metric": args.best_metric
+        },
+        "training": {
+            "num_epochs": args.num_epochs,            
+            "tomo_batch_size": args.tomo_batch_size,
+            "trainRunIDs": args.trainRunIDs,
+            "validateRunIDs": args.validateRunIDs,
+        }
+    }
+
+    # Print the parameters
+    print(f"\nParameters for Model Architecture Search:")
+    pprint.pprint(params); print()
+
+    # Save to YAML file
+    utils.save_parameters_yaml(params, output_path)
+
+if __name__ == "__main__":
+    cli()

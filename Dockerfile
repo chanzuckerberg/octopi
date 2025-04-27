@@ -14,5 +14,5 @@ RUN pip install --upgrade pip
 COPY . ./
 RUN pip install .
 
-#RUN python src/model_explore/segmentations_from_picks.py
-ENTRYPOINT ["python3", "src/model_explore/optuna_pl_ddp.py"]
+#RUN python src/octopus/segmentations_from_picks.py
+ENTRYPOINT ["python3", "src/octopus/optuna_pl_ddp.py"]
