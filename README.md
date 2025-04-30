@@ -1,17 +1,20 @@
 # OCTOPUS 🐙
 **O**bject dete**CT**ion of **P**roteins **U**sing **S**egmentation. A deep learning framework for Cryo-ET 3D particle picking with autonomous model exploration capabilities.
 
-## Introduction
+## 🚀 Introduction
 
 OCTOPUS addresses a critical bottleneck in cryo-electron tomography (cryo-ET) research: the efficient identification and extraction of proteins within complex cellular environments. As advances in cryo-ET enable the collection of thousands of tomograms, the need for automated, accurate particle picking has become increasingly urgent.
 
-Our deep learning-based pipeline streamlines the training and execution of 3D autoencoder models specifically designed for cryo-ET particle picking. Built on [copick](https://github.com/copick/copick), a storage-agnostic API, DeepFindET seamlessly accesses tomograms and segmentations across local and remote environments. 
+Our deep learning-based pipeline streamlines the training and execution of 3D autoencoder models specifically designed for cryo-ET particle picking. Built on [copick](https://github.com/copick/copick), a storage-agnostic API, octopus seamlessly accesses tomograms and segmentations across local and remote environments. 
 
-A key feature of DeepFindET is its automatic model architecture search using Bayesian optimization, allowing researchers to discover optimal neural network architectures for their specific datasets without manual trial and error.
+OCTOPUS offers a modular, deep learning-driven pipeline for:
+*	Training and evaluating custom 3D U-Net models for particle segmentation.
+*	Automatically exploring model architectures using Bayesian optimization via Optuna.
+*	Performing inference for both semantic segmentation and particle localization.
 
-Integration with our [ChimeraX plugin](https://github.com/copick/chimerax-copick) enables researchers to easily annotate new tomograms and visualize segmentation results or particle coordinates.
+Octopus empowers researchers to navigate the dense, intricate landscapes of cryo-ET datasets with unprecedented precision and efficiency without manual trial and error.
 
-DeepFindET empowers researchers to navigate the dense, intricate landscapes of cryo-ET datasets with unprecedented precision and efficiency.
+## Features
 
 ## Getting Started
 ### Installation and setup the environment
@@ -25,8 +28,9 @@ MLFLOW_TRACKING_PASSWORD = <Your_mlflow_access_token>
 
 ## Usage
 
-### Prepare the dataset 
-Generate picks segmentations for dataset 10439 from the CZ cryoET Dataportal (only need to run this step once). 
+### 📁 Training Labels Preparation  
+
+Use `create-targets` to create semantic masks for proteins of interest using annotation metadata. In this example lets generate picks segmentations for dataset 10439 from the CZ cryoET Dataportal (only need to run this step once). 
 ```
 create-targets \
     --config config.json \
@@ -38,7 +42,7 @@ create-targets \
     --target-user-id train-octopus
 ```
 
-### Training a single 3D U-Net model  
+### 🧠 Training a single 3D U-Net model  
 ```
 Train a 3D U-Net model on the prepared datasets using the prepared target segmentations. We can use tomograms derived from multiple copick projects.  
 train-model \
@@ -48,22 +52,60 @@ train-model \
     --tomo-batch-size 50 --num-epochs 100 --val-interval 10 \
     --target-info remotetargets,train-octopus,1
 ```
+Outputs will include model weights (.pth), logs, and training metrics.
 
-### Model hyperparameter exploration with Optuna
+### 🔍 Model exploration with Optuna
+
+OCTOPUS🐙 supports automatic neural architecture search using Optuna, enabling efficient discovery of optimal 3D U-Net configurations through Bayesian optimization. This allows users to maximize segmentation accuracy without manual tuning.
+
+To launch a model exploration job:
 ```
-Automatically search for the best model architecture and hyperparameters using Bayesian optimization to improve segmentation performance. 
 model-explore \
     --config experiment,/mnt/dataportal/ml_challenge/config.json \
     --config simulation,/mnt/dataportal/synthetic_ml_challenge/config.json \
     --voxel-size 10 --tomo-algorithm wbp --Nclass 8 \
     --model-save-path train_results
 ```
+Each trial evaluates a different architecture and logs:
+	•	Segmentation performance metrics
+	•	Model weights and configs
+	•	Training curves and validation loss
+
+🔬 Trials are automatically tracked with MLflow and saved under the specified `--model-save-path`.
+
+#### Optuna Dashboard
+
+(TODO)
  
-## MLflow tracking   
-To view the tracking results for model-explorations, go to the CZI [mlflow server](https://mlflow.cw.use4-prod.si.czi.technology/). Note the project name needs to be registered first.
+#### 📊 MLflow experiment tracking   
 
+OCTOPUS supports MLflow for logging and visualizing model training and hyperparameter search results, including:
+	•	Training loss/validation metrics over time
+	•	Model hyperparameters and architecture details
+	•	Trial comparison (e.g., best performing model)
 
-### Inference (Segmentation)
+You can use either a local MLflow instance, a remote (HPC) instance, or the CZI cloud server:
+
+#### 🧪 Local MLflow Dashboard
+
+To inspect results locally: `mlflow ui` and open http://localhost:5000 in your browser.
+
+#### 🖥️ HPC Cluster MLflow Access (Remote via SSH tunnel)
+
+If running OCTOPUS on a remote cluster (e.g., Biohub Bruno), forward the MLflow port. 
+On your local machine: 
+ `ssh -L 5000:localhost:5000 remote_username@remote_host` (in the case of Bruno the remote would be `login01.czbiohub.org`). 
+ 
+Then on the remote terminal (login node): ` mlflow ui --host 0.0.0.0 --port 5000` to launch the MLFlow dashboard on a local borwser.
+
+#### ☁️ CZI coreweave cluser
+
+For the CZI coreweave cluser, MLflow is already hosted. Go to the CZI [mlflow server](https://mlflow.cw.use4-prod.si.czi.technology/). 
+
+🔐 A .env file is required to authenticate (see Getting Started section).
+📁 Be sure to register your project name in MLflow before launching runs.
+
+### 🔮 Segmentation
 ```
 Generate segmentation prediction masks for tomograms in a given copick project.
 inference \
@@ -73,8 +115,9 @@ inference \
     --model-weights train_results/best_model.pth \
     --voxel-size 10 --tomo-algorithm wbp --tomo-batch-size 25
 ```
+Output masks will be saved to the corresponding copick project under the `seg-info` input.
 
-### Inference (Localization)
+### 📍 Localization
 ```
 Convert the segmentation masks into particle coordinates. 
 localize \
