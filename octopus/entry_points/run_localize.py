@@ -10,7 +10,7 @@ def pick_particles(
     copick_config_path: str,
     method: str,
     seg_info: Tuple[str, str, str],
-    voxel_size: str,
+    voxel_size: float,
     pick_session_id: str,
     pick_user_id: str,
     radius_min_scale: float,

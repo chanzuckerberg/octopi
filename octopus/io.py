@@ -132,8 +132,8 @@ def get_segmentation_array(run,
     seg = run.get_segmentations(name=segmentation_name, 
                                 session_id = session_id,
                                 user_id = user_id,
-                                voxel_size=voxel_spacing)
-
+                                voxel_size=float(voxel_spacing))
+    
     # No Segmentations Are Available, Result in Error
     if len(seg) == 0:
         # Get all available segmentations with their metadata

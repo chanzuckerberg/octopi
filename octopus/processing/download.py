@@ -49,6 +49,8 @@ def from_dataportal(
             else:
                 vol = rescale.run(vol)
                 write.tomogram(run, vol, output_voxel_size, target_tomo_type)
+    
+    print(f'Downloading Complete!! Downloaded {len(root.runs)} runs')
 
 def cli():
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)

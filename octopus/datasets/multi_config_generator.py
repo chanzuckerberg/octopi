@@ -70,7 +70,7 @@ class MultiConfigTrainLoaderManager(TrainLoaderManager):
                     name=self.target_name, 
                     session_id=self.target_session_id, 
                     user_id=self.target_user_id,
-                    voxel_size=self.voxel_size
+                    voxel_size=float(self.voxel_size)
                 )
                 if len(seg) > 0:
                     available_runIDs.append((name, run.name))  # Include session name for disambiguation

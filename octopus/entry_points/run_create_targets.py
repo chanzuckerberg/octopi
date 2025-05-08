@@ -1,4 +1,4 @@
-from octopus import create_targets_from_picks as create_targets
+from octopus.processing.create_targets_from_picks import generate_targets
 from octopus import utils, io 
 import copick_utils.writers.write as write
 from collections import defaultdict

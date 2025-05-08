@@ -11,7 +11,7 @@ def create_train_script(args):
         strconfigs += f"--config {config}"
 
     command = f"""
-train-model \\
+octopus train-model \\
     --model-save-path {args.model_save_path} \\
     --voxel-size {args.voxel_size} --tomo-algorithm {args.tomo_algorithm} --Nclass {args.Nclass} \\
     --tomo-batch-size {args.tomo_batch_size} --num-epochs {args.num_epochs} --val-interval {args.val_interval} \\
@@ -38,6 +38,12 @@ def train_model_slurm():
     args = run_train.train_model_parser(parser_description, add_slurm=True)
     create_train_script(args)   
 
+def create_model_explore_script(args):
+    pass
+
+def model_explore_slurm():
+    pass
+
 def create_inference_script(args):
     
     if len(args.config.split(',')) > 1:
@@ -56,7 +62,7 @@ def create_inference_script(args):
     else:
 
         command = f"""
-inference \\
+octopus inference \\
     --config {args.config} \\
     --seg-info  {",".join(args.seg_info)} \\
     --model-weights {args.model_weights} \\
@@ -97,7 +103,7 @@ def create_localize_script(args):
     else:
 
         command = f"""
-localize \\
+octopus localize \\
     --config {args.config} \\
     --voxel-size {args.voxel_size} --pick-session-id {args.pick_session_id} --pick-user-id {args.pick_user_id} \\
     --method {args.method}  --seg-info {",".join(args.seg_info)} \\
@@ -120,3 +126,9 @@ def localize_slurm():
     args = run_localize.localize_parser(parser_description, add_slurm=True)
     create_localize_script(args)
         
+def create_extract_mb_picks_script(args):
+    pass
+
+def extract_mb_picks_slurm():
+    pass
+

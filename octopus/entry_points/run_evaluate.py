@@ -1,4 +1,5 @@
-from octopus import evaluate, utils
+import octopus.processing.evaluate as evaluate
+import octopus.utils as utils
 from typing import List
 import argparse
 
