@@ -118,10 +118,17 @@ def compare_tomo_points(tomo, run, objects, vol_slice, user_id1, user_id2,
 def plot_training_results(
     results, 
     class_names: Optional[List[str]] = None,
-    save_plot: str = None):
+    save_plot: str = None,
+    fig = None, axs = None):
 
     # Create a 2x2 subplot layout
-    fig, axs = plt.subplots(2, 2, figsize=(12, 10))
+    if fig is None:
+        fig, axs = plt.subplots(2, 2, figsize=(12, 10))
+    else:
+        # Clear previos plots
+        for ax in axs.flatten():
+            ax.clear()
+
     fig.suptitle("Metrics Over Epochs", fontsize=16)
 
     # Unpack the data for loss (logged every epoch)
@@ -181,7 +188,14 @@ def plot_training_results(
     # Adjust layout and show plot
     plt.tight_layout(rect=[0, 0, 1, 0.96])  # Leave space for the main title
 
-    if save_plot: 
-        fig.savefig(save_plot)
-    else:
-        plt.show()
+    fig.savefig(save_plot)
+    fig.canvas.draw()
+
+    return fig, axs
+
+    # if save_plot: 
+    #     fig.savefig(save_plot)
+    # else:
+    #     plt.show()
+    #     # # Just draw the plot without displaying
+    #     # fig.canvas.draw()
