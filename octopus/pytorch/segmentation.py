@@ -20,7 +20,6 @@ class Predictor:
                  model_config: str,
                  model_weights: str,
                  apply_tta: bool = True,
-                 tomo_batch_size: int = 48,
                  device: Optional[str] = None):
 
         self.config = config
@@ -32,7 +31,6 @@ class Predictor:
         self.Nclass = model_config['model']['num_classes']     
         self.dim_in = model_config['model']['dim_in']
         self.input_dim = None
-        self.tomo_batch_size = tomo_batch_size
         
         # Get the number of GPUs available
         num_gpus = torch.cuda.device_count()
@@ -188,7 +186,7 @@ class Predictor:
                       voxel_spacing: float = 10,
                       tomo_algorithm: str = 'denoised', 
                       segmentation_name: str = 'prediction',
-                      segmentation_user_id: str = 'monai',
+                      segmentation_user_id: str = 'octopus',
                       segmentation_session_id: str = '0'):
 
         """Run inference on tomograms in batches."""                          

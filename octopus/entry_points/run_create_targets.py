@@ -1,4 +1,4 @@
-from octopus.processing.create_targets_from_picks import generate_targets
+import octopus.processing.create_targets_from_picks as create_targets
 from octopus import utils, io 
 import copick_utils.writers.write as write
 from collections import defaultdict
@@ -73,8 +73,8 @@ def create_all_train_targets(
         info = {
             "label": object.label,
             "radius": object.radius,
-            "user_id": picks_session_id,
-            "session_id": picks_user_id,
+            "user_id": picks_user_id,
+            "session_id": picks_session_id,
             "is_particle_target": True,
         }
         target_objects[object.name] = info
