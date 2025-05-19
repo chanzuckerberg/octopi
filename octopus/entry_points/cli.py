@@ -65,7 +65,7 @@ def cli_slurm_main():
         # "download-dataportal": (download_dataportal, "Download tomograms from the Dataportal, we can downsample to smaller voxel size if desired."),
         # "create-targets": (create_targets, "Generate segmentation targets from coordinates."),
         "train": (slurm_submitter.train_model_slurm, "Train a single U-Net model."),
-        # "model-explore": (model_explore, "Explore model architectures with Optuna / Bayesian Optimization."),
+        "model-explore": (slurm_submitter.model_explore_slurm, "Explore model architectures with Optuna / Bayesian Optimization."),
         "inference": (slurm_submitter.inference_slurm, "Perform segmentation inference on tomograms."),
         "localize": (slurm_submitter.localize_slurm, "Perform localization of particles in tomograms."),
         # "extract-mb-picks": (extract_mb_picks, "Extract MB Picks from tomograms.")

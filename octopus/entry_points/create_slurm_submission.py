@@ -1,5 +1,5 @@
+from octopus.entry_points import run_train, run_segment_predict, run_localize, run_optuna
 from octopus.submit_slurm import create_shellsubmit, create_multiconfig_shellsubmit
-from octopus.entry_points import run_train, run_segment_predict, run_localize
 from octopus.entry_points import common 
 from octopus import utils
 import argparse
@@ -39,10 +39,38 @@ def train_model_slurm():
     create_train_script(args)   
 
 def create_model_explore_script(args):
-    pass
+
+    strconfigs = ""
+    for config in args.config:
+        strconfigs += f"--config {config}"
+
+    command = f"""
+octopus model-explore \\
+    --model-type {args.model_type} --model-save-path {args.model_save_path} \\
+    --voxel-size {args.voxel_size} --tomo-algorithm {args.tomo_algorithm} --Nclass {args.Nclass} \\
+    --val-interval {args.val_interval} --num-epochs {args.num_epochs} --num-trials {args.num_trials} \\
+    --best-metric {args.best_metric} --mlflow-experiment-name {args.mlflow_experiment_name} \\
+    --target-name {args.target_name} --target-session-id {args.target_session_id} --target-user-id {args.target_user_id} \\
+    {strconfigs}
+"""
+
+    create_shellsubmit(
+        job_name = args.job_name,
+        output_file = 'optuna.log',
+        shell_name = 'model_explore.sh',
+        conda_path = args.conda_env,
+        command = command,
+        num_gpus = 1,
+        gpu_constraint = args.gpu_constraint
+    )
 
 def model_explore_slurm():
-    pass
+    """
+    Create a SLURM script for running bayesian optimization on 3D CNN models
+    """
+    parser_description = "Create a SLURM script for running bayesian optimization on 3D CNN models"
+    args = run_optuna.optuna_parser(parser_description, add_slurm=True)
+    create_model_explore_script(args)   
 
 def create_inference_script(args):
     
