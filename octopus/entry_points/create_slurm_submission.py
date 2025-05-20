@@ -160,3 +160,25 @@ def create_extract_mb_picks_script(args):
 def extract_mb_picks_slurm():
     pass
 
+
+def create_import_mrc_script(args):
+
+    command = f"""
+octopus import-mrc-volumes \\
+    --mrcs-path {args.mrcs_path} --config {args.config} \\
+    --target-tomo-type {args.target_tomo_type} \\
+    --input-voxel-size {args.input_voxel_size} --output-voxel-size {args.output_voxel_size}
+"""
+
+    create_shellsubmit(
+        job_name = args.job_name,
+        output_file = 'importer.log',
+        shell_name = 'mrc_importer.sh',
+        conda_path = args.conda_env,
+        command = command
+    )
+
+def import_mrc_slurm():
+    parser_description = "Create a SLURM script for importing mrc volumes and potentialy downsampling"
+    args = run_import_mrc.cli_mrcs(parser_description, add_slurm=True)
+    create_import_mrc_script(args)
