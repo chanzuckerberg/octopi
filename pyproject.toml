@@ -1,5 +1,5 @@
 [tool.poetry]
-name = "octopus"
+name = "octopi"
 version = "0.0.1"
 description = "Model architecture exploration for cryoET particle picking"
 authors = ["CZII autonomous 3d particle picking team"]
@@ -36,8 +36,8 @@ pre-commit = "^3.8.0"
 ruff = "^0.6.4"
 
 [tool.poetry.scripts]
-octopus = "octopus.main:cli_main"
-octopus-slurm = "octopus.main:cli_slurm_main"
+octopi = "octopi.main:cli_main"
+octopi-slurm = "octopi.main:cli_slurm_main"
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]

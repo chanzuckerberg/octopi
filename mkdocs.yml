@@ -1,6 +1,6 @@
 site_name: octopi
-repo_url: "https://github.com/czimaging/octopi"
-repo_name: "czimaging/octopi"
+repo_url: "https://github.com/chanzuckerberg/octopi"
+repo_name: "chanzuckerberg/octopi"
 copyright: "2025, Jonathan Schwartz"
 theme:
   name: material
