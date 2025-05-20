@@ -1,4 +1,5 @@
 from octopus.processing.downsample import FourierRescale
+from octopus.entry_points import common
 import copick, argparse, mrcfile, glob, os
 from copick_utils.writers import write
 from tqdm import tqdm
@@ -11,7 +12,18 @@ def from_dataportal(
     target_tomo_type,
     input_voxel_size = 10,
     output_voxel_size = None):
+    """
+    Download and process tomograms from the CZI Dataportal.
     
+    Args:
+        config (str): Path to the copick configuration file
+        datasetID (int): ID of the dataset to download
+        overlay_path (str): Path to the overlay file
+        dataportal_name (str): Name of the tomogram type in the dataportal
+        target_tomo_type (str): Name to use for the tomogram locally
+        input_voxel_size (float): Original voxel size of the tomograms
+        output_voxel_size (float, optional): Desired voxel size for downsampling
+    """
     if config is not None:
         root = copick.from_file(config)
     elif datasetID is not None and overlay_path is not None:
@@ -52,8 +64,22 @@ def from_dataportal(
     
     print(f'Downloading Complete!! Downloaded {len(root.runs)} runs')
 
-def cli_dataportal():
-    parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+def cli_dataportal_parser(parser_description, add_slurm: bool = False):
+    """
+    Create argument parser for the dataportal download command.
+    
+    Args:
+        parser_description (str): Description of the parser
+        add_slurm (bool): Whether to add SLURM-specific arguments
+    
+    Returns:
+        argparse.ArgumentParser: Configured argument parser
+    """
+    parser = argparse.ArgumentParser(
+        description=parser_description,
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter
+    )
+
     parser.add_argument('--config', type=str, required=False, default=None, help='Path to the config file')
     parser.add_argument('--datasetID', type=int, required=False, default=None, help='Dataset ID')
     parser.add_argument('--overlay-path', type=str, required=False, default=None, help='Path to the overlay file')
@@ -61,8 +87,23 @@ def cli_dataportal():
     parser.add_argument('--target-tomo-type', type=str, required=False, default='wbp', help='Local name')
     parser.add_argument('--input-voxel-size', type=float, required=False, default=10, help='Voxel size')
     parser.add_argument('--output-voxel-size', type=float, required=False, default=None, help='Save voxel size')
+    
+    if add_slurm:
+        slurm_group = parser.add_argument_group("SLURM Arguments")
+        common.add_slurm_parameters(slurm_group, 'dataportal-importer', gpus = 0)
+
     args = parser.parse_args()
+    return args
+
+def cli_dataportal():
+    """
+    Command-line interface for downloading tomograms from the Dataportal.
+    Handles argument parsing and calls from_dataportal with the parsed arguments.
+    """
+    parser_description = "Import tomograms from the Dataportal with optional downsampling with Fourier Cropping"
+    args = cli_dataportal_parser(parser_description)
     from_dataportal(args.config, args.datasetID, args.overlay_path, args.dataportal_name, args.target_tomo_type, args.input_voxel_size, args.output_voxel_size)
+
 
 def from_mrcs(
     mrcs_path,
@@ -70,7 +111,16 @@ def from_mrcs(
     target_tomo_type,
     input_voxel_size,
     output_voxel_size = 10):
-
+    """
+    Import and process tomograms from local MRC/MRCS files.
+    
+    Args:
+        mrcs_path (str): Path to directory containing MRC/MRCS files
+        config (str): Path to the copick configuration file
+        target_tomo_type (str): Name to use for the tomogram locally
+        input_voxel_size (float): Original voxel size of the tomograms
+        output_voxel_size (float, optional): Desired voxel size for downsampling
+    """
     # Load Copick Project
     if os.path.exists(config):
         root = copick.from_file(config)
@@ -119,17 +169,45 @@ def from_mrcs(
 
         # Write the tomogram
         write.tomogram(run, vol, voxel_size_to_write, target_tomo_type)
-    print(f"Processed {len(mrc_files)} files from {mrcs_dir}")
+    print(f"Processed {len(mrc_files)} files from {mrcs_path}")
 
 
-def cli_mrcs():
-    parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+def cli_mrcs_parser(parser_description, add_slurm: bool = False):
+    """
+    Create argument parser for the MRC import command.
+    
+    Args:
+        parser_description (str): Description of the parser
+        add_slurm (bool): Whether to add SLURM-specific arguments
+    
+    Returns:
+        argparse.ArgumentParser: Configured argument parser
+    """
+    parser = argparse.ArgumentParser(
+        description=parser_description,
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter
+    )
+
+    # Input Arguments
     parser.add_argument('--mrcs-path', type=str, required=True, help='Path to the mrcs file')
     parser.add_argument('--config', type=str, required=False, default=None, help='Path to the config file to write tomograms to')
     parser.add_argument('--target-tomo-type', type=str, required=True, help='Reconstruction algorithm used to create the tomogram')
     parser.add_argument('--input-voxel-size', type=float, required=True, help='Voxel size of the tomogram')
     parser.add_argument('--output-voxel-size', type=float, required=False, default=10, help='Save voxel size')
+    
+    if add_slurm:
+        slurm_group = parser.add_argument_group("SLURM Arguments")
+        common.add_slurm_parameters(slurm_group, 'mrcs-importer', gpus = 0)
+
     args = parser.parse_args()
+
+    return args
+    
+def cli_mrcs():
+    """
+    Command-line interface for importing MRC/MRCS files.
+    Handles argument parsing and calls from_mrcs with the parsed arguments.
+    """
+    parser_description = "Import MRC volumes from a directory."
+    args = cli_mrcs_parser(parser_description)
     from_mrcs(args.mrcs_path, args.config, args.target_tomo_type, args.input_voxel_size, args.output_voxel_size)
-    
-    

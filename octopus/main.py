@@ -12,6 +12,10 @@ import argparse
 import sys
 
 def cli_main():
+    """
+    Main CLI entry point for Octopus.
+    """
+
     # Create the main parser
     parser = argparse.ArgumentParser(
         description="Octopus 🐙: 🛠️ Tools for Finding Proteins in 🧊 cryo-ET data",
@@ -52,6 +56,10 @@ def cli_main():
         parser.parse_args()
 
 def cli_slurm_main():
+    """
+    SLURM-specific CLI entry point for Octopus.
+    """
+
     # Create the main parser
     parser = argparse.ArgumentParser(
         description="Octopus for SLURM 🖥️: Shell Submission Tools for Running 🐙 on HPC",
@@ -64,8 +72,8 @@ def cli_slurm_main():
 
     # Define all subcommands with their help text
     commands = {
-        # "download-dataportal": (slurm_submitter.download_dataportal, "Download tomograms from the Dataportal, we can downsample to smaller voxel size if desired."),
-        # "import-mrc-volumes": (slurm_submitter.import_mrc_volumes, "Import MRC volumes from a directory."),
+        "import-mrc-volumes": (slurm_submitter.import_mrc_slurm, "Import MRC volumes from a directory."),
+        "download-dataportal": (slurm_submitter.download_dataportal_slurm, "Download tomograms from the Dataportal, we can downsample to smaller voxel size if desired."),
         # "create-targets": (create_targets, "Generate segmentation targets from coordinates."),
         "train": (slurm_submitter.train_model_slurm, "Train a single U-Net model."),
         "model-explore": (slurm_submitter.model_explore_slurm, "Explore model architectures with Optuna / Bayesian Optimization."),
@@ -90,3 +98,4 @@ def cli_slurm_main():
     else:
         # Just show help if no valid command
         parser.parse_args()
+

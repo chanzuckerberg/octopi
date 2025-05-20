@@ -36,8 +36,8 @@ pre-commit = "^3.8.0"
 ruff = "^0.6.4"
 
 [tool.poetry.scripts]
-octopus = "octopus.entry_points.cli:cli_main"
-octopus-slurm = "octopus.entry_points.cli:cli_slurm_main"
+octopus = "octopus.main:cli_main"
+octopus-slurm = "octopus.main:cli_slurm_main"
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]

@@ -4,6 +4,13 @@ import argparse, os, pprint
 from octopus import utils
 
 def optuna_parser(parser_description, add_slurm: bool = False):
+    """
+    Create an argument parser for model architecture search using Optuna.
+    
+    Args:
+        parser_description (str): Description of the parser
+        add_slurm (bool): Whether to add SLURM-specific arguments
+    """
     
     parser = argparse.ArgumentParser(
         description=parser_description,
