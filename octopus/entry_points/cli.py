@@ -1,4 +1,5 @@
-from octopus.processing.download import cli as download_dataportal
+from octopus.processing.importers import cli_dataportal as download_dataportal
+from octopus.processing.importers import cli_mrcs as import_mrc_volumes
 from octopus.entry_points.run_create_targets import cli as create_targets
 from octopus.entry_points.run_train import cli as train_model
 from octopus.entry_points.run_optuna import cli as model_explore
@@ -23,6 +24,7 @@ def cli_main():
 
     # Define all subcommands with their help text
     commands = {
+        "import-mrc-volumes": (import_mrc_volumes, "Import MRC volumes from a directory, we can downsample to smaller voxel size if desired."),
         "download-dataportal": (download_dataportal, "Download tomograms from the Dataportal, we can downsample to smaller voxel size if desired."),
         "create-targets": (create_targets, "Generate segmentation targets from coordinates."),
         "train": (train_model, "Train a single U-Net model."),
@@ -62,7 +64,8 @@ def cli_slurm_main():
 
     # Define all subcommands with their help text
     commands = {
-        # "download-dataportal": (download_dataportal, "Download tomograms from the Dataportal, we can downsample to smaller voxel size if desired."),
+        # "download-dataportal": (slurm_submitter.download_dataportal, "Download tomograms from the Dataportal, we can downsample to smaller voxel size if desired."),
+        # "import-mrc-volumes": (slurm_submitter.import_mrc_volumes, "Import MRC volumes from a directory."),
         # "create-targets": (create_targets, "Generate segmentation targets from coordinates."),
         "train": (slurm_submitter.train_model_slurm, "Train a single U-Net model."),
         "model-explore": (slurm_submitter.model_explore_slurm, "Explore model architectures with Optuna / Bayesian Optimization."),
