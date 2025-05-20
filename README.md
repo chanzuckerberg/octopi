@@ -35,6 +35,26 @@ octopus-slurm --help
 ```
 This provides utilities for submitting training, inference, and localization jobs in SLURM-based environments.
 
+### 📥 Data Import & Preprocessing
+
+To train or run inference with Octopus, your tomograms must be organized inside a CoPick project. Octopus supports two primary methods for data ingestion, both of which include optional Fourier cropping to reduce resolution and accelerate downstream processing.
+
+If your tomograms are already processed and stored locally in .mrc format (e.g., from Warp, IMOD, or AreTomo), you can import them into a new or existing CoPick project using:
+
+```
+octopus import-mrc-volumes \
+    --input-folder /path/to/mrc/files --config /path/to/config.json \
+    --target-tomo-type denoised --input-voxel-size --output-voxel-size 10
+```
+
+Octopus also can process tomograms that are hosted on the data portal. Users can download tomograms onto their own remote machine especially if they would like to downsample the tomograms to a lower resolution for speed and memory. You can download and process the tomograms using:
+```
+octopus download-dataportal \
+    --config /path/to/config.json --datasetID 10445 --overlay-path path/to/saved/zarrs \
+    --input-voxel-size 5 --output-voxel-size 10 \
+    --dataportal-name wbp --target-tomotype wbp 
+```
+
 ### 📁 Training Labels Preparation  
 
 Use `octopus create-targets` to create semantic masks for proteins of interest using annotation metadata. In this example lets generate picks segmentations for dataset 10439 from the CZ cryoET Dataportal (only need to run this step once). 

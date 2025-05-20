@@ -31,6 +31,10 @@ def generate_targets(
         radius_scale (float): Scale factor for target object radius.
     """
 
+    # Default session ID to 1 if not provided
+    if target_session_id is None:
+        target_session_id = '1'
+
     print('Creating Targets for the following objects:', ', '.join(train_targets.keys()))
 
     # Get Target Names

@@ -33,12 +33,15 @@ class ModelTrainer:
         self.trial_run_id = None  
 
         # Default F-Beta Value
-        self.beta = 3
+        self.beta = 2
 
         # Initialize EMAHandler for the model
         self.ema_experiment = use_ema
         if self.ema_experiment:
             self.ema_handler = ema.ExponentialMovingAverage(self.model.parameters(), decay=0.99)
+
+        # Initialize Figure and Axes for Plotting
+        self.fig = None; self.axs = None
 
     def set_parallel_mlflow(self, 
                             client,
@@ -150,18 +153,8 @@ class ModelTrainer:
         Nclass = data_load_gen.Nclasses
         self.create_results_dictionary(Nclass)  
 
-        # Regex pattern for fBetaN and fBetaN_classM (Still need to handle fBetaN_classM)
-        pattern = r"^fBeta[1-9]\d*(?:_class[1-9]\d*)?$"
-        if re.match(pattern, best_metric) or best_metric in self.metric_names:
-            self.beta = int(best_metric[5:])
-            best_metric = 'avg_fbeta'
-        else:
-            print(f'\n{best_metric} is not a valid metric! Tracking avg_f1 as the best metric\n')
-            best_metric = 'avg_f1'
-
-        # # Early Stopping Parameters
-        # self.nan_counter = 0
-        # self.max_nan_epochs = 10
+        # Resolve the best metric
+        best_metric = self.resolve_best_metric(best_metric)
 
         # Stopping Criteria
         self.stopping_criteria = stopping_criteria.EarlyStoppingChecker(monitor_metric=best_metric, val_interval=val_interval)            
@@ -238,7 +231,11 @@ class ModelTrainer:
 
                 # Save plot if Local Training Call
                 if not self.use_mlflow:
-                    viz.plot_training_results(self.results, save_plot=os.path.join(model_save_path, "net_train_history.png"))
+                    self.fig, self.axs = viz.plot_training_results(
+                        self.results, 
+                        save_plot=os.path.join(model_save_path, "net_train_history.png"), 
+                        fig=self.fig, 
+                        axs=self.axs)
 
                 # After Validation Metrics are Logged, Check for Early Stopping
                 if self.stopping_criteria.should_stop_training(epoch_loss, results=self.results, check_metrics=True):
@@ -311,17 +308,6 @@ class ModelTrainer:
             return True  # Indicate early stopping
 
         return False  # Continue training
-    
-    # def check_for_early_stopping(self, epoch_loss: float):
-    #     # # Check for NaN in the loss
-    #     # if np.isnan(epoch_loss):
-    #     #     self.nan_counter += 1
-    #     #     if self.nan_counter > self.max_nan_epochs:
-    #     #         return True
-    #     # else:
-    #     #     self.nan_counter = 0  # Reset the counter if loss is valid
-    #     #     return False
-    #     return stopping_criteria.check_for_nan(self.results, self.nan_counter, self.max_nan_epochs)
         
     def save_model(self, model_save_path: str):
 
@@ -428,4 +414,25 @@ class ModelTrainer:
         else:
             mlflow.log_params(params_dict)  
 
+    # Example input: best_metric = 'fBeta2_class3' or 'fBeta1' or 'f1_class2'
+    def resolve_best_metric(self, best_metric):
+        fbeta_pattern = r"^fBeta(\d+)(?:_class(\d+))?$"  # Matches fBetaX or fBetaX_classY
+        match = re.match(fbeta_pattern, best_metric)
+
+        if match:
+            self.beta = int(match.group(1))  # Extract beta value
+            class_part = match.group(2)
+            if class_part:
+                best_metric = f'fbeta_class{class_part}'  # fBeta2_class3 → fbeta_class3
+            else:
+                best_metric = 'avg_fbeta'  # fBeta2 → avg_fbeta
+
+        elif best_metric in self.metric_names:
+            pass  # It's already a valid metric in the results dict
+
+        else:
+            print(f"'{best_metric}' is not a valid metric. Defaulting to 'avg_f1'.\n")
+            best_metric = 'avg_f1'
+
+        return best_metric
     

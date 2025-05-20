@@ -1,4 +1,5 @@
-from octopus.processing.download import cli as download_dataportal
+from octopus.processing.importers import cli_dataportal as download_dataportal
+from octopus.processing.importers import cli_mrcs as import_mrc_volumes
 from octopus.entry_points.run_create_targets import cli as create_targets
 from octopus.entry_points.run_train import cli as train_model
 from octopus.entry_points.run_optuna import cli as model_explore
@@ -11,6 +12,10 @@ import argparse
 import sys
 
 def cli_main():
+    """
+    Main CLI entry point for Octopus.
+    """
+
     # Create the main parser
     parser = argparse.ArgumentParser(
         description="Octopus 🐙: 🛠️ Tools for Finding Proteins in 🧊 cryo-ET data",
@@ -23,6 +28,7 @@ def cli_main():
 
     # Define all subcommands with their help text
     commands = {
+        "import-mrc-volumes": (import_mrc_volumes, "Import MRC volumes from a directory, we can downsample to smaller voxel size if desired."),
         "download-dataportal": (download_dataportal, "Download tomograms from the Dataportal, we can downsample to smaller voxel size if desired."),
         "create-targets": (create_targets, "Generate segmentation targets from coordinates."),
         "train": (train_model, "Train a single U-Net model."),
@@ -50,6 +56,10 @@ def cli_main():
         parser.parse_args()
 
 def cli_slurm_main():
+    """
+    SLURM-specific CLI entry point for Octopus.
+    """
+
     # Create the main parser
     parser = argparse.ArgumentParser(
         description="Octopus for SLURM 🖥️: Shell Submission Tools for Running 🐙 on HPC",
@@ -62,10 +72,11 @@ def cli_slurm_main():
 
     # Define all subcommands with their help text
     commands = {
-        # "download-dataportal": (download_dataportal, "Download tomograms from the Dataportal, we can downsample to smaller voxel size if desired."),
+        "import-mrc-volumes": (slurm_submitter.import_mrc_slurm, "Import MRC volumes from a directory."),
+        "download-dataportal": (slurm_submitter.download_dataportal_slurm, "Download tomograms from the Dataportal, we can downsample to smaller voxel size if desired."),
         # "create-targets": (create_targets, "Generate segmentation targets from coordinates."),
         "train": (slurm_submitter.train_model_slurm, "Train a single U-Net model."),
-        # "model-explore": (model_explore, "Explore model architectures with Optuna / Bayesian Optimization."),
+        "model-explore": (slurm_submitter.model_explore_slurm, "Explore model architectures with Optuna / Bayesian Optimization."),
         "inference": (slurm_submitter.inference_slurm, "Perform segmentation inference on tomograms."),
         "localize": (slurm_submitter.localize_slurm, "Perform localization of particles in tomograms."),
         # "extract-mb-picks": (extract_mb_picks, "Extract MB Picks from tomograms.")
@@ -87,3 +98,4 @@ def cli_slurm_main():
     else:
         # Just show help if no valid command
         parser.parse_args()
+
