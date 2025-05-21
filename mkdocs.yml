@@ -20,3 +20,10 @@ theme:
   logo: assets/logo.png
   features:
     - content.code.copy
+
+# Page tree
+nav:
+  - 🏡 Home: 
+      - Overview: index.md
+
+  - 📓 Tutorials:
