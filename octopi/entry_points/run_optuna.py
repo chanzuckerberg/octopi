@@ -21,7 +21,7 @@ def optuna_parser(parser_description, add_slurm: bool = False):
     input_group = parser.add_argument_group("Input Arguments")
     common.add_config(input_group, single_config=False)
     input_group.add_argument("--target-info", type=utils.parse_target, help="Target information, e.g., 'name' or 'name,user_id,session_id'")    
-    input_group.add_argument("--tomo-algorithm", default='wbp', 
+    input_group.add_argument("--tomo-alg", default='wbp', 
                              help="Tomogram algorithm used for training")
     input_group.add_argument("--mlflow-experiment-name", type=str, default="model-search", required=False, 
                              help="Name of the MLflow experiment (default: 'model-search').")

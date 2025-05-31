@@ -111,7 +111,7 @@ def cli():
     # Set default values if not provided
     args.seg_info = list(args.seg_info)  # Convert tuple to list
     if args.seg_info[1] is None:
-        args.seg_info[1] = "DeepFindET"
+        args.seg_info[1] = "octopi"
 
     if args.seg_info[2] is None:
         args.seg_info[2] = "1"

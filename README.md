@@ -64,7 +64,7 @@ octopi create-targets \
     --target apoferritin --target beta-galactosidase,slabpick,1 \
     --target ribosome,pytom,0 --target virus-like-particle,pytom,0 \
     --seg-target membrane \
-    --tomogram-algorithm wbp --voxel-size 10 \
+    --tomo-alg wbp --voxel-size 10 \
     --target-session-id 1 --target-segmentation-name remotetargets \
     --target-user-id train-octopi
 ```
@@ -75,7 +75,7 @@ Train a 3D U-Net model on the prepared datasets using the prepared target segmen
 octopi train-model \
     --config experiment,config1.json \
     --config simulation,config2.json \
-    --voxel-size 10 --tomo-algorithm wbp --Nclass 8 \
+    --voxel-size 10 --tomo-alg wbp --Nclass 8 \
     --tomo-batch-size 50 --num-epochs 100 --val-interval 10 \
     --target-info remotetargets,train-octopi,1
 ```
@@ -90,7 +90,7 @@ To launch a model exploration job:
 octopi model-explore \
     --config experiment,/mnt/dataportal/ml_challenge/config.json \
     --config simulation,/mnt/dataportal/synthetic_ml_challenge/config.json \
-    --voxel-size 10 --tomo-algorithm wbp --Nclass 8 \
+    --voxel-size 10 --tomo-alg wbp --Nclass 8 \
     --model-save-path train_results
 ```
 Each trial evaluates a different architecture and logs:
@@ -146,7 +146,7 @@ octopi inference \
     --seg-info predict,unet,1 \
     --model-config train_results/best_model_config.yaml \
     --model-weights train_results/best_model.pth \
-    --voxel-size 10 --tomo-algorithm wbp --tomo-batch-size 25
+    --voxel-size 10 --tomo-alg wbp --tomo-batch-size 25
 ```
 Output masks will be saved to the corresponding copick project under the `seg-info` input.
 

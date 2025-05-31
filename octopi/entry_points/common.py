@@ -50,16 +50,20 @@ def add_config(parser, single_config):
 
 def add_inference_parameters(parser):
 
-    parser.add_argument("--tomo-algorithm", required=False, default = 'wbp', help="Tomogram algorithm used for produces segmentation prediction masks.")    
-    parser.add_argument("--seg-info", type=utils.parse_target, required=True, help='Information Query to save Segmentation predictions under, e.g., (e.g., "name" or "name,user_id,session_id" - Default UserID is DeepFindET and SessionID is 1')
-    parser.add_argument("--tomo-batch-size", type=int, default=50, required=False, help="Batch size for tomogram processing.")
-    parser.add_argument("--run-ids", type=utils.parse_list, default=None, required=False, help="List of run IDs for prediction, e.g., run1,run2 or [run1,run2]. If not provided, all available runs will be processed.")   
+    parser.add_argument("--tomo-alg", required=False, default = 'wbp', 
+                        help="Tomogram algorithm used for produces segmentation prediction masks.")    
+    parser.add_argument("--seg-info", type=utils.parse_target, required=False, 
+                        default='predict,octopi,1', help='Information Query to save Segmentation predictions under, e.g., (e.g., "name" or "name,user_id,session_id" - Default UserID is octopi and SessionID is 1')
+    parser.add_argument("--tomo-batch-size", type=int, default=25, required=False, 
+                        help="Batch size for tomogram processing.")
+    parser.add_argument("--run-ids", type=utils.parse_list, default=None, required=False, 
+                        help="List of run IDs for prediction, e.g., run1,run2 or [run1,run2]. If not provided, all available runs will be processed.")   
     
 def add_localize_parameters(parser):
 
     parser.add_argument("--voxel-size", type=int, required=False, default=10, help="Voxel size")
     parser.add_argument("--method", type=str,required=False, default='watershed', help="Localization method")
-    parser.add_argument("--pick-session-id", required=True, type=str, help="Pick session ID")
+    parser.add_argument("--pick-session-id", required=False, default="1", type=str, help="Pick session ID")
     parser.add_argument("--pick-objects", required=True, type=str, help="Pick objects")
     parser.add_argument("--seg-info", required=True, type=str, help="Segmentation info")
 
