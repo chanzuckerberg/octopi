@@ -164,8 +164,8 @@ def parse_args():
     parameters_group.add_argument("--voxel-size", type=float, default=10, help="Voxel size for tomogram reconstruction.")    
     
     output_group = parser.add_argument_group("Output Arguments")
-    output_group.add_argument("--target-segmentation-name", type=str, default=None, help="Name for the target segmentation.")
-    output_group.add_argument("--target-user-id", type=str, default="monai", help="User ID associated with the target segmentation.")
+    output_group.add_argument("--target-segmentation-name", type=str, default='targets', help="Name for the target segmentation.")
+    output_group.add_argument("--target-user-id", type=str, default="octopi", help="User ID associated with the target segmentation.")
     output_group.add_argument("--target-session-id", type=str, default="1", help="Session ID for the target segmentation.")
 
     return parser.parse_args()
