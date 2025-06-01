@@ -20,7 +20,7 @@ def from_dataportal(
         datasetID (int): ID of the dataset to download
         overlay_path (str): Path to the overlay file
         dataportal_name (str): Name of the tomogram type in the dataportal
-        target_tomo_type (str): Name to use for the tomogram locally
+        target_tomo_alg (str): Name to use for the tomogram locally
         input_voxel_size (float): Original voxel size of the tomograms
         output_voxel_size (float, optional): Desired voxel size for downsampling
     """

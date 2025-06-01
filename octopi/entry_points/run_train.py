@@ -159,7 +159,7 @@ def cli():
     train_model(
         copick_config_path=copick_configs, 
         target_info=args.target_info,
-        tomo_algorithm=args.tomo_algorithm,
+        tomo_algorithm=args.tomo_alg,
         voxel_size=args.voxel_size,
         model_config=model_config,
         model_weights=args.model_weights,

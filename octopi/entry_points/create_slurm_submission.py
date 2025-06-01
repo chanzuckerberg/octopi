@@ -63,7 +63,7 @@ def create_model_explore_script(args):
     command = f"""
 octopi model-explore \\
     --model-type {args.model_type} --model-save-path {args.model_save_path} \\
-    --voxel-size {args.voxel_size} --tomo-algorithm {args.tomo_algorithm} --Nclass {args.Nclass} \\
+    --voxel-size {args.voxel_size} --tomo-alg {args.tomo_alg} --Nclass {args.Nclass} \\
     --val-interval {args.val_interval} --num-epochs {args.num_epochs} --num-trials {args.num_trials} \\
     --best-metric {args.best_metric} --mlflow-experiment-name {args.mlflow_experiment_name} \\
     --target-name {args.target_name} --target-session-id {args.target_session_id} --target-user-id {args.target_user_id} \\
@@ -115,7 +115,7 @@ octopi inference \\
     --model-weights {args.model_weights} \\
     --dim-in {args.dim_in} --res-units {args.res_units} \\
     --model-type {args.model_type} --channels {",".join(map(str, args.channels))} --strides {",".join(map(str, args.strides))} \\
-    --voxel-size {args.voxel_size} --tomo-algorithm {args.tomo_algorithm} --Nclass {args.Nclass}
+    --voxel-size {args.voxel_size} --tomo-alg {args.tomo_alg} --Nclass {args.Nclass}
 """
 
         create_shellsubmit(

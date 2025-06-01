@@ -127,7 +127,7 @@ def cli():
         model_config=args.model_config,
         seg_info=args.seg_info,
         voxel_size=args.voxel_size,
-        tomo_algorithm=args.tomo_algorithm,
+        tomo_algorithm=args.tomo_alg,
         tomo_batch_size=args.tomo_batch_size,
         run_ids=args.run_ids,
     )
@@ -144,7 +144,7 @@ def save_parameters(args: argparse.Namespace,
             "config": args.config,
             "model_config": args.model_config,
             "model_weights": args.model_weights,
-            "tomo_algorithm": args.tomo_algorithm,
+            "tomo_algorithm": args.tomo_alg,
             "voxel_size": args.voxel_size
         },
         "outputs": {

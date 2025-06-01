@@ -185,7 +185,7 @@ def cli():
             seg_targets=args.seg_target,
             voxel_size=args.voxel_size,
             radius_scale=args.radius_scale,
-            tomogram_algorithm=args.tomogram_algorithm,
+            tomogram_algorithm=args.tomo_alg,
             target_segmentation_name=args.target_segmentation_name,
             target_user_id=args.target_user_id,
             target_session_id=args.target_session_id,
@@ -200,7 +200,7 @@ def cli():
             picks_user_id=args.picks_user_id,
             voxel_size=args.voxel_size,
             radius_scale=args.radius_scale,
-            tomogram_algorithm=args.tomogram_algorithm,
+            tomogram_algorithm=args.tomo_alg,
             target_segmentation_name=args.target_segmentation_name,
             target_user_id=args.target_user_id,
             target_session_id=args.target_session_id,
@@ -241,7 +241,7 @@ def save_parameters(args, output_path: str):
             "input": input_group ,
             "parameters": {
                 "radius_scale": args.radius_scale,
-                "tomogram_algorithm": args.tomogram_algorithm,
+                "tomogram_algorithm": args.tomo_alg,
                 "voxel_size": args.voxel_size,            
             }
         }
