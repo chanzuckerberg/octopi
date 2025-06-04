@@ -16,7 +16,7 @@ def get_model(architecture):
     elif architecture == "SegResNet":
         model = SegResNet.mySegResNet()
     else:
-        raise ValueError(f"Model type {architecture} not supported!!")
+        raise ValueError(f"Model type {architecture} not supported!\nPlease use one of the following: Unet, AttentionUnet, MedNeXt, SegResNet")
 
     return model
 

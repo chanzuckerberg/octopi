@@ -110,7 +110,7 @@ def from_mrcs(
     config,
     target_tomo_type,
     input_voxel_size,
-    output_voxel_size = 10):
+    output_voxel_size = None):
     """
     Import and process tomograms from local MRC/MRCS files.
     
@@ -192,8 +192,8 @@ def cli_mrcs_parser(parser_description, add_slurm: bool = False):
     parser.add_argument('--mrcs-path', type=str, required=True, help='Path to the mrcs file')
     parser.add_argument('--config', type=str, required=False, default=None, help='Path to the config file to write tomograms to')
     parser.add_argument('--target-tomo-type', type=str, required=True, help='Reconstruction algorithm used to create the tomogram')
-    parser.add_argument('--input-voxel-size', type=float, required=True, help='Voxel size of the tomogram')
-    parser.add_argument('--output-voxel-size', type=float, required=False, default=10, help='Save voxel size')
+    parser.add_argument('--input-voxel-size', type=float, required=False, default=10, help='Voxel size of the MRC tomogram')
+    parser.add_argument('--output-voxel-size', type=float, required=False, default=None, help='Output voxel size (if desired to downsample to lower resolution)')
     
     if add_slurm:
         slurm_group = parser.add_argument_group("SLURM Arguments")
