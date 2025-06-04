@@ -1,5 +1,5 @@
-from copick_utils.segmentation.segmentation_from_picks import from_picks
-import copick_utils.writers.write as write
+from octopi.processing.segmentation_from_picks import from_picks
+import octopi.processing.writers as write
 from octopi import io 
 from typing import List
 from tqdm import tqdm

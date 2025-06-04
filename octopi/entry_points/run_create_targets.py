@@ -1,9 +1,8 @@
 import octopi.processing.create_targets_from_picks as create_targets
-from octopi import utils, io 
-import copick_utils.writers.write as write
-from collections import defaultdict
 from typing import List, Tuple, Union
+from collections import defaultdict
 import argparse, copick, yaml, os
+from octopi import utils, io 
 from tqdm import tqdm
 import numpy as np
 

@@ -5,11 +5,11 @@ from monai.data import MetaTensor
 from monai.transforms import (
     Compose, AsDiscrete, Activations
 )
-import torch, copick, gc, os
+from octopi.processing import writers as write
 from octopi.models import common
-from octopi import io, utils
-from copick_utils.writers import write
 from typing import List, Optional
+import torch, copick, gc, os
+from octopi import io, utils
 from tqdm import tqdm
 import numpy as np
 

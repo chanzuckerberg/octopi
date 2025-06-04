@@ -17,9 +17,12 @@ octopi offers a modular, deep learning-driven pipeline for:
 octopi empowers researchers to navigate the dense, intricate landscapes of cryo-ET datasets with unprecedented precision and efficiency without manual trial and error.
 
 ## Getting Started
-### Installation and setup the environment
-Inside the directory, run `pip install -e .` 
-**Note** (eventually this package will be available on PyPI).  
+### Installation
+
+*Octopi* is available on PyPI.
+```
+pip install octopi
+```
 
 ## 📚 Usage
 

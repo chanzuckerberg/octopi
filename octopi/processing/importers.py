@@ -1,7 +1,7 @@
 from octopi.processing.downsample import FourierRescale
-from octopi.entry_points import common
 import copick, argparse, mrcfile, glob, os
-from copick_utils.writers import write
+import octopi.processing.writers as write
+from octopi.entry_points import common
 from tqdm import tqdm
 
 def from_dataportal(
