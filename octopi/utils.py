@@ -172,6 +172,44 @@ def parse_copick_configs(config_entries: List[str]):
 
     return copick_configs
 
+def parse_data_split(value: str) -> Tuple[float, float, float]:
+    """
+    Parse data split ratios from string input.
+    
+    Args:
+        value: Either a single float (e.g., "0.8") or two comma-separated floats (e.g., "0.7,0.1")
+    
+    Returns:
+        Tuple of (train_ratio, val_ratio, test_ratio)
+    
+    Examples:
+        "0.8" -> (0.8, 0.2, 0.0)
+        "0.7,0.1" -> (0.7, 0.1, 0.2)
+    """
+    parts = value.split(',')
+    
+    if len(parts) == 1:
+        # Single value provided - use it as train ratio
+        train_ratio = float(parts[0])
+        val_ratio = 1.0 - train_ratio
+        test_ratio = 0.0
+    elif len(parts) == 2:
+        # Two values provided - use as train and val ratios
+        train_ratio = float(parts[0])
+        val_ratio = float(parts[1])
+        test_ratio = 1.0 - train_ratio - val_ratio
+    else:
+        raise ValueError("Data split must be either a single value or two comma-separated values")
+    
+    # Validate ratios
+    if train_ratio < 0 or val_ratio < 0 or test_ratio < 0:
+        raise ValueError("All ratios must be non-negative")
+    
+    if abs(train_ratio + val_ratio + test_ratio - 1.0) > 1e-6:
+        raise ValueError(f"Ratios must sum to 1.0, got {train_ratio + val_ratio + test_ratio}")
+    
+    return round(train_ratio, 2), round(val_ratio, 2), round(test_ratio, 2)
+
 ##############################################################################################################################
 
 # Create a custom dumper that uses flow style for lists only.
