@@ -75,6 +75,7 @@ jobs:
           pip install --upgrade twine
           twine check dist/*                  
 
+      # Always publish to TestPyPI for any version tag
       - name: Publish to TestPyPI
         if: startsWith(github.ref, 'refs/tags/v')
         run: |
@@ -83,57 +84,18 @@ jobs:
         env:
           TWINE_USERNAME: __token__
           TWINE_PASSWORD: ${{ secrets.TEST_PYPI_API_TOKEN }}
-      
 
-  # build-and-publish:
-  #   name: Build and publish Python 🐍 distributions 📦 to PyPI
-  #   needs: test  # Only run after tests pass
-  #   runs-on: ubuntu-latest
-  #   # Only publish on tag pushes
-  #   if: startsWith(github.ref, 'refs/tags/')
-
-  #   steps:
-  #     - uses: actions/checkout@v4
-
-  #     - name: Set up Python
-  #       uses: actions/setup-python@v5
-  #       with:
-  #         python-version: "3.x"
-
-  #     - name: Install pypa/build
-  #       run: python -m pip install build
-
-  #     - name: Build a binary wheel and a source tarball
-  #       run: python -m build
-
-  #     - name: Upload built wheels
-  #       uses: actions/upload-artifact@v4
-  #       with:
-  #         name: wheels-${{ matrix.python-version }}
-  #         path: dist/   
-
-  #     - name: Validate wheel with twine
-  #       run: |
-  #         python -m pip install --upgrade twine
-  #         twine check dist/*               
-
-  #     - name: Publish to TestPyPI
-  #       if: startsWith(github.ref, 'refs/tags/v')
-  #       run: |
-  #         python -m pip install --upgrade twine
-  #         twine upload --repository-url https://test.pypi.org/legacy/ dist/* --verbose
-  #       env:
-  #         TWINE_USERNAME: __token__
-  #         TWINE_PASSWORD: ${{ secrets.TEST_PYPI_API_TOKEN }}
-
-      # Uncomment below for PyPI publish
-      # - name: Publish to PyPI
-      #   if: startsWith(github.ref, 'refs/tags/v')
-      #   run: |
-      #     python -m pip install --upgrade twine
-      #     twine upload wheelhouse/*
-      #   env:
-      #     TWINE_USERNAME: __token__
-      #     TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
-
-
+      # Only publish to PyPI for release versions (no -test, -rc, etc.)
+      - name: Publish to PyPI
+        if: |
+          startsWith(github.ref, 'refs/tags/v') &&
+          !contains(github.ref, '-test') &&
+          !contains(github.ref, '-beta') &&
+          !contains(github.ref, '-alpha') &&
+          !contains(github.ref, '-dev')
+        run: |
+          python -m pip install --upgrade twine
+          twine upload dist/* --verbose
+        env:
+          TWINE_USERNAME: __token__
+          TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}

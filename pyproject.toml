@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "octopi"
-version = "0.0.1"
+version = "1.0"
 description = "Model architecture exploration for cryoET particle picking"
 authors = ["Jonathan Schwartz", "Kevin Zhao"]
 license = "MIT"
