@@ -24,7 +24,8 @@ class ModelSearchSubmit:
         best_metric: str,
         val_interval: int,
         trainRunIDs: List[str],
-        validateRunIDs: List[str]
+        validateRunIDs: List[str],
+        data_split: str
     ):
         """
         Initialize the ModelSearch class for architecture search with Optuna.
@@ -47,8 +48,10 @@ class ModelSearchSubmit:
             val_interval (int): Validation interval.
             trainRunIDs (List[str]): List of training run IDs.
             validateRunIDs (List[str]): List of validation run IDs.
+            data_split (str): Data split ratios.
         """
 
+        # Input parameters 
         self.copick_config = copick_config
         self.target_name = target_name
         self.target_user_id = target_user_id
@@ -66,6 +69,9 @@ class ModelSearchSubmit:
         self.val_interval = val_interval
         self.trainRunIDs = trainRunIDs
         self.validateRunIDs = validateRunIDs
+        self.data_split = data_split
+        
+        # Data generator - will be initialized in _initialize_data_generator()
         self.data_generator = None
 
         # Set random seed for reproducibility
@@ -102,10 +108,11 @@ class ModelSearchSubmit:
             )
 
         # Split datasets into training and validation
+        ratios = utils.parse_data_split(self.data_split)
         self.data_generator.get_data_splits(
             trainRunIDs=self.trainRunIDs,
             validateRunIDs=self.validateRunIDs,
-            train_ratio = 0.8, val_ratio = 0.2, test_ratio = 0.0,
+            train_ratio = ratios[0], val_ratio = ratios[1], test_ratio = ratios[2],
             create_test_dataset = False
         )
         
