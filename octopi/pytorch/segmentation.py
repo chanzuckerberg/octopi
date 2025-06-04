@@ -5,7 +5,7 @@ from monai.data import MetaTensor
 from monai.transforms import (
     Compose, AsDiscrete, Activations
 )
-from octopi.processing import writers as write
+import octopi.processing.writers as write
 from octopi.models import common
 from typing import List, Optional
 import torch, copick, gc, os
