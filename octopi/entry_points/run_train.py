@@ -114,7 +114,8 @@ def train_model_parser(parser_description, add_slurm: bool = False):
     # Input Arguments
     input_group = parser.add_argument_group("Input Arguments")
     common.add_config(input_group, single_config=False)
-    input_group.add_argument("--target-info", type=utils.parse_target, help="Target information, e.g., 'name' or 'name,user_id,session_id'")
+    input_group.add_argument("--target-info", type=utils.parse_target, default="targets,octopi,1", 
+                             help="Target information, e.g., 'name' or 'name,user_id,session_id'. Default is 'targets,octopi,1'.")
     input_group.add_argument("--tomo-alg", default='wbp', help="Tomogram algorithm used for training")
     input_group.add_argument("--trainRunIDs", type=utils.parse_list, help="List of training run IDs, e.g., run1,run2,run3")
     input_group.add_argument("--validateRunIDs", type=utils.parse_list, help="List of validation run IDs, e.g., run4,run5,run6")
