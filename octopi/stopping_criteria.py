@@ -9,7 +9,7 @@ class EarlyStoppingChecker:
                  max_nan_epochs=15, 
                  plateau_patience=20, 
                  plateau_min_delta=0.001,
-                 stagnation_patience=20, 
+                 stagnation_patience=50, 
                  convergence_window=5, 
                  convergence_threshold=0.005,
                  val_interval=15,
