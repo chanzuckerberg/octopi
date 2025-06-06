@@ -1,9 +1,8 @@
 import octopi.processing.create_targets_from_picks as create_targets
-from octopi import utils, io 
-import copick_utils.writers.write as write
-from collections import defaultdict
 from typing import List, Tuple, Union
+from collections import defaultdict
 import argparse, copick, yaml, os
+from octopi import utils, io 
 from tqdm import tqdm
 import numpy as np
 
@@ -28,9 +27,19 @@ def create_sub_train_targets(
 
     # Create dictionary for particle targets
     for t in pick_targets:
+        # Parse the target
         obj_name, user_id, session_id = t 
+        obj = root.get_object(obj_name)
+
+        # Check if the object is valid
+        if obj is None:
+            print(f'Warning - Skipping Particle Target: "{obj_name}", as it is not a valid name in the config file.')
+            continue
+        
+        # Get the label and radius of the object
+        label = obj.label
         info = {
-            "label": root.get_object(obj_name).label,
+            "label": label,
             "user_id": user_id,
             "session_id": session_id,
             "is_particle_target": True,

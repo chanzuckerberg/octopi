@@ -138,7 +138,8 @@ class TrainLoaderManager:
 
         print(f"Number of training samples: {len(trainRunIDs)}")
         print(f"Number of validation samples: {len(validateRunIDs)}")
-        print(f'Number of test samples: {len(testRunIDs)}')    
+        if testRunIDs is not None:
+            print(f'Number of test samples: {len(testRunIDs)}')    
 
         # Define separate batch sizes
         self.train_batch_size = min( len(self.myRunIDs['train']), self.tomo_batch_size)

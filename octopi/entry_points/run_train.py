@@ -25,7 +25,8 @@ def train_model(
     tversky_alpha: float = 0.5,
     num_epochs: int = 100,  
     val_interval: int = 5,
-    best_metric: str = 'avg_f1'
+    best_metric: str = 'avg_f1',
+    data_split: str = '0.8'
     ):
 
     # Initialize the data generator to manage training and validation datasets
@@ -53,11 +54,13 @@ def train_model(
             Nclasses = model_config['num_classes'],
             tomo_batch_size = tomo_batch_size ) 
     
+
     # Get the data splits
+    ratios = utils.parse_data_split(data_split)
     data_generator.get_data_splits(
         trainRunIDs = trainRunIDs,
         validateRunIDs = validateRunIDs,
-        train_ratio = 0.9, val_ratio = 0.1, test_ratio = 0.0,
+        train_ratio = ratios[0], val_ratio = ratios[1], test_ratio = ratios[2],
         create_test_dataset = False)
     
     # Get the reload frequency
@@ -111,10 +114,13 @@ def train_model_parser(parser_description, add_slurm: bool = False):
     # Input Arguments
     input_group = parser.add_argument_group("Input Arguments")
     common.add_config(input_group, single_config=False)
-    input_group.add_argument("--target-info", type=utils.parse_target, help="Target information, e.g., 'name' or 'name,user_id,session_id'")
+    input_group.add_argument("--target-info", type=utils.parse_target, default="targets,octopi,1", 
+                             help="Target information, e.g., 'name' or 'name,user_id,session_id'. Default is 'targets,octopi,1'.")
     input_group.add_argument("--tomo-alg", default='wbp', help="Tomogram algorithm used for training")
     input_group.add_argument("--trainRunIDs", type=utils.parse_list, help="List of training run IDs, e.g., run1,run2,run3")
     input_group.add_argument("--validateRunIDs", type=utils.parse_list, help="List of validation run IDs, e.g., run4,run5,run6")
+    input_group.add_argument('--data-split', type=str, default='0.8', help="Data split ratios. Either a single value (e.g., '0.8' for 80/20/0 split) "
+                                "or two comma-separated values (e.g., '0.7,0.1' for 70/10/20 split)")
     
     fine_tune_group = parser.add_argument_group("Fine-Tuning Arguments")
     fine_tune_group.add_argument('--model-config', type=str, help="Path to the model configuration file (typically used for fine-tuning)")
@@ -172,7 +178,8 @@ def cli():
         val_interval=args.val_interval,
         best_metric=args.best_metric,
         trainRunIDs=args.trainRunIDs,
-        validateRunIDs=args.validateRunIDs
+        validateRunIDs=args.validateRunIDs,
+        data_split=args.data_split
     )
 
 def get_model_config(channels, strides, res_units, Nclass, dim_in):

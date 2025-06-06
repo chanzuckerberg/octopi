@@ -46,7 +46,7 @@ def add_config(parser, single_config):
                             help="Specify a single configuration path (/path/to/config.json) "
                                  "or multiple entries in the format session_name,/path/to/config.json. "
                                  "Use multiple --config entries for multiple sessions.")
-    parser.add_argument("--voxel-size", type=int, required=False, default=10, help="Voxel size of tomograms used")
+    parser.add_argument("--voxel-size", type=float, required=False, default=10, help="Voxel size of tomograms used")
 
 def add_inference_parameters(parser):
 

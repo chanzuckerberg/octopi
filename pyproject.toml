@@ -1,8 +1,8 @@
 [tool.poetry]
 name = "octopi"
-version = "0.0.1"
+version = "1.0"
 description = "Model architecture exploration for cryoET particle picking"
-authors = ["CZII autonomous 3d particle picking team"]
+authors = ["Jonathan Schwartz", "Kevin Zhao"]
 license = "MIT"
 readme = "README.md"
 
@@ -27,7 +27,6 @@ python-dotenv = "*"
 pytorch-lightning = "2.4.0"
 monai-weekly = { version = "1.5.dev2448", allow-prereleases = true }
 optuna-integration = { version = "*", extras = ["botorch", "pytorch_lightning"] }
-copick-utils = {git = "https://github.com/copick/copick-utils.git", branch = "main"}
 
 [tool.poetry.dev-dependencies]
 pytest = "^6.2.3"

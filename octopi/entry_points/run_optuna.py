@@ -20,7 +20,8 @@ def optuna_parser(parser_description, add_slurm: bool = False):
     # Input Arguments
     input_group = parser.add_argument_group("Input Arguments")
     common.add_config(input_group, single_config=False)
-    input_group.add_argument("--target-info", type=utils.parse_target, help="Target information, e.g., 'name' or 'name,user_id,session_id'")    
+    input_group.add_argument("--target-info", type=utils.parse_target, default="targets,octopi,1", 
+                             help="Target information, e.g., 'name' or 'name,user_id,session_id'")    
     input_group.add_argument("--tomo-alg", default='wbp', 
                              help="Tomogram algorithm used for training")
     input_group.add_argument("--mlflow-experiment-name", type=str, default="model-search", required=False, 
@@ -29,6 +30,8 @@ def optuna_parser(parser_description, add_slurm: bool = False):
                              help="List of training run IDs, e.g., run1,run2 or [run1,run2].")
     input_group.add_argument("--validateRunIDs", type=utils.parse_list, default=None, required=False, 
                              help="List of validation run IDs, e.g., run3,run4 or [run3,run4].")    
+    input_group.add_argument('--data-split', type=str, default='0.8', help="Data split ratios. Either a single value (e.g., '0.8' for 80/20/0 split) "
+                                "or two comma-separated values (e.g., '0.7,0.1' for 70/10/20 split)")
 
     model_group = parser.add_argument_group("Model Arguments")
     model_group.add_argument("--model-type", type=str, default='Unet', required=False, 
@@ -85,7 +88,8 @@ def cli():
         validateRunIDs=args.validateRunIDs, 
         tomo_batch_size=args.tomo_batch_size,
         best_metric=args.best_metric,
-        val_interval=args.val_interval
+        val_interval=args.val_interval,
+        data_split=args.data_split
     )
 
     # Run the model search
@@ -120,6 +124,7 @@ def save_parameters(args: argparse.Namespace,
             "tomo_batch_size": args.tomo_batch_size,
             "trainRunIDs": args.trainRunIDs,
             "validateRunIDs": args.validateRunIDs,
+            "data_split": args.data_split
         }
     }
 
