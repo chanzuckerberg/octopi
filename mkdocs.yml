@@ -11,13 +11,11 @@ theme:
       toggle:
         icon: material/brightness-4
         name: Switch to light mode
-
     # Palette toggle for dark mode
     - scheme: default
       toggle:
         icon: material/brightness-7
         name: Switch to dark mode
-
   logo: assets/logo.png
   features:
     - content.code.copy
@@ -30,7 +28,8 @@ theme:
     - search.suggest
 
 markdown_extensions:
-  - pymdownx.highlight
+  - pymdownx.highlight:
+      anchor_linenums: true
   - pymdownx.superfences
   - pymdownx.inlinehilite
   - admonition
@@ -47,10 +46,11 @@ plugins:
   - search
   - git-revision-date-localized:
       type: datetime
+      enable_creation_date: true
   - git-committers:
       repository: chanzuckerberg/octopi
+      branch: main
   - git-authors
-  - awesome-pages
   - minify:
       minify_html: true
 
@@ -61,16 +61,12 @@ nav:
     - Importing Data to Copick: getting-started/data-import.md
     - Quick Start: getting-started/quickstart.md
   - User Guide:
-    - CLI Tutorial: user-guide/cli-tutorial.md
-    - API Tutorial: user-guide/api-tutorial.md
-    - Data Import: user-guide/data-import.md
     - Training: user-guide/training.md
-    - Model Exploration: user-guide/model-exploration.md
     - Inference: user-guide/inference.md
     - Localization: user-guide/localization.md
-  - Advanced Topics:
-    - MLflow Integration: advanced/mlflow.md
-    - HPC Deployment: advanced/hpc.md
-  - API Reference:
-    - Core API: api/core.md
-    - CLI Reference: api/cli.md
+    - API Tutorial: user-guide/api-tutorial.md
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/chanzuckerberg/octopi
