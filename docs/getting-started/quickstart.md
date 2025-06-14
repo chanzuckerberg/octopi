@@ -76,8 +76,8 @@ octopi evaluate
 
 ## What's Next?
 
-This workflow gives you a quick particle picking pipeline. To learn more:
+This workflow gives you a quick introduction to the particle picking pipeline. To learn more:
 
-- **[Prepare Labels](../user-guide/labels.md)**
-- **[Training Details](../user-guide/training.md)** - Explore model exploration
-- **[Inference](../user-guide/inference.md)** - Learn about different inference modes and post-processing
+- **[Prepare Labels](../user-guide/labels.md)** - Generate targets for training octopi models.
+- **[Train Models](../user-guide/training.md)** - Train a single model or ensemble of models with bayesian optimization.
+- **[Inference](../user-guide/inference.md)** - Deploy the trained models and get 3D coordinates.

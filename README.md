@@ -1,4 +1,9 @@
 # OCTOPI 🐙🐙🐙
+
+[![License](https://img.shields.io/pypi/l/octopi.svg?color=green)](https://github.com/chanzuckerberg/octopi/raw/main/LICENSE)
+[![PyPI](https://img.shields.io/pypi/v/octopi.svg?color=green)](https://pypi.org/project/octopi)
+[![Python Version](https://img.shields.io/pypi/pyversions/octopi.svg?color=green)](https://www.python.org/)
+
 **O**bject dete**CT**ion **O**f **P**rote**I**ns. A deep learning framework for Cryo-ET 3D particle picking with autonomous model exploration capabilities.
 
 ## 🚀 Introduction

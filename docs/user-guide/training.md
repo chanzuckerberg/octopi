@@ -1,130 +1,116 @@
-# CLI Tutorial
+# Training Octopi Models
 
-This guide will walk you through using octopi's command-line interface for various tasks in the particle picking pipeline.
+This guide covers everything you need to know about training 3D U-Net models with Octopi, from basic single-model training to advanced hyperparameter optimization with Bayesian methods.
 
-## Basic Usage
+## Overview
 
-octopi provides a clean, scriptable command-line interface. Run the following command to view all available subcommands:
+OCTOPI offers two main training approaches:
 
-```bash
-octopi --help
-```
+1. **Single Model Training** - Train a specific architecture with defined parameters
+2. **Model Exploration** - Automatically discover optimal architectures using Bayesian optimization
 
-Each subcommand supports its own `--help` flag for detailed usage.
+For most use cases, we recommend starting with model exploration to find the best architecture for your data.
 
-## Data Import & Preprocessing
+## Single Model Training
 
-### Importing Local MRC Files
+For specific use cases or when you have a known good architecture, you can train a single model directly.
 
-If your tomograms are already processed and stored locally in .mrc format (e.g., from Warp, IMOD, or AreTomo), you can import them into a new or existing CoPick project using:
-
-```bash
-octopi import-mrc-volumes \
-    --input-folder /path/to/mrc/files \
-    --config /path/to/config.json \
-    --target-tomo-type denoised \
-    --input-voxel-size \
-    --output-voxel-size 10
-```
-
-### Downloading from Data Portal
-
-To download and process tomograms from the data portal:
-
-```bash
-octopi download-dataportal \
-    --config /path/to/config.json \
-    --datasetID 10445 \
-    --overlay-path path/to/saved/zarrs \
-    --input-voxel-size 5 \
-    --output-voxel-size 10 \
-    --dataportal-name wbp \
-    --target-tomotype wbp
-```
-
-## Training Labels Preparation
-
-Generate semantic masks for proteins of interest using annotation metadata:
-
-```bash
-octopi create-targets \
-    --config config.json \
-    --target apoferritin \
-    --target beta-galactosidase,slabpick,1 \
-    --target ribosome,pytom,0 \
-    --target virus-like-particle,pytom,0 \
-    --seg-target membrane \
-    --tomo-alg wbp \
-    --voxel-size 10 \
-    --target-session-id 1 \
-    --target-segmentation-name remotetargets \
-    --target-user-id train-octopi
-```
-
-## Training a Model
-
-Train a 3D U-Net model on prepared datasets:
+### Basic Training Command
 
 ```bash
 octopi train-model \
-    --config experiment,config1.json \
-    --config simulation,config2.json \
-    --voxel-size 10 \
-    --tomo-alg wbp \
-    --Nclass 8 \
-    --tomo-batch-size 50 \
-    --num-epochs 100 \
-    --val-interval 10 \
-    --target-info remotetargets,train-octopi,1
+    --config config.json \
+    --voxel-size 10 --tomo-alg wbp --Nclass 8 \
+    --tomo-batch-size 50 --num-epochs 100 --val-interval 10 \
+    --target-info targets,octopi,1
 ```
 
-## Model Exploration
+## Model Exploration with Bayesian Optimization
 
-Launch a model exploration job using Optuna:
+![Bayesian Optimization Workflow](../assets/bo_workflow.png)
+*OCTOPI's automated architecture search uses Bayesian optimization to efficiently explore the space of possible 3D U-Net configurations, maximizing segmentation performance.*
+
+### Why Use Model Exploration?
+
+- **Automatic optimization** - No manual hyperparameter tuning required
+- **Efficient search** - Bayesian methods are smarter than grid search
+- **Optimal performance** - Finds architectures tailored to your specific data
+- **Time savings** - Avoids trial-and-error experimentation
+
+### Launch Model Exploration
 
 ```bash
 octopi model-explore \
     --config experiment,/mnt/dataportal/ml_challenge/config.json \
     --config simulation,/mnt/dataportal/synthetic_ml_challenge/config.json \
-    --voxel-size 10 \
-    --tomo-alg wbp \
-    --Nclass 8 \
+    --voxel-size 10 --tomo-alg wbp --Nclass 8 \
     --model-save-path train_results
 ```
+### What Model Exploration Optimizes
 
-## Inference
+Each trial evaluates different architectural choices:
+- **Network depth** - Number of encoder/decoder layers
+- **Feature channels** - Width of convolutional layers  
+- **Regularization** - Dropout and weight decay parameters
 
-Generate segmentation prediction masks:
+### Exploration Outputs
 
+The exploration process generates:
+- **Performance metrics** - F1 scores, precision, recall for each trial
+- **Model configurations** - Architecture specifications for top performers
+- **Training artifacts** - Weights and logs for promising models
+- **Optimization history** - Complete trial progression and results
+
+## Monitoring and Tracking
+
+### Optuna Dashboard
+
+Monitor your hyperparameter search progress in real-time using the Optuna dashboard.
+
+**Setup Options:**
+- **VS Code Extension** - Install the Optuna extension for integrated monitoring
+- **CLI Dashboard** - Follow the [Optuna dashboard guide](https://optuna-dashboard.readthedocs.io/en/latest/getting-started.html)
+
+The dashboard provides:
+- **Trial progress** - Real-time optimization status
+- **Parameter importance** - Which hyperparameters matter most
+- **Optimization history** - Performance trends over trials
+- **Best trial identification** - Top-performing configurations
+
+### MLflow Experiment Tracking
+
+Octopi integrates with MLflow for comprehensive experiment management and visualization.
+
+**🧪 Local MLflow Dashboard**
 ```bash
-octopi inference \
-    --config config.json \
-    --seg-info predict,unet,1 \
-    --model-config train_results/best_model_config.yaml \
-    --model-weights train_results/best_model.pth \
-    --voxel-size 10 \
-    --tomo-alg wbp \
-    --tomo-batch-size 25
+mlflow ui
 ```
+Then open http://localhost:5000 in your browser.
 
-## Localization
+**🖥️ HPC Cluster Access (Remote SSH Tunnel)**
 
-Convert segmentation masks into particle coordinates:
+For remote clusters like Biohub Bruno:
 
-```bash
-octopi localize \
-    --config config.json \
-    --pick-session-id 1 \
-    --pick-user-id unet \
-    --seg-info predict,unet,1
-```
+1. **Forward the port** (on your local machine):
+   ```bash
+   ssh -L 5000:localhost:5000 remote_username@login01.czbiohub.org
+   ```
 
-## HPC Cluster Usage
+2. **Launch MLflow** (on the remote terminal):
+   ```bash
+   mlflow ui --host 0.0.0.0 --port 5000
+   ```
 
-If you're running octopi on an HPC cluster, several SLURM-compatible submission commands are available:
+#### What MLflow Tracks
 
-```bash
-octopi-slurm --help
-```
+MLflow automatically logs:
+- **Training metrics** - Loss curves and validation performance over time
+- **Model parameters** - Architecture details and hyperparameter values  
+- **Trial comparisons** - Performance across different model configurations
+- **Artifacts** - Model weights, configuration files, and training plots
 
-This provides utilities for submitting training, inference, and localization jobs in SLURM-based environments. 
+## Next Steps
+
+After successful training:
+
+- **[Run Inference](inference.md)** - Apply your trained models to new tomograms and assess model quality on test data 

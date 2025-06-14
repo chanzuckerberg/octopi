@@ -61,11 +61,11 @@ nav:
     - Import Data to Copick: getting-started/data-import.md
     - Quick Start: getting-started/quickstart.md
   - User Guide:
+    - Overview: user-guide/overview.md
     - Create Target Labels: user-guide/labels.md
     - Training: user-guide/training.md
     - Inference: user-guide/inference.md
-    - Localization: user-guide/localization.md
-    - API Tutorial: user-guide/api-tutorial.md
+  - API Tutorial: user-guide/api-tutorial.md
 
 extra:
   social:

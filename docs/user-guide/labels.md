@@ -45,6 +45,8 @@ octopi create-targets \
     --target-user-id octopi
 ```
 
-### Check Target Quality
+## Check Target Quality
 
-Refer to the notebook in `notebooks/inspect_segmentation_targets.ipynb` to see how to load a segmentation target and overlay it over the tomograms. Additional, use the ChimeraX Copick plug-in to also check the targets.
+To validate your training targets, refer to our interactive notebook: [Inspect Segmentation Targets](https://github.com/chanzuckerberg/octopi/blob/main/notebooks/inspect_segmentation_targets.ipynb)
+
+This notebook shows how to load segmentation targets and overlay targets on tomograms.

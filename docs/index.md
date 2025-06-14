@@ -22,8 +22,7 @@ Our deep learning-based pipeline streamlines the training and execution of 3D au
 ## Quick Links
 
 - [Installation Guide](getting-started/installation.md)
-- [Quck Start](getting-started/quickstart.md)
-- [Model Exploration](user-guide/model-exploration.md)
+- [Quick Start](getting-started/quickstart.md)
 - [API Tutorial](user-guide/api-tutorial.md)
 
 ## Getting Help

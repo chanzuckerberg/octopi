@@ -22,7 +22,7 @@ octopi import-mrc-volumes \
     --output-voxel-size 10
 ```
 
-To satisfy the recommended resolution requirement, we can downsample tomograms to the desired voxel size by specifying both the original voxel size (`--input-voxel-size`) and the desired voxel size (`--output-voxel-size`, generally recommended to be 10 Å). In cases where downsampling is unnecessary, simply omit the `--output-voxel-size` parameter.
+To satisfy the recommended resolution requirement, we can downsample tomograms to the desired voxel size by specifying both the original voxel size (`--input-voxel-size`) and the desired voxel size (`--output-voxel-size`), generally recommended to be 10 Å). In cases where downsampling is unnecessary, simply omit the `--output-voxel-size` parameter.
 
 ### Parameter Descriptions
 
@@ -73,7 +73,7 @@ We will save these tomograms locally under the `--target-tomo-type` flag.
 ## Next Steps
 
 Once your data is imported, you can:
-- [Prepare Training Data](../user-guide/training.md) - Set up your particle annotations
+- [Prepare Training Data](../user-guide/labels.md) - Set up your particle annotations
 - [Start Training Models](../user-guide/training.md) - Train custom 3D U-Net models
 - [Run Inference](../user-guide/inference.md) - Apply trained models to new data
 - [Try the Quick Start](quickstart.md) - Complete end-to-end workflow example
