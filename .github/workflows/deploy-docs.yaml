@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - docs
     paths:
       - 'docs/**'
       - 'mkdocs.yml'
@@ -11,6 +12,7 @@ on:
   pull_request:
     branches:
       - main
+      - docs
     paths:
       - 'docs/**'
       - 'mkdocs.yml'
@@ -48,25 +50,7 @@ jobs:
           pip install mkdocs-awesome-pages-plugin
           pip install mkdocs-minify-plugin
           pip install mkdocs-redirects
-      
-      - name: Debug - Check mkdocs.yml and files
-        run: |
-          echo "=== Current working directory ==="
-          pwd
-          echo "=== Contents of current directory ==="
-          ls -la
-          echo "=== mkdocs.yml exists and content ==="
-          if [ -f mkdocs.yml ]; then
-            echo "mkdocs.yml found"
-            cat mkdocs.yml
-          else
-            echo "mkdocs.yml NOT FOUND"
-          fi
-          echo "=== Files in docs directory ==="
-          find docs -name "*.md" -type f | sort
-          echo "=== Test YAML parsing ==="
-          python -c "import yaml; print('YAML parsing test:'); print(yaml.safe_load(open('mkdocs.yml'))['nav'] if 'nav' in yaml.safe_load(open('mkdocs.yml')) else 'NO NAV FOUND')"
-
+    
       - name: Build documentation
         run: mkdocs build
 
