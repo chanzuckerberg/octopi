@@ -2,7 +2,7 @@
 
 **O**bject dete**CT**ion **O**f **P**rote**I**ns. A deep learning framework for Cryo-ET 3D particle picking with autonomous model exploration capabilities.
 
-![Segmentation Examples](assets/octopi.png)
+![Octopi](assets/octopi.png)
 
 ## Introduction
 
@@ -10,7 +10,7 @@ octopi addresses a critical bottleneck in cryo-electron tomography (cryo-ET) res
 
 Our deep learning-based pipeline streamlines the training and execution of 3D autoencoder models specifically designed for cryo-ET particle picking. Built on [copick](https://github.com/copick/copick), a storage-agnostic API, octopi seamlessly accesses tomograms and segmentations across local and remote environments.
 
-## Key Features
+## 🚀 Key Features
 
 - Training and evaluating custom 3D U-Net models for particle segmentation
 - Automatic model architecture exploration using Bayesian optimization via Optuna
@@ -22,12 +22,10 @@ Our deep learning-based pipeline streamlines the training and execution of 3D au
 ## Quick Links
 
 - [Installation Guide](getting-started/installation.md)
-- [CLI Tutorial](user-guide/cli-tutorial.md)
-- [API Tutorial](user-guide/api-tutorial.md)
+- [Quck Start](getting-started/quickstart.md)
 - [Model Exploration](user-guide/model-exploration.md)
+- [API Tutorial](user-guide/api-tutorial.md)
 
 ## Getting Help
 
-- Check out our [documentation](user-guide/cli-tutorial.md) for detailed guides
-- Explore our [API reference](api/core.md) for Python usage
 - Visit our [GitHub repository](https://github.com/chanzuckerberg/octopi) for source code and issues 

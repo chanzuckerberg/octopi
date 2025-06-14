@@ -58,9 +58,10 @@ nav:
   - Home: index.md
   - Getting Started:
     - Installation: getting-started/installation.md
-    - Importing Data to Copick: getting-started/data-import.md
+    - Import Data to Copick: getting-started/data-import.md
     - Quick Start: getting-started/quickstart.md
   - User Guide:
+    - Create Target Labels: user-guide/labels.md
     - Training: user-guide/training.md
     - Inference: user-guide/inference.md
     - Localization: user-guide/localization.md

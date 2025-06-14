@@ -1,6 +1,6 @@
 # Installation Guide
 
-## Basic Installation
+## Quick Installation
 
 octopi is available on PyPI and can be installed using pip:
 
@@ -39,7 +39,7 @@ python -c "import octopi; print(octopi.__version__)"
 
 ## Next Steps
 
-- Import your tomograms into a copick project (data-import.md).
-- Check out the [Quick Start Guide](quickstart.md) to begin using octopi
+- [Import Your Data](data-import.md) - Learn how to import your tomograms into a copick project.
+- [Quick Start Guide](quickstart.md) - Run your first particle picking experiment. 
 - Explore the [CLI Tutorial](../user-guide/cli-tutorial.md) for command-line usage
-- Learn about the [Python API](../user-guide/api-tutorial.md) for programmatic usage 
+- [Learn the API](../user-guide/api-tutorial.md) - Integrate Octopi into your Python workflows. 
