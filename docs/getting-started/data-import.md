@@ -1,13 +1,13 @@
 # Data Import Guide
 
-octopi leverages [copick](https://github.com/copick/copick) to provide a flexible and unified interface for accessing tomographic data, whether it's stored locally or on the [CryoET Data Portal](https://cryoetdataportal.czscience.com). This guide explains how to work with both data sources. If you need help creating these configuration files, detailed tutorials are available:
+octopi leverages [copick](https://github.com/copick/copick) to provide a flexible and unified interface for accessing tomographic data, whether it's stored locally or remotely on a HPC server or on our [CryoET Data Portal](https://cryoetdataportal.czscience.com). This guide explains how to work with both data sources. If you need help creating these configuration files, detailed tutorials are available:
 
 - [Copick Quickstart](https://copick.github.io/copick/quickstart/) - Basic configuration and setup 
 - [Data Portal Tutorial](https://copick.github.io/copick/examples/tutorials/data_portal/) - Working with CryoET Data Portal
 
 ## Data Resolution
 
-Before importing data, it's important to consider the resolution. We recommend working with tomograms at a voxel size of **10 Å (1 nm)** for optimal performance. 
+Before importing data, it's important to consider the resolution. We recommend working with tomograms at a voxel size of **10 Å (1 nm)** for optimal performance. You can downsample higher-resolution tomograms during import.
 
 ## Importing Local MRC Files
 
@@ -22,7 +22,7 @@ octopi import-mrc-volumes \
     --output-voxel-size 10
 ```
 
-To satisfy the recommended resolution requirement, we can downsample tomograms to the desired voxel size by specifying both the original voxel size (`--input-voxel-size`) and the desired voxel size (`--output-voxel-size`), generally recommended to be 10 Å). In cases where downsampling is unnecessary, simply omit the `--output-voxel-size` parameter.
+To satisfy the recommended resolution requirement, we can downsample tomograms to the desired voxel size by specifying both the original voxel size (`--input-voxel-size`) and the desired voxel size (`--output-voxel-size`). In cases where downsampling is unnecessary, simply omit the `--output-voxel-size` parameter.
 
 ### Parameter Descriptions
 
@@ -68,12 +68,13 @@ Similar to local MRC import, you can downsample portal data by specifying both `
 copick browse -ds <datasetID>
 ```
 
-We will save these tomograms locally under the `--target-tomo-type` flag.
+This will save these tomograms locally under the `--target-tomo-type` flag.
 
 ## Next Steps
 
 Once your data is imported, you can:
+
+- [Try the Quick Start](quickstart.md) - Complete end-to-end workflow example
 - [Prepare Training Data](../user-guide/labels.md) - Set up your particle annotations
 - [Start Training Models](../user-guide/training.md) - Train custom 3D U-Net models
 - [Run Inference](../user-guide/inference.md) - Apply trained models to new data
-- [Try the Quick Start](quickstart.md) - Complete end-to-end workflow example

@@ -4,7 +4,7 @@
 
 ![Octopi](assets/octopi.png)
 
-## Introduction
+## 🧬 Introduction
 
 octopi addresses a critical bottleneck in cryo-electron tomography (cryo-ET) research: the efficient identification and extraction of proteins within complex cellular environments. As advances in cryo-ET enable the collection of thousands of tomograms, the need for automated, accurate particle picking has become increasingly urgent.
 
@@ -19,12 +19,13 @@ Our deep learning-based pipeline streamlines the training and execution of 3D au
 - Support for both CLI and Python API interfaces
 - HPC cluster compatibility with SLURM integration
 
-## Quick Links
+## 🔗 Quick Links
 
 - [Installation Guide](getting-started/installation.md)
 - [Quick Start](getting-started/quickstart.md)
+- [User Guide](user-guide/overview.md)
 - [API Tutorial](user-guide/api-tutorial.md)
 
-## Getting Help
+## 🙋 Getting Help
 
 - Visit our [GitHub repository](https://github.com/chanzuckerberg/octopi) for source code and issues 

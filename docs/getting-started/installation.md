@@ -41,5 +41,4 @@ python -c "import octopi; print(octopi.__version__)"
 
 - [Import Your Data](data-import.md) - Learn how to import your tomograms into a copick project.
 - [Quick Start Guide](quickstart.md) - Run your first particle picking experiment. 
-- Explore the [CLI Tutorial](../user-guide/cli-tutorial.md) for command-line usage
 - [Learn the API](../user-guide/api-tutorial.md) - Integrate Octopi into your Python workflows. 

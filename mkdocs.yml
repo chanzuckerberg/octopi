@@ -63,7 +63,8 @@ nav:
   - User Guide:
     - Overview: user-guide/overview.md
     - Create Target Labels: user-guide/labels.md
-    - Training: user-guide/training.md
+    - Training Basics: user-guide/training-basics.md
+    - Advanced Training: user-guide/advanced-training.md
     - Inference: user-guide/inference.md
   - API Tutorial: user-guide/api-tutorial.md
 

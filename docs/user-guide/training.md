@@ -4,7 +4,7 @@ This guide covers everything you need to know about training 3D U-Net models wit
 
 ## Overview
 
-OCTOPI offers two main training approaches:
+Octopi offers two main training approaches:
 
 1. **Single Model Training** - Train a specific architecture with defined parameters
 2. **Model Exploration** - Automatically discover optimal architectures using Bayesian optimization

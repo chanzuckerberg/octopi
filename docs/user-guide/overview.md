@@ -38,34 +38,20 @@ Deploy your trained models to analyze new tomograms:
 
 **When to use:** Once you have trained models, use this to get final particle coordinates.
 
-## Choose Your Path
-
-### 🚀 **New to OCTOPI?**
-Follow the complete workflow:
-1. [Prepare Labels](labels.md) → [Training](training.md) → [Inference](inference.md)
-
-### 🔬 **Have existing models?**
-Skip training and go directly to:
-- [Inference](inference.md) → [Localization](localization.md)
-
-### 💻 **Python developer?**
-Check out the [API Tutorial](api-tutorial.md) for programmatic usage
-
-## Key Concepts
-
-### Copick Integration
-OCTOPI uses [copick](https://github.com/copick/copick) for data management, providing seamless access to tomograms and annotations across local and remote storage.
-
-### Bayesian Optimization
-Model exploration uses Bayesian methods to efficiently search the space of possible architectures and hyperparameters.
-
 ## What's Next?
 
 Ready to start? Choose your entry point:
 
+### 🚀 **New to OCTOPI?**
+Follow the complete workflow:
+
 - **[Begin with Labels →](labels.md)** - Start the complete workflow
 - **[Jump to Training →](training.md)** - If you already have training targets
+
+### 🔬 **Have existing models?**
 - **[Skip to Inference →](inference.md)** - If you have pre-trained models
+
+### 💻 **Python developer?**
 - **[Explore the API →](api-tutorial.md)** - For programmatic usage
 
 ---

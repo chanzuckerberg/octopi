@@ -1,8 +1,14 @@
 # Quick Start Guide
 
-This guide walks you through a complete OCTOPI workflow: from data preparation to particle localization. 
+This guide walks you through a complete Octopi workflow: from data preparation to particle localization. 
 
-## Basic Workflow
+## Basic Workflow Overview
+
+1.	🎯 **Create Training Targets**- Convert particle coordinates (from annotations or portals) into semantic segmentation masks for supervised training.
+2.	🧠 **Train a Deep Learning Model** - Train a 3D U-Net model using your masks and tomograms. You can combine multiple datasets and track performance with MLflow.
+3.	🔮 **Predict New Segmentations** - Use the trained model to generate segmentation masks for new tomograms. These masks identify potential particle locations.
+4.	📍 **Localize particles from masks** - Extract 3D coordinates from the prediction masks.
+5.	📊 **Evaluate performance**  - Compare your predicted coordinates against ground truth annotations to calculate metrics like precision, recall, and F1 score.
 
 ### Step 1. Prepare Training Labels
 
@@ -17,7 +23,7 @@ octopi create-targets
     --target-user-id octopi
 ```
 
-This creates training targets for a single copick query. To produce targets from multiple coordinate queries,  refer to the [Prepare Labels](../user-guide/labels.md) section.
+🎯 This creates training targets for a single copick query. To produce targets from multiple coordinate queries,  refer to the [Prepare Labels](../user-guide/labels.md) section.
 
 ### Step 2. Train a Model
 
@@ -32,9 +38,11 @@ octopi train-model
     --target-info targets,octopi,1
 ```
 
-We can provide config files stemming from multiple copick projects. This would be relevenant in instances where you want to train a model that reflects multiple experimental acquisitions. For the number of classes, this value is a number of pickable objects + 1 to account for background. 
+We can provide config files stemming from multiple copick projects. This would be relevenant in instances where you want to train a model that reflects multiple experimental acquisitions.
 
-The results will be saved to a `results/` folder which contains the trained model, a config file for the model, and plotted training / validation curves. 
+🧪 `--Nclass` should be the number of distinct object classes + 1 (for background).
+
+📁 The results will be saved to a `results/` folder which contains the trained model, a config file for the model, and plotted training / validation curves. 
 
 ### Step 3. Generate Predicted Segmentation Masks
 
@@ -53,7 +61,7 @@ This generates segmentation masks for your tomograms provided under the `--voxel
 
 ### Step 4: Extract Particle Coordinates
 
-Convert segmentation masks into precise particle coordinates:
+Convert segmentation masks into precise 3D particle coordinates:
 
 ```bash
 octopi localize
