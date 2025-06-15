@@ -49,7 +49,7 @@ We can provide config files stemming from multiple copick projects. This would b
 Apply your trained model to new tomograms:
 
 ```bash
-octopi inference
+octopi segment
     --config config.json
     --seg-info predict,unet,1
     --model-weights results/best_model.pth
