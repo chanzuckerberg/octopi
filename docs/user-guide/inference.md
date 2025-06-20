@@ -49,7 +49,7 @@ octopi localize \
     --pick-session-id 1 --pick-user-id octopi
 ```
 
-The localization algorithm uses **particle size information** from your copick configuration to filter predictions. For each protein type, Octopi reads the expected particle radius from the copick config file. Predicted candidates smaller than `min_radius * radius_min_scale` or larger than `max_radius * radius_max_scale` are discarded as noise.
+The localization algorithm uses **particle size information** from your copick configuration to filter predictions. For each protein type, Octopi reads the expected particle radius from the copick config file. Predicted candidates smaller than `radius * radius_min_scale` or larger than `radius * radius_max_scale` are discarded as noise.
 
 ### Localization Parameters
 
