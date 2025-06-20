@@ -87,6 +87,9 @@ def generate_targets(
                     session_id=train_targets[target_name]["session_id"],
                 )
 
+        # Filter out empty picks
+        query = [pick for pick in query if pick.points is not None]
+
         # Add Picks to Target  
         for pick in query:
             numPicks += len(pick.points)
