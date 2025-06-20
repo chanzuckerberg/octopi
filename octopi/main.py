@@ -33,7 +33,7 @@ def cli_main():
         "create-targets": (create_targets, "Generate segmentation targets from coordinates."),
         "train": (train_model, "Train a single U-Net model."),
         "model-explore": (model_explore, "Explore model architectures with Optuna / Bayesian Optimization."),
-        "inference": (inference, "Perform segmentation inference on tomograms."),
+        "segment": (inference, "Perform segmentation inference on tomograms."),
         "localize": (localize, "Perform localization of particles in tomograms."),
         "extract-mb-picks": (extract_mb_picks, "Extract MB Picks from tomograms."),
         "evaluate": (evaluate, "Evaluate the performance of a model."),

@@ -227,9 +227,9 @@ class Predictor:
             lambda x: torch.rot90(x, k=1, dims=(3, 4)),  # 90° rotation
             lambda x: torch.rot90(x, k=2, dims=(3, 4)),  # 180° rotation
             lambda x: torch.rot90(x, k=3, dims=(3, 4)),  # 270° rotation
-            # Flip(spatial_axis=0),         # Flip along x-axis (depth)
-            # Flip(spatial_axis=1),         # Flip along y-axis (height)
-            # Flip(spatial_axis=2),         # Flip along z-axis (width)
+            # lambda x: torch.flip(x, dims=(3,)),        # Flip along height (spatial_axis=1)
+            # lambda x: torch.flip(x, dims=(4,)),        # Flip along width (spatial_axis=2)  
+            # lambda x: torch.flip(x, dims=(3, 4)),      # Flip along both height and width
         ]
 
         # Define inverse transformations (flip back to original orientation)
@@ -238,9 +238,9 @@ class Predictor:
             lambda x: torch.rot90(x, k=-1, dims=(2, 3)),  # Inverse of 90° (i.e. -90°)
             lambda x: torch.rot90(x, k=-2, dims=(2, 3)),  # Inverse of 180° (i.e. -180°)
             lambda x: torch.rot90(x, k=-3, dims=(2, 3)),  # Inverse of 270° (i.e. -270°)
-            # Flip(spatial_axis=0),         # Undo Flip along x-axis
-            # Flip(spatial_axis=1),         # Undo Flip along y-axis
-            # Flip(spatial_axis=2),         # Undo Flip along z-axis
+            # lambda x: torch.flip(x, dims=(2,)),        # Same as forward
+            # lambda x: torch.flip(x, dims=(3,)),        # Same as forward
+            # lambda x: torch.flip(x, dims=(2, 3)),      # Same as forward
         ]
 
 ###################################################################################################################################################

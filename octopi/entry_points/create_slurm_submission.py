@@ -17,18 +17,17 @@ def create_train_script(args):
     command = f"""
 octopi train \\
     --model-save-path {args.model_save_path} \\
-    --target-info {args.target_info} \\
-    --voxel-size {args.voxel_size} --tomo-algorithm {args.tomo_algorithm} --Nclass {args.Nclass} \\
+    --target-info {','.join(args.target_info)} \\
+    --voxel-size {args.voxel_size} --tomo-alg {args.tomo_alg} --Nclass {args.Nclass} \\
     --best-metric {args.best_metric} --num-epochs {args.num_epochs} --val-interval {args.val_interval} \\
     --tomo-batch-size {args.tomo_batch_size} --num-tomo-crops {args.num_tomo_crops} \\
-    {strconfigs}
-"""
+    {strconfigs}"""
 
     # If a model config is provided, use it to build the model
     if args.model_config is not None:
         command += f" --model-config {args.model_config}"
     else:
-        command += f" --tversky-alpha {args.tversky_alpha} --channels {args.channels} --strides {args.strides} --dim-in {args.dim_in} --res-units {args.res_units}"
+        command += f" --tversky-alpha {args.tversky_alpha} --channels {",".join(map(str, args.channels))} --strides {",".join(map(str, args.strides))} --dim-in {args.dim_in} --res-units {args.res_units}"
 
     # If Model Weights are provided, use them to initialize the model
     if args.model_weights is not None and args.model_config is not None:
