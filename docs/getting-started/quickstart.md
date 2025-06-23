@@ -33,14 +33,14 @@ Train a 3D U-Net model:
 octopi train-model
     --config experiment,config1.json
     --config simulation,config2.json
-    --voxel-size 10 --tomo-alg wbp --Nclass 8
-    --tomo-batch-size 50 --num-epochs 100 --val-interval 10
+    --voxel-size 10 --tomo-alg wbp --Nclass 8 # Adjust me based on Nclasses present
+    --tomo-batch-size 15 --num-epochs 500 --val-interval 10
     --target-info targets,octopi,1
 ```
 
-We can provide config files stemming from multiple copick projects. This would be relevenant in instances where you want to train a model that reflects multiple experimental acquisitions.
+**🧪 Note:** `--Nclass` should be the number of distinct object classes + 1 (for background).
 
-🧪 `--Nclass` should be the number of distinct object classes + 1 (for background).
+We can provide config files stemming from multiple copick projects. This would be relevenant in instances where you want to train a model that reflects multiple experimental acquisitions.
 
 📁 The results will be saved to a `results/` folder which contains the trained model, a config file for the model, and plotted training / validation curves. 
 
