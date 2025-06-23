@@ -27,7 +27,7 @@ octopi create-targets
 
 ### Step 2. Train a Model
 
-Train a 3D U-Net model:
+Train a single 3D U-Net model:
 
 ```bash
 octopi train-model
@@ -43,6 +43,22 @@ octopi train-model
 We can provide config files stemming from multiple copick projects. This would be relevenant in instances where you want to train a model that reflects multiple experimental acquisitions.
 
 📁 The results will be saved to a `results/` folder which contains the trained model, a config file for the model, and plotted training / validation curves. 
+
+#### Alternative: Automatic Model Exploration
+
+For optimal results, consider using Bayesian optimization to automatically discover the best architecture for your data:
+
+```bash
+octopi model-explore
+    --config experiment,config1.json
+    --config simulation,config2.json
+    --voxel-size 10 --tomo-alg wbp --Nclass 8 # Adjust me based on Nclasses present
+    --tomo-batch-size 15 --num-epochs 500 --val-interval 10
+    --target-info targets,octopi,1
+```
+This approach automatically optimizes network architecture and hyperparameters, often achieving better performance than the default configuration. However, the exploration process can be lengthy taking up to a day to complete. 
+
+For a complete guide on model exploration, monitoring with Optuna dashboard, and understanding the optimization process, see the [Model Exploration page](../user-guide/training-basics.md).
 
 ### Step 3. Generate Predicted Segmentation Masks
 

@@ -33,7 +33,7 @@ def add_train_parameters(parser, octopi = False):
         parser.add_argument("--num-tomo-crops", type=int, required=False, default=16, help="Number of tomogram crops to use per patch")    
         parser.add_argument("--lr", type=float, required=False, default=1e-3, help="Learning rate for the optimizer")
         parser.add_argument("--tversky-alpha", type=float, required=False, default=0.3, help="Alpha parameter for the Tversky loss")
-        parser.add_argument("--model-save-path", required=True, help="Path to model save directory")
+        parser.add_argument("--model-save-path", required=False, default='results', help="Path to model save directory")
     else:
         parser.add_argument("--num-trials", type=int, default=10, required=False, help="Number of trials for architecture search (default: 10).")
 
