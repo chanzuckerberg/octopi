@@ -101,6 +101,9 @@ class ModelTrainer:
                     device=self.device
                 )
 
+                del val_inputs
+                torch.cuda.empty_cache()
+
                 # Compute the loss for this batch
                 loss = self.loss_function(val_outputs, val_labels)  # Assuming self.loss_function is defined
                 val_loss += loss.item()  # Accumulate the loss                
@@ -111,6 +114,9 @@ class ModelTrainer:
                 
                 # Compute metrics
                 self.metrics_function(y_pred=metric_val_outputs, y=metric_val_labels)             
+
+                del val_labels, val_outputs, metric_val_outputs, metric_val_labels
+                torch.cuda.empty_cache()
 
         # # Contains recall, precision, and f1 for each class
         metric_values = self.metrics_function.aggregate(reduction='mean_batch')
