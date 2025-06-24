@@ -8,9 +8,9 @@ def add_model_parameters(parser, octopi = False):
     
     # Add U-Net model parameters
     parser.add_argument("--Nclass", type=int, required=False, default=3, help="Number of prediction classes in the model")
-    parser.add_argument("--channels", type=utils.parse_int_list, required=False, default='32,64,128,128', help="List of channel sizes")
+    parser.add_argument("--channels", type=utils.parse_int_list, required=False, default='32,64,96,96', help="List of channel sizes")
     parser.add_argument("--strides", type=utils.parse_int_list, required=False, default='2,2,1', help="List of stride sizes")
-    parser.add_argument("--res-units", type=int, required=False, default=2, help="Number of residual units in the UNet")
+    parser.add_argument("--res-units", type=int, required=False, default=1, help="Number of residual units in the UNet")
     parser.add_argument("--dim-in", type=int, required=False, default=96, help="Input dimension for the UNet model")
 
 def inference_model_parameters(parser):
@@ -24,7 +24,7 @@ def add_train_parameters(parser, octopi = False):
     """
     Add training parameters to the parser.
     """
-    parser.add_argument("--num-epochs", type=int, required=False, default=100, help="Number of training epochs")
+    parser.add_argument("--num-epochs", type=int, required=False, default=1000, help="Number of training epochs")
     parser.add_argument("--val-interval", type=int, required=False, default=10, help="Interval for validation metric calculations")
     parser.add_argument("--tomo-batch-size", type=int, required=False, default=15, help="Number of tomograms to load per epoch for training")
     parser.add_argument("--best-metric", type=str, default='avg_f1', required=False, help="Metric to Monitor for Determining Best Model. To track fBetaN, use fBetaN with N as the beta-value.")
@@ -32,8 +32,8 @@ def add_train_parameters(parser, octopi = False):
     if not octopi:
         parser.add_argument("--num-tomo-crops", type=int, required=False, default=16, help="Number of tomogram crops to use per patch")    
         parser.add_argument("--lr", type=float, required=False, default=1e-3, help="Learning rate for the optimizer")
-        parser.add_argument("--tversky-alpha", type=float, required=False, default=0.5, help="Alpha parameter for the Tversky loss")
-        parser.add_argument("--model-save-path", required=True, help="Path to model save directory")
+        parser.add_argument("--tversky-alpha", type=float, required=False, default=0.3, help="Alpha parameter for the Tversky loss")
+        parser.add_argument("--model-save-path", required=False, default='results', help="Path to model save directory")
     else:
         parser.add_argument("--num-trials", type=int, default=10, required=False, help="Number of trials for architecture search (default: 10).")
 

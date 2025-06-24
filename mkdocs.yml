@@ -1,7 +1,8 @@
-site_name: octopi
+site_name: octopi 🐙🐙🐙
 repo_url: "https://github.com/chanzuckerberg/octopi"
 repo_name: "chanzuckerberg/octopi"
 copyright: "2025, Jonathan Schwartz"
+
 theme:
   name: material
   palette:
@@ -10,13 +11,65 @@ theme:
       toggle:
         icon: material/brightness-4
         name: Switch to light mode
-
     # Palette toggle for dark mode
     - scheme: default
       toggle:
         icon: material/brightness-7
         name: Switch to dark mode
-
   logo: assets/logo.png
   features:
     - content.code.copy
+    - navigation.tabs
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
+    - search.highlight
+    - search.share
+    - search.suggest
+
+markdown_extensions:
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.superfences
+  - pymdownx.inlinehilite
+  - admonition
+  - pymdownx.details
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+  - attr_list
+  - md_in_html
+  - toc:
+      permalink: true
+
+plugins:
+  - search
+  - git-revision-date-localized:
+      type: datetime
+      enable_creation_date: true
+  - git-committers:
+      repository: chanzuckerberg/octopi
+      branch: main
+  - git-authors
+  - minify:
+      minify_html: true
+
+nav:
+  - Home: index.md
+  - Getting Started:
+    - Installation: getting-started/installation.md
+    - Import Data to Copick: getting-started/data-import.md
+    - Quick Start: getting-started/quickstart.md
+  - User Guide:
+    - Overview: user-guide/overview.md
+    - Import Data to Copick: getting-started/data-import.md    
+    - Create Target Labels: user-guide/labels.md
+    - Model Exploration: user-guide/training-basics.md
+    - Advanced Training: user-guide/advanced-training.md
+    - Inference: user-guide/inference.md
+  - API Tutorial: user-guide/api-tutorial.md
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/chanzuckerberg/octopi
