@@ -62,6 +62,7 @@ nav:
     - Quick Start: getting-started/quickstart.md
   - User Guide:
     - Overview: user-guide/overview.md
+    - Import Data to Copick: getting-started/data-import.md    
     - Create Target Labels: user-guide/labels.md
     - Model Exploration: user-guide/training-basics.md
     - Advanced Training: user-guide/advanced-training.md

@@ -22,6 +22,7 @@ Our deep learning-based pipeline streamlines the training and execution of 3D au
 ## 🔗 Quick Links
 
 - [Installation Guide](getting-started/installation.md)
+- [Import Data to Copick](getting-started/data-import.md)
 - [Quick Start](getting-started/quickstart.md)
 - [User Guide](user-guide/overview.md)
 - [API Tutorial](user-guide/api-tutorial.md)

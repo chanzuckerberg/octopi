@@ -5,9 +5,48 @@ octopi leverages [copick](https://github.com/copick/copick) to provide a flexibl
 - [Copick Quickstart](https://copick.github.io/copick/quickstart/) - Basic configuration and setup 
 - [Data Portal Tutorial](https://copick.github.io/copick/examples/tutorials/data_portal/) - Working with CryoET Data Portal
 
+
 ## Data Resolution
 
 Before importing data, it's important to consider the resolution. We recommend working with tomograms at a voxel size of **10 Å (1 nm)** for optimal performance. You can downsample higher-resolution tomograms during import.
+
+<details>
+<summary><strong>💡 Example Copick Config File (config.json) </strong></summary>
+
+The copick configuration file points to a directory that stores all the tomograms, coordinates, and segmentations in an overlay root. The config files define all the pickable objects that octopi reads to determine target segmentations and converting predicted segmentation masks to object coordinates.
+```bash
+{
+    "name": "test",
+    "description": "A test project description.",
+    "version": "1.0.0",
+
+    "pickable_objects": [
+        {
+            "name": "ribosome",
+            "is_particle": true,
+            "pdb_id": "7P6Z",
+            "label": 1,
+            "color": [0, 255, 0, 255],
+            "radius": 150,
+            "map_threshold": 0.037
+
+        },
+        {
+            "name": "membrane",
+            "is_particle": false,
+            "label": 2,
+            "color": [0, 0, 0, 255]
+        }
+    ],
+
+    // Change this path to the location of sample_project
+    "overlay_root": "local:///PATH/TO/EXTRACTED/PROJECT/",
+    "overlay_fs_args": {
+        "auto_mkdir": true
+    }
+}
+```
+</details>
 
 ## Importing Local MRC Files
 
@@ -32,7 +71,7 @@ To satisfy the recommended resolution requirement, we can downsample tomograms t
 | `--config` | Path to copick config file | `/project/config.json` |
 | `--target-tomo-type` | Name for the tomogram type in your copick project | `denoised`, `wbp`, `raw` |
 | `--input-voxel-size` | Voxel size of your input MRC files (in Ångströms) | `5` (for 5Å data) |
-| `--output-voxel-size` | (Optional) Target voxel size after downsampling (optional) | `10` (downsample to 10Å) |
+| `--output-voxel-size` | (Optional) Target voxel size after downsampling | `10` (downsample to 10Å) |
 
 ## Working with CryoET Data Portal
 

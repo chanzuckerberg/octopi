@@ -25,6 +25,44 @@ octopi create-targets
 
 🎯 This creates training targets for a single copick query. To produce targets from multiple coordinate queries,  refer to the [Prepare Labels](../user-guide/labels.md) section.
 
+<details>
+<summary><strong>💡 Example Copick Config File (config.json) </strong></summary>
+
+The copick configuration file points to a directory that stores all the tomograms, coordinates, and segmentations in an overlay root. The config files define all the pickable objects that octopi reads to determine target segmentations and converting predicted segmentation masks to object coordinates.
+```bash
+{
+    "name": "test",
+    "description": "A test project description.",
+    "version": "1.0.0",
+
+    "pickable_objects": [
+        {
+            "name": "ribosome",
+            "is_particle": true,
+            "pdb_id": "7P6Z",
+            "label": 1,
+            "color": [0, 255, 0, 255],
+            "radius": 150,
+            "map_threshold": 0.037
+
+        },
+        {
+            "name": "membrane",
+            "is_particle": false,
+            "label": 2,
+            "color": [0, 0, 0, 255]
+        }
+    ],
+
+    // Change this path to the location of sample_project
+    "overlay_root": "local:///PATH/TO/EXTRACTED/PROJECT/",
+    "overlay_fs_args": {
+        "auto_mkdir": true
+    }
+}
+```
+</details>
+
 ### Step 2. Train a Model
 
 Train a single 3D U-Net model:
@@ -34,7 +72,7 @@ octopi train-model
     --config experiment,config1.json
     --config simulation,config2.json
     --voxel-size 10 --tomo-alg wbp --Nclass 8 # Adjust me based on Nclasses present
-    --tomo-batch-size 15 --num-epochs 500 --val-interval 10
+    --tomo-batch-size 15 --num-epochs 1000 --val-interval 10
     --target-info targets,octopi,1
 ```
 
@@ -53,7 +91,7 @@ octopi model-explore
     --config experiment,config1.json
     --config simulation,config2.json
     --voxel-size 10 --tomo-alg wbp --Nclass 8 # Adjust me based on Nclasses present
-    --tomo-batch-size 15 --num-epochs 500 --val-interval 10
+    --tomo-batch-size 15 --num-epochs 1000 --val-interval 10
     --target-info targets,octopi,1
 ```
 This approach automatically optimizes network architecture and hyperparameters, often achieving better performance than the default configuration. However, the exploration process can be lengthy taking up to a day to complete. 
