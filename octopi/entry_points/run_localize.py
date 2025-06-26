@@ -5,6 +5,7 @@ import copick, argparse, pprint
 from typing import List, Tuple
 import multiprocess as mp
 from tqdm import tqdm
+import os
 
 def pick_particles(
     copick_config_path: str,
@@ -40,56 +41,40 @@ def pick_particles(
     print(', '.join([f'{obj[0]} (Label: {obj[1]})' for obj in objects]) + '\n')
 
     # Either Specify Input RunIDs or Run on All RunIDs
-    if runIDs:  print('Running Localization on the Following RunIDs: ' + ', '.join(runIDs) + '\n')
-    run_ids = runIDs if runIDs else [run.name for run in root.runs]
+    if runIDs:
+        print('Running Localization on the Following RunIDs: ' + ', '.join(runIDs) + '\n')
+        run_ids = runIDs
+    else:
+        run_ids = [run.name for run in root.runs if run.get_voxel_spacing(voxel_size) is not None]
+        skipped_run_ids = [run.name for run in root.runs if run.get_voxel_spacing(voxel_size) is None]
+
+        if skipped_run_ids:
+            print(f"Warning: skipping runs with no voxel spacing {voxel_size}: {skipped_run_ids}")
+
     n_run_ids = len(run_ids)
 
     # Determine the number of processes to use
     if n_procs is None:
-        n_procs = min(int(mp.cpu_count()//4), n_run_ids)
+        n_procs = min(n_run_ids, int(os.environ.get('SLURM_CPUS_PER_TASK', mp.cpu_count())))
     print(f"Using {n_procs} processes to parallelize across {n_run_ids} run IDs.")
 
-    # Initialize tqdm progress bar
-    with tqdm(total=n_run_ids, desc="Localization", unit="run") as pbar:
-        for _iz in range(0, n_run_ids, n_procs):
+    with mp.Pool(processes=n_procs) as pool:
+        with tqdm(total=n_run_ids, desc="Localization", unit="run") as pbar:
+            worker_func = lambda run_id: localize.processs_localization(
+                root.get_run(run_id),  
+                objects, 
+                seg_info,
+                method, 
+                voxel_size,
+                filter_size,
+                radius_min_scale, 
+                radius_max_scale,
+                pick_session_id,
+                pick_user_id
+            )
 
-            start_idx = _iz
-            end_idx = min(_iz + n_procs, n_run_ids)  # Ensure end_idx does not exceed n_run_ids
-            print(f"\nProcessing runIDs from {start_idx} -> {end_idx } (out of {n_run_ids})")
-
-            processes = []                
-            for _in in range(n_procs):
-                _iz_this = _iz + _in
-                if _iz_this >= n_run_ids:
-                    break
-                run_id = run_ids[_iz_this]
-                run = root.get_run(run_id)
-                p = mp.Process(
-                    target=localize.processs_localization,
-                    args=(run,  
-                          objects, 
-                          seg_info,
-                          method, 
-                          voxel_size,
-                          filter_size,
-                          radius_min_scale, 
-                          radius_max_scale,
-                          pick_session_id,
-                          pick_user_id),
-                )
-                processes.append(p)
-
-            for p in processes:
-                p.start()
-
-            for p in processes:
-                p.join()
-
-            for p in processes:
-                p.close()
-
-            # Update tqdm progress bar
-            pbar.update(len(processes))
+            for _ in pool.imap_unordered(worker_func, run_ids, chunksize=1):
+                pbar.update(1)
 
     print('Localization Complete!')
 
