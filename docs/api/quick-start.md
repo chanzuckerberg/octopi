@@ -126,7 +126,7 @@ trainer.train(
 
 ## Model Exploration with Optuna
 
-For automatic model architecture search we can simply the entire process. By default, Octopi will sample various loss functions, parameters for the given architecture, 
+We can simply the entire process of manual tuning of model architectures and training parameters with Optuna / Bayesian Optimization. By default, Octopi will sample various loss functions, parameters for the given architecture, 
 
 ```python
 from octopi.pytorch.model_search_submitter import ModelSearchSubmit

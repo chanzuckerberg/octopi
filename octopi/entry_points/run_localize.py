@@ -55,9 +55,10 @@ def pick_particles(
 
     # Determine the number of processes to use
     if n_procs is None:
-        n_procs = min(n_run_ids, int(os.environ.get('SLURM_CPUS_PER_TASK', mp.cpu_count())))
+        n_procs = min(mp.cpu_count(), n_run_ids)
     print(f"Using {n_procs} processes to parallelize across {n_run_ids} run IDs.")
 
+    # Run Localization - Main Parallelization Loop
     with mp.Pool(processes=n_procs) as pool:
         with tqdm(total=n_run_ids, desc="Localization", unit="run") as pbar:
             worker_func = lambda run_id: localize.processs_localization(

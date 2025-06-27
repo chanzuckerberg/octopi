@@ -30,46 +30,23 @@ def extract_membrane_bound_picks(
     if n_procs is None:
         n_procs = min(mp.cpu_count(), n_run_ids)
     print(f"Using {n_procs} processes to parallelize across {n_run_ids} run IDs.")   
+    
+    # Run Membrane-Protein Isolation - Main Parallelization Loop
+    with mp.Pool(processes=n_procs) as pool:
+        with tqdm(total=n_run_ids, desc="Membrane-Protein Isolation", unit="run") as pbar:
+            worker_func = lambda run_id: extract.process_membrane_bound_extract(
+                root.get_run(run_id),  
+                voxel_size, 
+                picks_info, 
+                membrane_info,
+                organelle_info,
+                save_user_id, 
+                save_session_id,
+                distance_threshold
+            )
 
-    # Initialize tqdm progress bar
-    with tqdm(total=n_run_ids, desc="Membrane-Protein Isolation", unit="run") as pbar:
-        for _iz in range(0, n_run_ids, n_procs):
-
-            start_idx = _iz
-            end_idx = min(_iz + n_procs, n_run_ids)  # Ensure end_idx does not exceed n_run_ids
-            print(f"\nProcessing runIDs from {start_idx} -> {end_idx } (out of {n_run_ids})")
-
-            processes = []                
-            for _in in range(n_procs):
-                _iz_this = _iz + _in
-                if _iz_this >= n_run_ids:
-                    break
-                run_id = run_ids[_iz_this]
-                run = root.get_run(run_id)
-                p = mp.Process(
-                    target=extract.process_membrane_bound_extract,
-                    args=(run,  
-                          voxel_size, 
-                          picks_info, 
-                          membrane_info,
-                          organelle_info,
-                          save_user_id, 
-                          save_session_id,
-                          distance_threshold),
-                )
-                processes.append(p)
-
-            for p in processes:
-                p.start()
-
-            for p in processes:
-                p.join()
-
-            for p in processes:
-                p.close()
-
-            # Update tqdm progress bar
-            pbar.update(len(processes))
+            for _ in pool.imap_unordered(worker_func, run_ids, chunksize=1):
+                pbar.update(1)
 
     print('Extraction of Membrane-Bound Proteins Complete!')
 
