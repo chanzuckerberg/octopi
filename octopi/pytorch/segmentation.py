@@ -193,8 +193,12 @@ class Predictor:
         
         # If runIDs are not provided, load all runs
         if runIDs is None:
-            runIDs = [run.name for run in self.root.runs]
-        
+            runIDs = [run.name for run in self.root.runs if run.get_voxel_spacing(voxel_spacing) is not None]
+            skippedRunIDs = [run.name for run in self.root.runs if run.get_voxel_spacing(voxel_spacing) is None]
+
+            if skippedRunIDs:
+                print(f"Warning: skipping runs with no voxel spacing {voxel_spacing}: {skippedRunIDs}")
+
         # Iterate over batches of runIDs
         for i in range(0, len(runIDs), num_tomos_per_batch):
 
