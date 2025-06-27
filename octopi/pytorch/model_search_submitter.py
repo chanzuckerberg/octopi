@@ -16,16 +16,16 @@ class ModelSearchSubmit:
         voxel_size: float,
         Nclass: int,
         model_type: str,
-        mlflow_experiment_name: str,
-        random_seed: int,
-        num_epochs: int,
-        num_trials: int,
-        tomo_batch_size: int,
-        best_metric: str,
-        val_interval: int,
-        trainRunIDs: List[str],
-        validateRunIDs: List[str],
-        data_split: str
+        best_metric: str = 'avg_f1',
+        num_epochs: int = 1000,
+        num_trials: int = 100,
+        data_split: str = 0.8,
+        random_seed: int = 42,
+        val_interval: int = 10,
+        tomo_batch_size: int = 15,
+        trainRunIDs: List[str] = None,
+        validateRunIDs: List[str] = None,
+        mlflow_experiment_name: str = 'explore',
     ):
         """
         Initialize the ModelSearch class for architecture search with Optuna.
@@ -207,7 +207,7 @@ class ModelSearchSubmit:
             # Run multi-GPU optimization
             study = self.get_optuna_study()
             study.optimize(
-                lambda trial: BayesianModelSearch(self.data_generator, self.model_type).multi_gpu_objective(
+                lambda trial: hyper_search.BayesianModelSearch(self.data_generator, self.model_type).multi_gpu_objective(
                     parent_run, trial,
                     self.num_epochs,
                     best_metric=self.best_metric,

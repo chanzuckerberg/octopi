@@ -48,7 +48,7 @@ The copick configuration file points to a directory that stores all the tomogram
 ```
 </details>
 
-## Importing Local MRC Files
+## Importing Local MRC Tomograms
 
 If you have tomograms stored locally in `*.mrc` format (e.g., from Warp, IMOD, or AreTomo), you can import them into a copick project:
 
@@ -73,9 +73,9 @@ To satisfy the recommended resolution requirement, we can downsample tomograms t
 | `--input-voxel-size` | Voxel size of your input MRC files (in Ångströms) | `5` (for 5Å data) |
 | `--output-voxel-size` | (Optional) Target voxel size after downsampling | `10` (downsample to 10Å) |
 
-## Working with CryoET Data Portal
+## Downloading from the CryoET Data-Portal
 
-The CryoET Data Portal provides access to thousands of annotated tomograms. Octopi can work with this data in two ways:
+The [CryoET Data Portal](https://cryoetdataportal.czscience.com) provides access to thousands of annotated tomograms. Octopi can work with this data in two ways:
 
 ### 1. Direct Portal Access
 

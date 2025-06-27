@@ -67,7 +67,9 @@ nav:
     - Model Exploration: user-guide/training-basics.md
     - Advanced Training: user-guide/advanced-training.md
     - Inference: user-guide/inference.md
-  - API Tutorial: user-guide/api-tutorial.md
+  - API Tutorial: 
+    - Overview: api/introduction.md
+    - Quick Start: api/quick-start.md
 
 extra:
   social:
