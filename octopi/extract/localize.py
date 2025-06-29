@@ -9,7 +9,7 @@ from octopi import io
 import scipy.ndimage as ndi
 from tqdm import tqdm
 import numpy as np
-import math
+import gc
 
 def processs_localization(run,  
                           objects, 
@@ -69,7 +69,7 @@ def processs_localization(run,
             # Save Picks
             try:
                 picks = run.new_picks(object_name = obj[0], session_id = pick_session_id, user_id=pick_user_id)
-            except:
+            except Exception as e:
                 picks = run.get_picks(object_name = obj[0], session_id = pick_session_id, user_id=pick_user_id)[0]
 
             # Assign Identity As Orientation
@@ -107,7 +107,7 @@ def extract_particle_centroids_via_watershed(
     max_particle_size = (4 / 3) * np.pi * (max_particle_radius ** 3)
 
     # Create a binary mask for the specific segmentation label
-    binary_mask = (segmentation == segmentation_idx).astype(int)
+    binary_mask = (segmentation == segmentation_idx).astype(np.uint8)
 
     # Skip if the segmentation label is not present
     if np.sum(binary_mask) == 0:
@@ -117,15 +117,40 @@ def extract_particle_centroids_via_watershed(
     # Structuring element for erosion and dilation
     struct_elem = ball(1)
     eroded = binary_erosion(binary_mask, struct_elem)
+    del binary_mask
+    gc.collect()
+
     dilated = binary_dilation(eroded, struct_elem)
+    del eroded
+    gc.collect()
 
     # Distance transform and local maxima detection
     distance = ndi.distance_transform_edt(dilated)
     local_max = (distance == ndi.maximum_filter(distance, footprint=np.ones((maxima_filter_size, maxima_filter_size, maxima_filter_size))))
 
     # Watershed segmentation
-    markers, _ = ndi.label(local_max)
+    markers, num_labels = ndi.label(local_max)
+    del local_max
+    gc.collect()
+
+    if num_labels < 256:
+        markers = markers.astype(np.uint8)
+    elif num_labels < 65535:
+        markers = markers.astype(np.uint16)
+    elif num_labels < 4294967295:
+        markers = markers.astype(np.uint32)
+
     watershed_labels = watershed(-distance, markers, mask=dilated)
+    del distance, markers, dilated
+    gc.collect()
+
+    if num_labels < 256:
+        watershed_labels = watershed_labels.astype(np.uint8)
+    elif num_labels < 65535:
+        watershed_labels = watershed_labels.astype(np.uint16)
+    elif num_labels < 4294967295:
+        watershed_labels = watershed_labels.astype(np.uint32)
+    gc.collect()
 
     # Extract region properties and filter based on particle size
     all_centroids = []
@@ -134,6 +159,9 @@ def extract_particle_centroids_via_watershed(
 
             # Option 1: Use all centroids
             all_centroids.append(region.centroid)
+
+    del watershed_labels
+    gc.collect()
 
     return all_centroids
 

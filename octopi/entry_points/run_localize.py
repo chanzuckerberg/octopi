@@ -55,7 +55,8 @@ def pick_particles(
 
     # Determine the number of processes to use
     if n_procs is None:
-        n_procs = min(mp.cpu_count(), n_run_ids)
+        # the tomograms have heavy memory requirements, so limit the number of processes to prevent OOM errors
+        n_procs = min(mp.cpu_count(), n_run_ids, 8)
     print(f"Using {n_procs} processes to parallelize across {n_run_ids} run IDs.")
 
     # Run Localization - Main Parallelization Loop
