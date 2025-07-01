@@ -69,7 +69,7 @@ def processs_localization(run,
             # Save Picks
             try:
                 picks = run.new_picks(object_name = obj[0], session_id = pick_session_id, user_id=pick_user_id)
-            except Exception as e:
+            except:
                 picks = run.get_picks(object_name = obj[0], session_id = pick_session_id, user_id=pick_user_id)[0]
 
             # Assign Identity As Orientation
@@ -129,27 +129,14 @@ def extract_particle_centroids_via_watershed(
     local_max = (distance == ndi.maximum_filter(distance, footprint=np.ones((maxima_filter_size, maxima_filter_size, maxima_filter_size))))
 
     # Watershed segmentation
-    markers, num_labels = ndi.label(local_max)
+    markers, _ = ndi.label(local_max)
     del local_max
+    markers = markers.astype(np.uint8)
     gc.collect()
-
-    if num_labels < 256:
-        markers = markers.astype(np.uint8)
-    elif num_labels < 65535:
-        markers = markers.astype(np.uint16)
-    elif num_labels < 4294967295:
-        markers = markers.astype(np.uint32)
 
     watershed_labels = watershed(-distance, markers, mask=dilated)
     del distance, markers, dilated
-    gc.collect()
-
-    if num_labels < 256:
-        watershed_labels = watershed_labels.astype(np.uint8)
-    elif num_labels < 65535:
-        watershed_labels = watershed_labels.astype(np.uint16)
-    elif num_labels < 4294967295:
-        watershed_labels = watershed_labels.astype(np.uint32)
+    watershed_labels = watershed_labels.astype(np.uint8)
     gc.collect()
 
     # Extract region properties and filter based on particle size
