@@ -42,7 +42,11 @@ def generate_targets(
 
     # If runIDs are not provided, load all runs
     if run_ids is None:
-        run_ids = [run.name for run in root.runs]
+        run_ids = [run.name for run in root.runs if run.get_voxel_spacing(voxel_size) is not None]
+        skipped_run_ids = [run.name for run in root.runs if run.get_voxel_spacing(voxel_size) is None]
+        
+        if skipped_run_ids:
+            print(f"Warning: skipping runs with no voxel spacing {voxel_size}: {skipped_run_ids}")
 
     # Iterate Over All Runs
     for runID in tqdm(run_ids):
