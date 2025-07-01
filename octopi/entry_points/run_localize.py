@@ -51,14 +51,12 @@ def pick_particles(
         if skipped_run_ids:
             print(f"Warning: skipping runs with no voxel spacing {voxel_size}: {skipped_run_ids}")
 
+    # Nprocesses shouldnt exceed computation resource or number of available runs
     n_run_ids = len(run_ids)
-
-    # Determine the number of processes to use
-    if n_procs is None:
-        n_procs = min(mp.cpu_count(), n_run_ids)
-    print(f"Using {n_procs} processes to parallelize across {n_run_ids} run IDs.")
+    n_procs = min(mp.mp.cpu_count(), n_procs, n_run_ids)
 
     # Run Localization - Main Parallelization Loop
+    print(f"Using {n_procs} processes to parallelize across {n_run_ids} run IDs.")
     with mp.Pool(processes=n_procs) as pool:
         with tqdm(total=n_run_ids, desc="Localization", unit="run") as pbar:
             worker_func = lambda run_id: localize.processs_localization(
@@ -96,7 +94,7 @@ def localize_parser(parser_description, add_slurm: bool = False):
     localize_group.add_argument("--radius-max-scale", type=float, default=1.0, required=False, help="Maximum radius scale for particles.")
     localize_group.add_argument("--filter-size", type=int, default=10, required=False, help="Filter size for localization.")
     localize_group.add_argument("--pick-objects", type=utils.parse_list, default=None, required=False, help="Specific Objects to Find Picks for.")
-    localize_group.add_argument("--n-procs", type=int, default=None, required=False, help="Number of CPU processes to parallelize runs across. Defaults to the max number of cores available or available runs.")
+    localize_group.add_argument("--n-procs", type=int, default=8, required=False, help="Number of CPU processes to parallelize runs across. Defaults to the max number of cores available or available runs.")
 
     output_group = parser.add_argument_group("Output Arguments")
     output_group.add_argument("--pick-session-id", type=str, default='1', required=False, help="Session ID for the particle picks.")
