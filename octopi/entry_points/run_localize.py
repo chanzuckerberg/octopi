@@ -53,7 +53,7 @@ def pick_particles(
 
     # Nprocesses shouldnt exceed computation resource or number of available runs
     n_run_ids = len(run_ids)
-    n_procs = min(mp.mp.cpu_count(), n_procs, n_run_ids)
+    n_procs = min(mp.cpu_count(), n_procs, n_run_ids)
 
     # Run Localization - Main Parallelization Loop
     print(f"Using {n_procs} processes to parallelize across {n_run_ids} run IDs.")
