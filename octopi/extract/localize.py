@@ -100,7 +100,7 @@ def extract_particle_centroids_via_watershed(
     """
 
     if maxima_filter_size is None or maxima_filter_size < 0:
-        AssertionError('Enter a Non-Zero Filter Size!')
+        raise AssertionError('Enter a Non-Zero Filter Size!')
 
     # Calculate minimum and maximum particle volumes based on the given radii
     min_particle_size = (4 / 3) * np.pi * (min_particle_radius ** 3) 
@@ -117,10 +117,12 @@ def extract_particle_centroids_via_watershed(
     # Structuring element for erosion and dilation
     struct_elem = ball(1)
     eroded = binary_erosion(binary_mask, struct_elem)
+    binary_mask = None
     del binary_mask
     gc.collect()
 
     dilated = binary_dilation(eroded, struct_elem)
+    eroded = None
     del eroded
     gc.collect()
 
@@ -130,13 +132,15 @@ def extract_particle_centroids_via_watershed(
 
     # Watershed segmentation
     markers, _ = ndi.label(local_max)
+    local_max = None
     del local_max
-    markers = markers.astype(np.uint8)
     gc.collect()
 
     watershed_labels = watershed(-distance, markers, mask=dilated)
+    distance = None
+    markers = None
+    dilated = None
     del distance, markers, dilated
-    watershed_labels = watershed_labels.astype(np.uint8)
     gc.collect()
 
     # Extract region properties and filter based on particle size
@@ -147,6 +151,7 @@ def extract_particle_centroids_via_watershed(
             # Option 1: Use all centroids
             all_centroids.append(region.centroid)
 
+    watershed_labels = None
     del watershed_labels
     gc.collect()
 
