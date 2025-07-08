@@ -1,5 +1,6 @@
-from octopi import utils, io
+from copick_utils.io import readers
 from scipy.spatial import distance
+from octopi import utils, io
 from typing import List
 import copick, json, os
 import numpy as np
@@ -95,12 +96,12 @@ class evaluator:
             for name, radius in self.objects:
                 
                 # Get Ground Truth and Predicted Coordinates
-                gt_coordinates = io.get_copick_coordinates(
+                gt_coordinates = readers.coordinates(
                     run, name, 
                     self.ground_truth_user_id, self.ground_truth_session_id, 
                     self.voxel_size, raise_error=False
                 )
-                pred_coordinates = io.get_copick_coordinates(
+                pred_coordinates = readers.coordinates(
                     run, name,
                     self.prediction_user_id, self.predict_session_id, 
                     self.voxel_size, raise_error=False

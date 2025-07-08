@@ -3,6 +3,7 @@ from scipy.cluster.hierarchy import fcluster, linkage
 from skimage.segmentation import watershed
 from typing import List, Optional, Tuple
 from skimage.measure import regionprops
+from copick_utils.io import readers
 from scipy.spatial import distance
 from dataclasses import dataclass
 from octopi import io
@@ -27,12 +28,12 @@ def processs_localization(run,
         raise ValueError(f"Invalid method '{method}'. Expected 'watershed' or 'com'.")
 
     # Get Segmentation
-    seg = io.get_segmentation_array(run, 
-                                    voxel_size, 
-                                    seg_info[0], 
-                                    user_id=seg_info[1], 
-                                    session_id=seg_info[2],
-                                    raise_error=False)
+    seg = readers.segmentation(
+        run, voxel_size, 
+        seg_info[0], 
+        user_id=seg_info[1], 
+        session_id=seg_info[2],
+        raise_error=False)
 
     # Preprocess Segmentation
     # seg = preprocess_segmentation(seg, voxel_size, objects)
@@ -99,8 +100,8 @@ def extract_particle_centroids_via_watershed(
         max_particle_size (int): Maximum size threshold for particles.
     """
 
-    if maxima_filter_size is None or maxima_filter_size < 0:
-        AssertionError('Enter a Non-Zero Filter Size!')
+    if maxima_filter_size is None or maxima_filter_size <= 0:
+        raise ValueError('Enter a Non-Zero Filter Size!')
 
     # Calculate minimum and maximum particle volumes based on the given radii
     min_particle_size = (4 / 3) * np.pi * (min_particle_radius ** 3) 
@@ -117,12 +118,8 @@ def extract_particle_centroids_via_watershed(
     # Structuring element for erosion and dilation
     struct_elem = ball(1)
     eroded = binary_erosion(binary_mask, struct_elem)
-    del binary_mask
-    gc.collect()
 
     dilated = binary_dilation(eroded, struct_elem)
-    del eroded
-    gc.collect()
 
     # Distance transform and local maxima detection
     distance = ndi.distance_transform_edt(dilated)
@@ -131,12 +128,11 @@ def extract_particle_centroids_via_watershed(
     # Watershed segmentation
     markers, _ = ndi.label(local_max)
     del local_max
-    markers = markers.astype(np.uint8)
     gc.collect()
 
     watershed_labels = watershed(-distance, markers, mask=dilated)
+    distance, markers, dilated = None, None, None
     del distance, markers, dilated
-    watershed_labels = watershed_labels.astype(np.uint8)
     gc.collect()
 
     # Extract region properties and filter based on particle size
@@ -146,9 +142,6 @@ def extract_particle_centroids_via_watershed(
 
             # Option 1: Use all centroids
             all_centroids.append(region.centroid)
-
-    del watershed_labels
-    gc.collect()
 
     return all_centroids
 

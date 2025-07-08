@@ -1,6 +1,6 @@
 from octopi.extract import membranebound_extract as extract
 from scipy.spatial.transform import Rotation as R
-from octopi import io
+from copick_utils.io import readers
 from scipy.spatial import cKDTree
 from typing import Tuple
 import numpy as np
@@ -28,7 +28,7 @@ def process_midpoint_extract(
     """
 
     # Pull Picks that Are used for Midpoint Extraction
-    coordinates = io.get_copick_coordinates(
+    coordinates = readers.coordinates(
         run, 
         picks_info[0], picks_info[1], picks_info[2],
         voxel_size
@@ -40,7 +40,7 @@ def process_midpoint_extract(
     save_picks_info[2] = save_session_id
 
     # Get Organelle Segmentation
-    seg = io.get_segmentation_array(
+    seg = readers.segmentation(
         run, 
         voxel_size, 
         organelle_info[0],
