@@ -100,7 +100,7 @@ def extract_particle_centroids_via_watershed(
         max_particle_size (int): Maximum size threshold for particles.
     """
 
-    if maxima_filter_size is None or maxima_filter_size < 0:
+    if maxima_filter_size is None or maxima_filter_size <= 0:
         raise AssertionError('Enter a Non-Zero Filter Size!')
 
     # Calculate minimum and maximum particle volumes based on the given radii
