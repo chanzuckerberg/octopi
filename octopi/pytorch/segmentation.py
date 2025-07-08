@@ -5,7 +5,7 @@ from monai.data import MetaTensor
 from monai.transforms import (
     Compose, AsDiscrete, Activations
 )
-import octopi.processing.writers as write
+from copick_utils.io import writers
 from octopi.models import common
 from typing import List, Optional
 import torch, copick, gc, os
@@ -212,7 +212,7 @@ class Predictor:
             for ind in range(len(batch_ids)):
                 run = self.root.get_run(batch_ids[ind])
                 seg = predictions[ind]
-                write.segmentation(run, seg, segmentation_user_id, segmentation_name, 
+                writers.segmentation(run, seg, segmentation_user_id, segmentation_name, 
                                    segmentation_session_id, voxel_spacing)
 
             # After processing and saving predictions for a batch:
@@ -311,7 +311,7 @@ class MultiGPUPredictor(Predictor):
                     for idx, run_id in enumerate(gpu_batches[gpu_id]):
                         run = self.root.get_run(run_id)
                         segmentation = predictions[idx]
-                        write.segmentation(run, segmentation, segmentation_user_id, segmentation_name, 
+                        writers.segmentation(run, segmentation, segmentation_user_id, segmentation_name, 
                                            segmentation_session_id, voxel_spacing)
                 else:
                     all_predictions.extend(predictions)

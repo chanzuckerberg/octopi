@@ -1,3 +1,4 @@
+from copick_utils.io import readers
 import matplotlib.colors as mcolors
 from typing import Optional, List
 import matplotlib.pyplot as plt
@@ -76,7 +77,7 @@ def show_tomo_points(tomo, run, objects, user_id, vol_slice, session_id = None, 
 
     for name,_,_ in objects:
         try:    
-            coordinates = io.get_copick_coordinates(run, name=name, user_id=user_id, session_id=session_id)
+            coordinates = readers.coordinates(run, name=name, user_id=user_id, session_id=session_id)
             close_points = coordinates[np.abs(coordinates[:, 0] - vol_slice) <= slice_proximity_threshold]
             plt.scatter(close_points[:, 2], close_points[:, 1], label=name, s=15)
         except:
@@ -94,7 +95,7 @@ def compare_tomo_points(tomo, run, objects, vol_slice, user_id1, user_id2,
 
     for name,_,_ in objects:
         try:
-            coordinates = io.get_copick_coordinates(run, name=name, user_id=user_id1, session_id=session_id1)
+            coordinates = readers.coordinates(run, name=name, user_id=user_id1, session_id=session_id1)
             close_points = coordinates[np.abs(coordinates[:, 0] - vol_slice) <= slice_proximity_threshold]
             plt.scatter(close_points[:, 2], close_points[:, 1], label=name, s=15)    
         except: 
@@ -106,7 +107,7 @@ def compare_tomo_points(tomo, run, objects, vol_slice, user_id1, user_id2,
     
     for name,_,_ in objects:
         try:
-            coordinates = io.get_copick_coordinates(run, name=name, user_id=user_id2, session_id=session_id2)
+            coordinates = readers.coordinates(run, name=name, user_id=user_id2, session_id=session_id2)
             close_points = coordinates[np.abs(coordinates[:, 0] - vol_slice) <= slice_proximity_threshold]
             plt.scatter(close_points[:, 2], close_points[:, 1], label=name, s=15)
         except:

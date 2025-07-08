@@ -41,6 +41,8 @@ markdown_extensions:
   - md_in_html
   - toc:
       permalink: true
+  - pymdownx.arithmatex:
+      generic: true      
 
 plugins:
   - search
@@ -54,6 +56,12 @@ plugins:
   - minify:
       minify_html: true
 
+
+extra_javascript:
+  - https://polyfill.io/v3/polyfill.min.js?features=es6
+  - https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js
+
+
 nav:
   - Home: index.md
   - Getting Started:
@@ -62,14 +70,18 @@ nav:
     - Quick Start: getting-started/quickstart.md
   - User Guide:
     - Overview: user-guide/overview.md
-    - Import Data to Copick: getting-started/data-import.md    
+    - Import Data to Copick: getting-started/data-import.md 
+    - Pick Particles: user-guide/pick-particles.md
     - Create Target Labels: user-guide/labels.md
     - Model Exploration: user-guide/training-basics.md
-    - Advanced Training: user-guide/advanced-training.md
+    - Train Individual Models: user-guide/advanced-training.md
     - Inference: user-guide/inference.md
   - API Tutorial: 
-    - Overview: api/introduction.md
+    - Overview: api/index.md
     - Quick Start: api/quick-start.md
+    - Training: api/training.md
+    - Inference: api/inference.md
+    - Adding New Models: api/adding-new-models.md
 
 extra:
   social:

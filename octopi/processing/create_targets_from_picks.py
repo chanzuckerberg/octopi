@@ -1,6 +1,5 @@
 from octopi.processing.segmentation_from_picks import from_picks
-import octopi.processing.writers as write
-from octopi import io 
+from copick_utils.io import readers, writers
 from typing import List
 from tqdm import tqdm
 import numpy as np
@@ -56,7 +55,7 @@ def generate_targets(
         run = root.get_run(runID)
 
         # Get Tomogram 
-        tomo = io.get_tomogram_array(run, voxel_size, tomo_algorithm)
+        tomo = readers.tomogram(run, voxel_size, tomo_algorithm)
         
         # Initialize Target Volume
         target = np.zeros(tomo.shape, dtype=np.uint8)
@@ -107,7 +106,7 @@ def generate_targets(
         # Write Segmentation for non-empty targets
         if target.max() > 0 and numPicks > 0:
             tqdm.write(f'Annotating {numPicks} picks in {runID}...')    
-            write.segmentation(run, target, target_user_name, 
+            writers.segmentation(run, target, target_user_name, 
                                name = target_segmentation_name, session_id= target_session_id, 
                                voxel_size = voxel_size)
     print('Creation of targets complete!')

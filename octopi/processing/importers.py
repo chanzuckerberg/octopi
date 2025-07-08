@@ -1,7 +1,7 @@
 from octopi.processing.downsample import FourierRescale
 import copick, argparse, mrcfile, glob, os
-import octopi.processing.writers as write
 from octopi.entry_points import common
+from copick_utils.io import writers
 from tqdm import tqdm
 
 def from_dataportal(
@@ -57,10 +57,10 @@ def from_dataportal(
 
             # If we want to save the tomograms at a different voxel size, we need to rescale the tomograms
             if output_voxel_size is None:
-                write.tomogram(run, vol, input_voxel_size, target_tomo_type)
+                writers.tomogram(run, vol, input_voxel_size, target_tomo_type)
             else:
                 vol = rescale.run(vol)
-                write.tomogram(run, vol, output_voxel_size, target_tomo_type)
+                writers.tomogram(run, vol, output_voxel_size, target_tomo_type)
     
     print(f'Downloading Complete!! Downloaded {len(root.runs)} runs')
 

@@ -1,275 +1,255 @@
-# API Tutorial
+# Quick Start
 
-This guide demonstrates how to use octopi's Python API for training and inference tasks. We'll walk through the process of training a 3D U-Net model for instance segmentation of proteins in Cryo-ET tomograms.
+This page provides a minimal introduction to all core octopi functions to get you up and running quickly. For detailed explanations and advanced options, see the [Training](training.md) and [Inference](inference.md) pages.
 
-## Data Preparation
+## Prerequisites
 
-### Generating Training Targets
+- Copick configuration file pointing to your tomogram data
+- Existing particle annotations (picks) or segmentations for training
+- Python environment with octopi installed
 
-First, we need to prepare the target data for training. This involves creating spherical targets corresponding to protein locations in the tomograms.
+## Complete Workflow
+
+Here's the essential 5-step workflow from data preparation to evaluation:
+
+### 1. Create Training Targets
 
 ```python
-from octopi.entry_points.run_create_targets import create_sub_train_targets, create_all_train_targets
+from octopi.entry_points.run_create_targets import create_sub_train_targets
 
 # Configuration
-config = '10440_config.json'
+config = 'config.json'
 target_name = 'targets'
 target_user_id = 'octopi'
-target_session_id = '0'
+target_session_id = '1'
+
+# Tomogram parameters
 voxel_size = 10.012
-tomogram_algorithm = 'wbp-denoised-denoiset-ctfdeconv'
+tomo_algorithm = 'denoised'
 radius_scale = 0.7
 
-# Option 1: Specify specific pickable objects
+# Define source annotations
 pick_targets = [
-    ('ribosome', 'data-portal', None),
-    ('virus-like-particle', 'data-portal', None),
-    ('apoferritin', 'data-portal', None)
+    ('ribosome', 'data-portal', '1'),
+    ('virus-like-particle', 'data-portal', '1'),
+    ('apoferritin', 'data-portal', '1')
 ]
 
-seg_targets = []
-
+# Create training targets
 create_sub_train_targets(
-    config, pick_targets, seg_targets, voxel_size, radius_scale, tomogram_algorithm,
-    target_name, target_user_id, target_session_id
-)
-
-# Option 2: Use all available pickable objects
-picks_user_id = 'data-portal'
-picks_session_id = None
-
-create_all_train_targets(
-    config, seg_targets, picks_session_id, picks_user_id, 
-    voxel_size, radius_scale, tomogram_algorithm, 
-    target_name, target_user_id, target_session_id
+    config, pick_targets, [], voxel_size, radius_scale,
+    tomo_algorithm, target_name, target_user_id, target_session_id
 )
 ```
+🔬 Check available data with: <code>copick browse -c config.json
 
-## Model Training
-
-### Setting Up the Training Environment
+### 2. Train Model
 
 ```python
-from monai.metrics import ConfusionMatrixMetric
-from octopi.models import common as builder
-from octopi.datasets import generators
+from octopi.workflows import train
 from monai.losses import TverskyLoss
-from octopi import losses
-from octopi.pytorch import trainer 
-from octopi import io, utils
-import torch, os
 
-# Training Parameters
-config = "10440_config.json"
-target_name = 'targets'
-target_user_id = 'octopi'
-target_session_id = None
+# Training configuration
+target_info = ['targets', 'octopi', '1']
+results_folder = 'model_output'
 
-# Data Generator Parameters
-num_tomo_crops = 16
-tomo_algorithm = 'wbp-denoised-denoiset-ctfdeconv'
-voxel_size = 10.012
-tomo_batch_size = 25
-
-# Model Configuration
-Nclass = 7
+# Model architecture
 model_config = {
     'architecture': 'Unet',
-    'channels': [32, 64, 128, 128],
-    'strides': [2, 2, 1, 1],
-    'num_res_units': 3,
-    'num_classes': Nclass,
-    'dropout': 0.05,
-    'dim_in': 128
+    'num_classes': 4,  # 3 objects + 1 background
+    'dim_in': 80,
+    'strides': [2, 2, 1],
+    'channels': [48, 64, 80, 80],
+    'dropout': 0.0,
+    'num_res_units': 1,
 }
 
-# Initialize the model
-model_builder = builder.get_model(model_config['architecture'])
-model = model_builder.build_model(model_config)
+# Loss function
+loss_function = TverskyLoss(
+    include_background=True, 
+    to_onehot_y=True, 
+    softmax=True,
+    alpha=0.3, 
+    beta=0.7
+)
+
+# Train the model
+train(
+    config, target_info, tomo_algorithm, voxel_size, loss_function,
+    model_config, model_save_path=results_folder
+)
 ```
 
-### Creating the Data Generator
+### 3. Run Segmentation
 
 ```python
-data_generator = generators.TrainLoaderManager(
-    config, 
-    target_name, 
-    target_session_id=target_session_id,
-    target_user_id=target_user_id,
+from octopi.workflows import segment
+
+# Model paths from training
+model_weights = f'{results_folder}/best_model.pth'
+model_config = f'{results_folder}/model_config.yaml'
+
+# Segmentation parameters
+seg_info = ['predict', 'octopi', '1']
+
+# Run segmentation
+segment(
+    config=config,
     tomo_algorithm=tomo_algorithm,
     voxel_size=voxel_size,
-    num_tomo_crops=num_tomo_crops,
-    tomo_batch_size=tomo_batch_size
+    model_weights=model_weights,
+    model_config=model_config,
+    seg_info=seg_info,
+    use_tta=True
 )
 ```
 
-### Training the Model
+### 4. Extract Coordinates
 
 ```python
-# Define loss function and metrics
-loss_fn = losses.WeightedFocalTverskyLoss()
-metric_fn = ConfusionMatrixMetric(include_background=True)
+from octopi.workflows import localize
 
-# Create trainer
-trainer = trainer.ModelTrainer(
-    model, device, loss_fn, 
-    metric_fn, optimizer
-)
+# Localization parameters
+pick_user_id = 'octopi'
+pick_session_id = '1'
 
-# Start training
-model_save_path = 'results'
-trainer.train(
-    data_generator, model_save_path, max_epochs = 1000,
-    crop_size=model_config['dim_in'], best_metric=best_metric, verbose=True
+# Run localization
+localize(
+    config=config,
+    voxel_size=voxel_size,
+    seg_info=seg_info,
+    pick_user_id=pick_user_id,
+    pick_session_id=pick_session_id
 )
 ```
 
-## Model Exploration with Optuna
-
-We can simply the entire process of manual tuning of model architectures and training parameters with Optuna / Bayesian Optimization. By default, Octopi will sample various loss functions, parameters for the given architecture, 
+### 5. Evaluate Results
 
 ```python
-from octopi.pytorch.model_search_submitter import ModelSearchSubmit
+from octopi.workflows import evaluate
 
-optimizer = ModelSearchSubmit(
-    copick_config=config,
-    target_name=name, target_user_id=user_id, target_session_id = session_id
-    tomo_algorithm=tomo_algorithm, voxel_size=voxel_size, Nclass=Nclass,
-    num_epochs=1000, num_trials = 100,
-    model_type = 'UNet'
+# Evaluation against ground truth
+evaluate(
+    config=config,
+    gt_user_id='data-portal',  # Ground truth source
+    gt_session_id='1',
+    pred_user_id=pick_user_id,
+    pred_session_id=pick_session_id,
+    distance_threshold=0.5,
+    save_path=f'{results_folder}/evaluation'
 )
-
-search.run_model_search()
 ```
 
-## Perform Segmentation Inference
+<details markdown="1">
+<summary><strong>💡 All in one script</strong></summary>
 
-With a trained model in hand, it's time to move forward with making predictions. In this step, you will execute model inference using a checkpoint from a saved epoch, allowing you to evaluate the model's performance on your test dataset.
+Copy and paste this complete script, then modify the configuration variables at the top:
 
-```python 
+```python
+from octopi.entry_points.run_create_targets import create_sub_train_targets
+from octopi.workflows import train, segment, localize, evaluate
+from monai.losses import TverskyLoss
 
-from octopi.pytorch import segmentation
+# =============================================================================
+# CONFIGURATION - Modify these variables for your dataset
+# =============================================================================
 
-########### Input Parameters ###########
+config = 'config.json'                    # Path to your Copick config
+voxel_size = 10.012                       # Voxel size in Angstroms
+tomo_algorithm = 'denoised'               # Tomogram algorithm identifier
+results_folder = 'model_output'          # Where to save results
 
-# Copick Query for Tomograms to Run Inference On
-config = "10440_config.json"
-tomo_algorithm = 'wbp-denoised-denoiset-ctfdeconv'
-voxel_size = 10.012
+# Define your objects and annotation sources
+pick_targets = [
+    ('ribosome', 'data-portal', '1'),
+    ('virus-like-particle', 'data-portal', '1'),
+    ('apoferritin', 'data-portal', '1')
+]
 
-# Path to Trained Model
-model_weights = 'results/best_model.pth'
-model_config = 'results/training_parameters.yaml'
+# Ground truth for evaluation
+gt_user_id = 'data-portal'
+gt_session_id = '1'
 
-# Adjust this parameter based on available GPU and RAM space
-tomo_batch_size = 15
+# =============================================================================
+# WORKFLOW - No need to modify below this line
+# =============================================================================
 
-# RunIDs to Run Inference On
-run_ids = None
-
-# Output Save Information (Segmentation Name, UserID, SessionID)
-seg_info = ['predict', 'DeepFindET', '1']
-
-print("Using Single-GPU Predictor.")
-predict = segmentation.Predictor(
-    config,
-    model_config,
-    model_weights,
+print("Step 1: Creating training targets...")
+create_sub_train_targets(
+    config, pick_targets, [], voxel_size, 0.7,
+    tomo_algorithm, 'targets', 'octopi', '1'
 )
 
-# Run batch prediction
-predict.batch_predict(
-    runIDs=run_ids,
-    num_tomos_per_batch=tomo_batch_size,
+print("Step 2: Training model...")
+model_config = {
+    'architecture': 'Unet',
+    'num_classes': len(pick_targets) + 1,  # objects + background
+    'dim_in': 80,
+    'strides': [2, 2, 1],
+    'channels': [48, 64, 80, 80],
+    'dropout': 0.0,
+    'num_res_units': 1,
+}
+
+loss_function = TverskyLoss(
+    include_background=True, to_onehot_y=True, softmax=True,
+    alpha=0.3, beta=0.7
+)
+
+train(
+    config, ['targets', 'octopi', '1'], tomo_algorithm, voxel_size,
+    loss_function, model_config, model_save_path=results_folder
+)
+
+print("Step 3: Running segmentation...")
+segment(
+    config=config,
     tomo_algorithm=tomo_algorithm,
-    voxel_spacing=voxel_size,
-    segmentation_name=seg_info[0],
-    segmentation_user_id=seg_info[1],
-    segmentation_session_id=seg_info[2]
+    voxel_size=voxel_size,
+    model_weights=f'{results_folder}/best_model.pth',
+    model_config=f'{results_folder}/model_config.yaml',
+    seg_info=['predict', 'octopi', '1'],
+    use_tta=True
 )
+
+print("Step 4: Extracting coordinates...")
+localize(
+    config=config,
+    voxel_size=voxel_size,
+    seg_info=['predict', 'octopi', '1'],
+    pick_user_id='octopi',
+    pick_session_id='1'
+)
+
+print("Step 5: Evaluating results...")
+evaluate(
+    config=config,
+    gt_user_id=gt_user_id,
+    gt_session_id=gt_session_id,
+    pred_user_id='octopi',
+    pred_session_id='1',
+    distance_threshold=0.5,
+    save_path=f'{results_folder}/evaluation'
+)
+
+print(f"Complete! Results saved to: {results_folder}")
 ```
+</details>
 
-## Converting Segmentation Masks to 3D Coordinates
+## Key Parameters to Modify
 
-Each segmentation mask highlights regions in the tomogram where the model believes a specific macromolecule is present. To transform these continuous volumetric predictions into biologically meaningful particle coordinates, we apply a post-processing pipeline that includes:
+- **`config`**: Path to your Copick configuration file
+- **`voxel_size`**: Tomogram resolution (check your data specifications)
+- **`tomo_algorithm`**: Algorithm used for tomogram reconstruction
+- **`pick_targets`**: List of (object_name, user_id, session_id) for your annotations
+- **`num_classes`**: Number of object types + 1 for background
+- **`gt_user_id/gt_session_id`**: Ground truth annotation source for evaluation
 
-	•	Thresholding the segmentation mask to isolate high-confidence regions
-	•	Size filtering based on expected macromolecule volume (e.g., diameter or voxel count)
-	•	Centroid extraction from connected components that match the size profile
 
-This process enables us to generate a precise list of coordinates that can be directly compared to ground truth annotations or used as input for downstream structural analysis.
+## Next Steps
 
-By tuning the filtering parameters (e.g., minimum/maximum particle size), the pipeline can be adapted to different targets such as ribosomes, proteasomes, or other cellular components.
+**For detailed explanations and advanced options:**
 
-```python
-from octopi.extract import localize
-from tqdm import tqdm
-import copick
-
-########### Input Parameters ###########
-
-# Copick Query for Tomograms to Run Inference On
-config = "10440_config.json"
-
-# Voxel Size of Segmentation Maps
-voxel_size = 10.012
-
-# Information for the Referenced Segmentation Map 
-seg_info = ['predict', 'DeepFindET', '1']
-
-# Information for the Saved Pick Session
-pick_user_id = 'octopi'; pick_session_id = '1'
-
-# Information for the Localization Method
-method = 'watershed'; filter_size = 10
-
-# Save of Segmentation Spheres that are Valid for Coordinates
-radius_min_scale = 0.5; radius_max_scale = 1.5
-
-# RunIDs to Run Localization On
-runIDs = None
-
-# List of Objects to Localize 
-# (We can Either Specify Specific Objects to Localize or None to Find All Objects)
-pick_objects = None
-
-# Load the Copick Config
-root = copick.from_file(config) 
-
-# Get objects that can be Picked
-objects = [(obj.name, obj.label, obj.radius) for obj in root.pickable_objects if obj.is_particle]
-
-# Verify each object has the required attributes
-for obj in objects:
-    if len(obj) < 3 or not isinstance(obj[2], (float, int)):
-        raise ValueError(f"Invalid object format: {obj}. Expected a tuple with (name, label, radius).")
-
-# Filter elements
-if pick_objects is not None:
-    objects = [obj for obj in objects if obj[0] in pick_objects]
-
-print(f'Running Localization on the Following Objects: ')
-print(', '.join([f'{obj[0]} (Label: {obj[1]})' for obj in objects]) + '\n')
-
-# Either Specify Input RunIDs or Run on All RunIDs
-if runIDs:  print('Running Localization on the Following RunIDs: ' + ', '.join(runIDs) + '\n')
-run_ids = runIDs if runIDs else [run.name for run in root.runs]
-n_run_ids = len(run_ids)
-
-# Main Loop
-for run_id in tqdm(run_ids):
-
-    # Run Localization on Given RunID
-    run = root.get_run(run_id)
-    localize.processs_localization(
-        run,
-        objects,
-        seg_info,
-        method,
-        voxel_size,
-        filter_size,
-        radius_min_scale, radius_max_scale,
-        pick_session_id, pick_user_id,
-    )
-
-```
+- **[Training Guide](training.md)** - Learn about loss functions, cross-validation, and model exploration
+- **[Inference Guide](inference.md)** - Understand segmentation, localization, and evaluation in detail
+- **[Adding New Models](adding-new-models.md)** - Integrate custom architectures

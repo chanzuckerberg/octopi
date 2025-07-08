@@ -1,5 +1,5 @@
 from scipy.spatial.transform import Rotation as R
-from octopi import utils, io
+from copick_utils.io import readers
 import scipy.ndimage as ndi
 from typing import Tuple
 import numpy as np
@@ -36,7 +36,7 @@ def process_membrane_bound_extract(run,
     new_session_id = str(int(save_session_id) + 1)  # Convert to string after increment                                  
 
     # Need Better Error Handing for Missing Picks
-    coordinates = io.get_copick_coordinates(
+    coordinates = readers.coordinates(
         run, 
         picks_info[0], picks_info[1], picks_info[2],
         voxel_size,
@@ -54,12 +54,13 @@ def process_membrane_bound_extract(run,
     if membrane_info is None:
         # Flag to distinguish between organelle and membrane segmentation
         membranes_provided = False
-        seg = io.get_segmentation_array(run, 
-                                    voxel_size, 
-                                    organelle_info[0],
-                                    user_id=organelle_info[1], 
-                                    session_id=organelle_info[2],
-                                    raise_error=False)
+        seg = readers.segmentation(
+            run, 
+            voxel_size, 
+            organelle_info[0],
+            user_id=organelle_info[1], 
+            session_id=organelle_info[2],
+            raise_error=False)
         # If No Segmentation is Found, Return
         if seg is None: return     
         elif nPoints == 0 or np.unique(seg).max() == 0:
@@ -68,7 +69,7 @@ def process_membrane_bound_extract(run,
     else:
         # Read both Organelle and Membrane Segmentations
         membranes_provided = True
-        seg = io.get_segmentation_array(
+        seg = readers.segmentation(
             run, 
             voxel_size, 
             membrane_info[0],
@@ -76,7 +77,7 @@ def process_membrane_bound_extract(run,
             session_id=membrane_info[2],
             raise_error=False)
 
-        organelle_seg = io.get_segmentation_array(
+        organelle_seg = readers.segmentation(
             run, 
             voxel_size, 
             organelle_info[0],

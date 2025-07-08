@@ -3,6 +3,7 @@ from scipy.cluster.hierarchy import fcluster, linkage
 from skimage.segmentation import watershed
 from typing import List, Optional, Tuple
 from skimage.measure import regionprops
+from copick_utils.io import readers
 from scipy.spatial import distance
 from dataclasses import dataclass
 from octopi import io
@@ -27,12 +28,12 @@ def processs_localization(run,
         raise ValueError(f"Invalid method '{method}'. Expected 'watershed' or 'com'.")
 
     # Get Segmentation
-    seg = io.get_segmentation_array(run, 
-                                    voxel_size, 
-                                    seg_info[0], 
-                                    user_id=seg_info[1], 
-                                    session_id=seg_info[2],
-                                    raise_error=False)
+    seg = readers.segmentation(
+        run, voxel_size, 
+        seg_info[0], 
+        user_id=seg_info[1], 
+        session_id=seg_info[2],
+        raise_error=False)
 
     # Preprocess Segmentation
     # seg = preprocess_segmentation(seg, voxel_size, objects)
