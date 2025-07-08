@@ -127,7 +127,6 @@ def extract_particle_centroids_via_watershed(
 
     # Watershed segmentation
     markers, _ = ndi.label(local_max)
-    local_max = None
     del local_max
     gc.collect()
 
