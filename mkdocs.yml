@@ -68,10 +68,13 @@ nav:
     - Installation: getting-started/installation.md
     - Import Data to Copick: getting-started/data-import.md
     - Quick Start: getting-started/quickstart.md
+  - Picking Particles:
+    - Overview: picking/overview.md
+    - Config File Setup: picking/config-setup.md
+    - ChimeraX Plugin: picking/chimerax-plugin.md
   - User Guide:
     - Overview: user-guide/overview.md
     - Import Data to Copick: getting-started/data-import.md 
-    - Pick Particles: user-guide/pick-particles.md
     - Create Target Labels: user-guide/labels.md
     - Model Exploration: user-guide/training-basics.md
     - Train Individual Models: user-guide/advanced-training.md
