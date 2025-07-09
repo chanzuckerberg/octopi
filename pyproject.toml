@@ -1,49 +1,57 @@
-[tool.poetry]
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
 name = "octopi"
-version = "1.1"
+version = "1.1.0"
 description = "Model architecture exploration for cryoET particle picking"
-authors = ["Jonathan Schwartz", "Kevin Zhao"]
-license = "MIT"
+authors = [
+    {name = "Jonathan Schwartz"},
+    {name = "Kevin Zhao"}
+]
+license = {text = "MIT"}
 readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+    "matplotlib",
+    "tqdm",
+    "copick",
+    "nibabel",
+    "mlflow",
+    "optuna",
+    "monai",
+    "plotly",
+    "pandas",
+    "mrcfile",
+    "kaleido",
+    "seaborn",
+    "requests",
+    "torch-ema",
+    "ipywidgets",
+    "copick-utils",
+    "multiprocess",
+    "python-dotenv",
+    "pytorch-lightning==2.4.0",
+    "optuna-integration[botorch,pytorch_lightning]",
+]
 
-[tool.poetry.dependencies]
-python = "^3.9"
-requests = "^2.25.1"
-matplotlib = "*"
-tqdm = "*"
-copick = "*"
-nibabel = "*"
-mlflow = "2.17.0"
-optuna = "4.0.0"
-plotly = "*"
-pandas = "*"
-mrcfile = "*"
-kaleido = "*"
-seaborn = "*"
-ipywidgets = "*"
-torch-ema = "*"
-copick-utils = "*"
-multiprocess = "*"
-python-dotenv = "*"
-pytorch-lightning = "2.4.0"
-monai-weekly = { version = "1.5.dev2448", allow-prereleases = true }
-optuna-integration = { version = "*", extras = ["botorch", "pytorch_lightning"] }
+[project.optional-dependencies]
+dev = [
+    "pytest>=6.2.3",
+    "black>=24.8.0",
+    "pre-commit>=3.8.0",
+    "ruff>=0.6.4",
+]
 
-[tool.poetry.dev-dependencies]
-pytest = "^6.2.3"
-black = "^24.8.0"
-pre-commit = "^3.8.0"
-ruff = "^0.6.4"
-
-[tool.poetry.scripts]
+[project.scripts]
 octopi = "octopi.main:cli_main"
 octopi-slurm = "octopi.main:cli_slurm_main"
 
-[build-system]
-requires = ["poetry-core>=1.0.0"]
-build-backend = "poetry.core.masonry.api"
+[tool.hatch.version]
+path = "octopi/__init__.py"
 
-[tool.poetry.urls]
-"Homepage" = "https://github.com/chanzuckerberg/octopi"
-"Documentation" = "https://chanzuckerberg.github.io/octopi/"
-"Issues" = "https://github.com/chanzuckerberg/octopi/issues"
+[project.urls]
+Homepage = "https://github.com/chanzuckerberg/octopi"
+Documentation = "https://chanzuckerberg.github.io/octopi/"
+Issues = "https://github.com/chanzuckerberg/octopi/issues"
