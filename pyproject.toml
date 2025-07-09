@@ -14,25 +14,25 @@ license = {text = "MIT"}
 readme = "README.md"
 requires-python = ">=3.9"
 dependencies = [
-    "requests>=2.25.1",
     "matplotlib",
     "tqdm",
     "copick",
     "nibabel",
-    "mlflow==2.17.0",
-    "optuna==4.0.0",
+    "mlflow",
+    "optuna",
+    "monai",
     "plotly",
     "pandas",
     "mrcfile",
     "kaleido",
     "seaborn",
-    "ipywidgets",
+    "requests",
     "torch-ema",
+    "ipywidgets",
     "copick-utils",
     "multiprocess",
     "python-dotenv",
     "pytorch-lightning==2.4.0",
-    "monai-weekly==1.5.dev2448",
     "optuna-integration[botorch,pytorch_lightning]",
 ]
 

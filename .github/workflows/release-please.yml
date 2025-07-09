@@ -30,7 +30,7 @@ jobs:
           manifest-file: ".release-please-manifest.json"
           config-file: "release-please-config.json"
           target-branch: "main"
-          token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
+          token: ${{ secrets.GITHUB_TOKEN }}
     outputs:
       paths_released: ${{ steps.release.outputs.paths_released }}
       release_created: ${{ steps.release.outputs.release_created }}
@@ -43,7 +43,7 @@ jobs:
     if: needs.release-please.outputs.release_created == 'true'
     environment:
       name: pypi
-      url: https://pypi.org/p/saber-em
+      url: https://pypi.org/p/octopi
     permissions:
       id-token: write # Required for trusted publishing
     steps:
