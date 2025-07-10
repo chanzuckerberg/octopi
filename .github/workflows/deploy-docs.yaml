@@ -60,6 +60,7 @@ jobs:
           path: ./site
 
   deploy:
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/docs'    
     needs: build
     runs-on: ubuntu-latest
     environment:
