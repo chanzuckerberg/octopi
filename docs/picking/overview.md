@@ -32,5 +32,9 @@ Generates picks in formats compatible with downstream processing pipelines, ensu
 ### 👥 Collaborative Picking
 Multiple users can work on the same dataset with session management, allowing for distributed annotation efforts and quality control processes.
 
+---
 
-The following sections will guide you through each step of this workflow, from initial setup to advanced picking strategies.
+## Next Steps
+
+- [Generate Config Files](config-setup.md) - To start any interactive picking session, we need to generate a copick config file.
+- [ChimeraX Plugin Tutorial](chimerax-plugin.md) - Let's get started with picking particles to generate training data for our models!

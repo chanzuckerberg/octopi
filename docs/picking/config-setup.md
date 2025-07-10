@@ -1,5 +1,9 @@
 # Copick Configuration File Setup
 
+Before you can start manual particle picking, you need a copick configuration file that defines your project structure, data locations, and pickable objects. This guide will help you create the right config file for your setup. 
+
+- **Note** This tutorial is an extension to the [Data-Import Tutorial](../getting-started/data-import.md).
+
 ### Config File Structure
 Create a JSON configuration file that defines your project parameters and data locations. The config file should specify:
 
@@ -77,6 +81,8 @@ Create a JSON configuration file that defines your project parameters and data l
 
 </details>
 
+**Note** You can mix overlay and static roots - for example, having an overlay root pointing to a local file location and static root pointing to a remote directory (or vice versa).
+
 ## Generating Configuration Templates
 
 Copick provides convenient commands to generate configuration templates for different setups:
@@ -90,3 +96,9 @@ copick config filesystem --help
 ```bash
 copick config dataportal --help
 ```
+
+---
+
+## Next Steps
+
+[ChimeraX Plugin](chimerax-plugin.md) - Now that we have a config file available, let's get straight to picking! 
