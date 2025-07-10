@@ -23,6 +23,14 @@ jobs:
       issues: write
       pull-requests: write
     steps:
+      # Generate token using your organization's GitHub App
+      - name: Generate token
+        id: generate_token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.GH_ACTIONS_HELPER_APP_ID }}
+          private-key: ${{ secrets.GH_ACTIONS_HELPER_PK }}
+
       - name: Release Please
         uses: googleapis/release-please-action@v4
         id: release
@@ -30,7 +38,7 @@ jobs:
           manifest-file: ".release-please-manifest.json"
           config-file: "release-please-config.json"
           target-branch: "main"
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ steps.generate_token.outputs.token }}  # ← Changed from secrets.GITHUB_TOKEN
     outputs:
       paths_released: ${{ steps.release.outputs.paths_released }}
       release_created: ${{ steps.release.outputs.release_created }}
@@ -43,7 +51,7 @@ jobs:
     if: needs.release-please.outputs.release_created == 'true'
     environment:
       name: pypi
-      url: https://pypi.org/p/octopi
+      url: https://pypi.org/p/octopi  # ← Make sure this matches your PyPI package name
     permissions:
       id-token: write # Required for trusted publishing
     steps:
