@@ -10,9 +10,10 @@ RUN apt update && \
 RUN ln -s /usr/bin/python3 /usr/bin/python
 
 # Install pip and the package
-RUN pip install --upgrade pip
+# for now pip 25 is not supported 
+RUN pip install --upgrade "pip<25" 
 COPY . ./
 RUN pip install .
 
-#RUN python src/octopi/segmentations_from_picks.py
-ENTRYPOINT ["python3", "src/octopi/optuna_pl_ddp.py"]
+#RUN python octopi/entry_points/run_optuna.py
+ENTRYPOINT ["python3", "octopi/entry_points/run_optuna.py"]
