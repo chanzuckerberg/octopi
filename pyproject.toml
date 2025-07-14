@@ -43,6 +43,16 @@ dev = [
     "pre-commit>=3.8.0",
     "ruff>=0.6.4",
 ]
+docs = [
+    "mkdocs-material",
+    "mkdocs-git-revision-date-localized-plugin",
+    "mkdocs-git-committers-plugin-2",
+    "mkdocs-git-authors-plugin",
+    "mkdocs-awesome-pages-plugin",
+    "mkdocs-minify-plugin",
+    "mkdocs-redirects",
+    "mkdocs",
+]
 
 [project.scripts]
 octopi = "octopi.main:cli_main"
