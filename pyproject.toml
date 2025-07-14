@@ -8,7 +8,9 @@ dynamic = ["version"]
 description = "Model architecture exploration for cryoET particle picking"
 authors = [
     {name = "Jonathan Schwartz"},
-    {name = "Kevin Zhao"}
+    {name = "Kevin Zhao"},
+    {name = "Daniel Ji"},
+    {name = "Utz Ermel"},
 ]
 license = {text = "MIT"}
 readme = "README.md"
