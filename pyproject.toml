@@ -4,15 +4,29 @@ build-backend = "hatchling.build"
 
 [project]
 name = "octopi"
-version = "1.1.0"
+dynamic = ["version"] 
 description = "Model architecture exploration for cryoET particle picking"
 authors = [
     {name = "Jonathan Schwartz"},
-    {name = "Kevin Zhao"}
+    {name = "Kevin Zhao"},
+    {name = "Daniel Ji"},
+    {name = "Utz Ermel"},
 ]
 license = {text = "MIT"}
 readme = "README.md"
 requires-python = ">=3.9"
+classifiers = [
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",        
+    "Programming Language :: Python :: 3.9",    
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Scientific/Engineering :: Image Processing",
+    "Topic :: Scientific/Engineering :: Image Recognition",
+]
 dependencies = [
     "matplotlib",
     "tqdm",
