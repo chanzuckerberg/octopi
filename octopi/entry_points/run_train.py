@@ -2,7 +2,7 @@ from octopi.datasets import generators, multi_config_generator
 from monai.losses import DiceLoss, FocalLoss, TverskyLoss
 from octopi.models import common as builder
 from monai.metrics import ConfusionMatrixMetric
-from octopi.utils import parsers, training, io
+from octopi.utils import parsers, io
 from octopi.entry_points import common 
 from octopi.pytorch import trainer 
 import torch, os, argparse
