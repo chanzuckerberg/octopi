@@ -88,7 +88,6 @@ def save_parameters_to_yaml(model, trainer, dataloader, filename: str):
     """
     Save training parameters to a YAML file.
     """
-    from .io import save_parameters_yaml
     
     parameters = {
         'model': model.get_model_parameters(),

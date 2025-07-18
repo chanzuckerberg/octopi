@@ -75,6 +75,12 @@ octopi-slurm = "octopi.main:cli_slurm_main"
 [tool.hatch.version]
 path = "octopi/__init__.py"
 
+[tool.hatch.metadata]
+allow-direct-references = true
+dependency-overrides = [
+    "numpy>=2"  # or whatever version you need
+]
+
 [project.urls]
 Homepage = "https://github.com/chanzuckerberg/octopi"
 Documentation = "https://chanzuckerberg.github.io/octopi/"
