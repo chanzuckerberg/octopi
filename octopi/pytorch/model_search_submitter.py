@@ -1,7 +1,7 @@
 from octopi.datasets import generators, multi_config_generator
+from octopi.utils import config, parsers
 from octopi.pytorch import hyper_search
 import torch, mlflow, optuna
-from octopi import utils
 from typing import List
 import pandas as pd
 
@@ -75,7 +75,7 @@ class ModelSearchSubmit:
         self.data_generator = None
 
         # Set random seed for reproducibility
-        utils.set_seed(self.random_seed)
+        config.set_seed(self.random_seed)
 
         # Initialize dataset generator
         self._initialize_data_generator()
@@ -108,7 +108,7 @@ class ModelSearchSubmit:
             )
 
         # Split datasets into training and validation
-        ratios = utils.parse_data_split(self.data_split)
+        ratios = parsers.parse_data_split(self.data_split)
         self.data_generator.get_data_splits(
             trainRunIDs=self.trainRunIDs,
             validateRunIDs=self.validateRunIDs,
@@ -134,7 +134,7 @@ class ModelSearchSubmit:
 
         # Set up MLflow tracking
         try:
-            tracking_uri = utils.mlflow_setup()
+            tracking_uri = config.mlflow_setup()
             mlflow.set_tracking_uri(tracking_uri)
         except Exception as e:
             print(f'Failed to set up MLflow tracking: {e}')

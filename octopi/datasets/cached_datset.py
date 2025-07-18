@@ -1,7 +1,7 @@
 from typing import List, Tuple, Callable, Optional, Dict, Any
 from monai.transforms import Compose
 from monai.data import CacheDataset
-from octopi import io
+from octopi.datasets import io
 from tqdm import tqdm
 import os, sys
 

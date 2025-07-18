@@ -1,11 +1,10 @@
 from octopi.entry_points import common
+from octopi.utils import parsers, io
 from octopi.extract import localize
-from octopi import utils
 import copick, argparse, pprint
 from typing import List, Tuple
 import multiprocess as mp
 from tqdm import tqdm
-import os
 
 def pick_particles(
     copick_config_path: str,
@@ -85,15 +84,15 @@ def localize_parser(parser_description, add_slurm: bool = False):
     input_group = parser.add_argument_group("Input Arguments")
     input_group.add_argument("--config", type=str, required=True, help="Path to the CoPick configuration file.")
     input_group.add_argument("--method", type=str, choices=['watershed', 'com'], default='watershed', required=False, help="Localization method to use.")
-    input_group.add_argument('--seg-info', type=utils.parse_target, required=True, help='Query for the organelles segmentations (e.g., "name" or "name,user_id,session_id".).')
+    input_group.add_argument('--seg-info', type=parsers.parse_target, required=True, help='Query for the organelles segmentations (e.g., "name" or "name,user_id,session_id".).')
     input_group.add_argument("--voxel-size", type=float, default=10, required=False, help="Voxel size for localization.")
-    input_group.add_argument("--runIDs", type=utils.parse_list, default = None, required=False, help="List of runIDs to run inference on, e.g., run1,run2,run3 or [run1,run2,run3].")
+    input_group.add_argument("--runIDs", type=parsers.parse_list, default = None, required=False, help="List of runIDs to run inference on, e.g., run1,run2,run3 or [run1,run2,run3].")
 
     localize_group = parser.add_argument_group("Localize Arguments")
     localize_group.add_argument("--radius-min-scale", type=float, default=0.5, required=False, help="Minimum radius scale for particles.")
     localize_group.add_argument("--radius-max-scale", type=float, default=1.0, required=False, help="Maximum radius scale for particles.")
     localize_group.add_argument("--filter-size", type=int, default=10, required=False, help="Filter size for localization.")
-    localize_group.add_argument("--pick-objects", type=utils.parse_list, default=None, required=False, help="Specific Objects to Find Picks for.")
+    localize_group.add_argument("--pick-objects", type=parsers.parse_list, default=None, required=False, help="Specific Objects to Find Picks for.")
     localize_group.add_argument("--n-procs", type=int, default=8, required=False, help="Number of CPU processes to parallelize runs across. Defaults to the max number of cores available or available runs.")
 
     output_group = parser.add_argument_group("Output Arguments")
@@ -165,7 +164,7 @@ def save_parameters(args: argparse.Namespace,
     pprint.pprint(params); print()
 
     # Save to YAML file
-    utils.save_parameters_yaml(params, output_path)
+    io.save_parameters_yaml(params, output_path)
 
 if __name__ == "__main__":
     cli()
