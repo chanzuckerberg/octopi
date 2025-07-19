@@ -6,7 +6,6 @@ from skimage.measure import regionprops
 from copick_utils.io import readers
 from scipy.spatial import distance
 from dataclasses import dataclass
-from octopi import io
 import scipy.ndimage as ndi
 from tqdm import tqdm
 import numpy as np

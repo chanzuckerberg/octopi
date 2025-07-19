@@ -1,10 +1,9 @@
-from monai.losses import FocalLoss, TverskyLoss
 from monai.metrics import ConfusionMatrixMetric
 from octopi.pytorch import trainer
 from mlflow.tracking import MlflowClient
 from octopi.models import common
-from octopi import io, losses
 import torch, mlflow, optuna, gc
+from octopi.utils import io
 
 class BayesianModelSearch:
 
