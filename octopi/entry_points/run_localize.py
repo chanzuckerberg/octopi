@@ -84,7 +84,7 @@ def localize_parser(parser_description, add_slurm: bool = False):
     input_group = parser.add_argument_group("Input Arguments")
     input_group.add_argument("--config", type=str, required=True, help="Path to the CoPick configuration file.")
     input_group.add_argument("--method", type=str, choices=['watershed', 'com'], default='watershed', required=False, help="Localization method to use.")
-    input_group.add_argument('--seg-info', type=parsers.parse_target, required=True, help='Query for the organelles segmentations (e.g., "name" or "name,user_id,session_id".).')
+    input_group.add_argument('--seg-info', type=parsers.parse_target, required=False, default='predict,octopi,1', help='Query for the organelles segmentations (e.g., "name" or "name,user_id,session_id".).')
     input_group.add_argument("--voxel-size", type=float, default=10, required=False, help="Voxel size for localization.")
     input_group.add_argument("--runIDs", type=parsers.parse_list, default = None, required=False, help="List of runIDs to run inference on, e.g., run1,run2,run3 or [run1,run2,run3].")
 
@@ -97,7 +97,7 @@ def localize_parser(parser_description, add_slurm: bool = False):
 
     output_group = parser.add_argument_group("Output Arguments")
     output_group.add_argument("--pick-session-id", type=str, default='1', required=False, help="Session ID for the particle picks.")
-    output_group.add_argument("--pick-user-id", type=str, default='monai', required=False, help="User ID for the particle picks.")
+    output_group.add_argument("--pick-user-id", type=str, default='octopi', required=False, help="User ID for the particle picks.")
 
     if add_slurm:
         slurm_group = parser.add_argument_group("SLURM Arguments")

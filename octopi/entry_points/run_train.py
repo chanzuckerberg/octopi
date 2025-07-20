@@ -96,7 +96,7 @@ def train_model(
     
     # Save parameters and results
     parameters_save_name = os.path.join(model_save_path, "model_config.yaml")
-    training.save_parameters_to_yaml(model_builder, model_trainer, data_generator, parameters_save_name)
+    io.save_parameters_to_yaml(model_builder, model_trainer, data_generator, parameters_save_name)
 
     # TODO: Write Results to Zarr or Another File Format? 
     results_save_name = os.path.join(model_save_path, "results.json")
