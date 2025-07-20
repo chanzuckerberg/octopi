@@ -5,9 +5,9 @@ from octopi.models import common as builder
 from octopi.pytorch import segmentation
 from octopi.datasets import generators
 from octopi.pytorch import trainer 
+from octopi.utils import io
 import multiprocess as mp
 import copick, torch, os
-from octopi import io
 from tqdm import tqdm
     
 def train(config, target_info, tomo_algorithm, voxel_size, loss_function,
