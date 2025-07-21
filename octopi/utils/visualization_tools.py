@@ -2,7 +2,6 @@ from copick_utils.io import readers
 import matplotlib.colors as mcolors
 from typing import Optional, List
 import matplotlib.pyplot as plt
-from octopi import io
 import numpy as np
 
 # Define the plotting function

@@ -1,7 +1,7 @@
 from octopi.pytorch.model_search_submitter import ModelSearchSubmit
 from octopi.entry_points import common
+from octopi.utils import parsers, io
 import argparse, os, pprint
-from octopi import utils
 
 def optuna_parser(parser_description, add_slurm: bool = False):
     """
@@ -20,15 +20,15 @@ def optuna_parser(parser_description, add_slurm: bool = False):
     # Input Arguments
     input_group = parser.add_argument_group("Input Arguments")
     common.add_config(input_group, single_config=False)
-    input_group.add_argument("--target-info", type=utils.parse_target, default="targets,octopi,1", 
+    input_group.add_argument("--target-info", type=parsers.parse_target, default="targets,octopi,1", 
                              help="Target information, e.g., 'name' or 'name,user_id,session_id'")    
     input_group.add_argument("--tomo-alg", default='wbp', 
                              help="Tomogram algorithm used for training")
     input_group.add_argument("--mlflow-experiment-name", type=str, default="model-search", required=False, 
                              help="Name of the MLflow experiment (default: 'model-search').")
-    input_group.add_argument("--trainRunIDs", type=utils.parse_list, default=None, required=False, 
+    input_group.add_argument("--trainRunIDs", type=parsers.parse_list, default=None, required=False, 
                              help="List of training run IDs, e.g., run1,run2 or [run1,run2].")
-    input_group.add_argument("--validateRunIDs", type=utils.parse_list, default=None, required=False, 
+    input_group.add_argument("--validateRunIDs", type=parsers.parse_list, default=None, required=False, 
                              help="List of validation run IDs, e.g., run3,run4 or [run3,run4].")    
     input_group.add_argument('--data-split', type=str, default='0.8', help="Data split ratios. Either a single value (e.g., '0.8' for 80/20/0 split) "
                                 "or two comma-separated values (e.g., '0.7,0.1' for 70/10/20 split)")
@@ -61,7 +61,7 @@ def cli():
     args = optuna_parser(description)
 
     # Parse the CoPick configuration paths
-    if len(args.config) > 1:    copick_configs = utils.parse_copick_configs(args.config)
+    if len(args.config) > 1:    copick_configs = parsers.parse_copick_configs(args.config)
     else:                       copick_configs = args.config[0]
 
     # Create the model exploration directory
@@ -133,7 +133,7 @@ def save_parameters(args: argparse.Namespace,
     pprint.pprint(params); print()
 
     # Save to YAML file
-    utils.save_parameters_yaml(params, output_path)
+    io.save_parameters_yaml(params, output_path)
 
 if __name__ == "__main__":
     cli()

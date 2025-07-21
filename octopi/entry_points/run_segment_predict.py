@@ -1,8 +1,8 @@
+import torch, argparse, json, pprint, yaml, os
 from octopi.pytorch import segmentation
 from octopi.entry_points import common
-import torch, argparse, json, pprint, yaml, os
-from octopi import utils
 from typing import List, Tuple
+from octopi.utils import io
 
 def inference(
     copick_config_path: str,
@@ -136,7 +136,7 @@ def save_parameters(args: argparse.Namespace,
                     output_path: str):  
 
     # Load the model config
-    model_config = utils.load_yaml(args.model_config)
+    model_config = io.load_yaml(args.model_config)
 
     # Create parameters dictionary
     params = {
@@ -160,7 +160,7 @@ def save_parameters(args: argparse.Namespace,
     pprint.pprint(params); print()
 
     # Save to YAML file
-    utils.save_parameters_yaml(params, output_path)
+    io.save_parameters_yaml(params, output_path)
 
 if __name__ == "__main__":
     cli()

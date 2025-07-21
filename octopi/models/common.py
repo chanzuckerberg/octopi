@@ -1,5 +1,5 @@
 from monai.losses import FocalLoss, TverskyLoss
-from octopi import losses
+from octopi.utils import losses
 from octopi.models import (
     Unet, AttentionUnet, MedNeXt, SegResNet
 )

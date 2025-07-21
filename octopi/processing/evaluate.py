@@ -1,6 +1,5 @@
 from copick_utils.io import readers
 from scipy.spatial import distance
-from octopi import utils, io
 from typing import List
 import copick, json, os
 import numpy as np

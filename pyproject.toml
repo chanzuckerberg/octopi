@@ -35,18 +35,15 @@ dependencies = [
     "mlflow",
     "optuna",
     "monai",
-    "plotly",
     "pandas",
     "mrcfile",
     "kaleido",
-    "seaborn",
     "requests",
     "torch-ema",
     "ipywidgets",
     "copick-utils",
     "multiprocess",
     "python-dotenv",
-    "pytorch-lightning==2.4.0",
     "optuna-integration[botorch,pytorch_lightning]",
 ]
 
@@ -74,6 +71,12 @@ octopi-slurm = "octopi.main:cli_slurm_main"
 
 [tool.hatch.version]
 path = "octopi/__init__.py"
+
+[tool.hatch.metadata]
+allow-direct-references = true
+dependency-overrides = [
+    "numpy>=2"  # or whatever version you need
+]
 
 [project.urls]
 Homepage = "https://github.com/chanzuckerberg/octopi"

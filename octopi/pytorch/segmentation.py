@@ -5,11 +5,12 @@ from monai.data import MetaTensor
 from monai.transforms import (
     Compose, AsDiscrete, Activations
 )
+from octopi.datasets import io as dataio
 from copick_utils.io import writers
-from octopi.models import common
 from typing import List, Optional
+from octopi.models import common
 import torch, copick, gc, os
-from octopi import io, utils
+from octopi.utils import io
 from tqdm import tqdm
 import numpy as np
 
@@ -26,7 +27,7 @@ class Predictor:
         self.root = copick.from_file(config)
 
         # Load the model config
-        model_config = utils.load_yaml(model_config)
+        model_config = io.load_yaml(model_config)
 
         self.Nclass = model_config['model']['num_classes']     
         self.dim_in = model_config['model']['dim_in']
@@ -160,14 +161,14 @@ class Predictor:
                         tomo_algorithm: str ):
 
         # Load data for the current batch
-        test_loader, test_dataset = io.create_predict_dataloader(
+        test_loader, test_dataset = dataio.create_predict_dataloader(
             self.root,
             voxel_spacing, tomo_algorithm,
             runIDs)
         
         # Determine Input Crop Size.
         if self.input_dim is None:
-            self.input_dim = io.get_input_dimensions(test_dataset, self.dim_in)
+            self.input_dim = dataio.get_input_dimensions(test_dataset, self.dim_in)
         
         predictions = []
         with torch.no_grad():

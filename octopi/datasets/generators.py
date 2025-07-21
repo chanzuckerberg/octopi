@@ -1,7 +1,7 @@
 from octopi.datasets import dataset, augment, cached_datset
 from monai.data import DataLoader, SmartCacheDataset, CacheDataset, Dataset
 from typing import List, Optional
-from octopi import io
+from octopi.datasets import io
 import torch, os, random, gc
 import multiprocess as mp
 

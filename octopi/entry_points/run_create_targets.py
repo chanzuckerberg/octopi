@@ -1,8 +1,8 @@
 import octopi.processing.create_targets_from_picks as create_targets
 from typing import List, Tuple, Union
+from octopi.utils import io, parsers
 from collections import defaultdict
 import argparse, copick, yaml, os
-from octopi import utils, io 
 from tqdm import tqdm
 import numpy as np
 
@@ -160,11 +160,11 @@ def parse_args():
 
     input_group = parser.add_argument_group("Input Arguments")
     input_group.add_argument("--config", type=str, required=True, help="Path to the CoPick configuration file.")
-    input_group.add_argument("--target", type=utils.parse_target, action="append", default=None, help='Target specifications: "name" or "name,user_id,session_id".')
+    input_group.add_argument("--target", type=parsers.parse_target, action="append", default=None, help='Target specifications: "name" or "name,user_id,session_id".')
     input_group.add_argument("--picks-session-id", type=str, default=None, help="Session ID for the picks.")
     input_group.add_argument("--picks-user-id", type=str, default=None, help="User ID associated with the picks.")
-    input_group.add_argument("--seg-target", type=utils.parse_target, action="append", default=[], help='Segmentation targets: "name" or "name,user_id,session_id".')
-    input_group.add_argument("--run-ids", type=utils.parse_list, default=None, help="List of run IDs.")
+    input_group.add_argument("--seg-target", type=parsers.parse_target, action="append", default=[], help='Segmentation targets: "name" or "name,user_id,session_id".')
+    input_group.add_argument("--run-ids", type=parsers.parse_list, default=None, help="List of run IDs.")
 
     # Parameters
     parameters_group = parser.add_argument_group("Parameters")
@@ -275,7 +275,7 @@ def save_parameters(args, output_path: str):
     existing_data[input_key] = new_entry[input_key]
 
     # Save back to the YAML file
-    utils.save_parameters_yaml(existing_data, output_path)
+    io.save_parameters_yaml(existing_data, output_path)
 
 if __name__ == "__main__":
     cli()

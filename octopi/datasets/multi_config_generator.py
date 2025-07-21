@@ -1,7 +1,7 @@
 from octopi.datasets import dataset, augment, cached_datset
 from octopi.datasets.generators import TrainLoaderManager
 from monai.data import DataLoader, SmartCacheDataset, CacheDataset, Dataset
-from octopi import io
+from octopi.datasets import io
 import multiprocess as mp
 from typing import List
 from tqdm import tqdm

@@ -1,6 +1,6 @@
-from octopi import visualization_tools as viz
+from octopi.utils import visualization_tools as viz
 from monai.inferers import sliding_window_inference
-from octopi import stopping_criteria
+from octopi.utils import stopping_criteria
 from monai.transforms import AsDiscrete
 from monai.data import decollate_batch
 import torch, os, mlflow, re
