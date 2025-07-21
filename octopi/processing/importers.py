@@ -168,7 +168,7 @@ def from_mrcs(
             voxel_size_to_write = input_voxel_size
 
         # Write the tomogram
-        write.tomogram(run, vol, voxel_size_to_write, target_tomo_type)
+        writers.tomogram(run, vol, voxel_size_to_write, target_tomo_type)
     print(f"Processed {len(mrc_files)} files from {mrcs_path}")
 
 
