@@ -5,9 +5,9 @@ from monai.data import MetaTensor
 from monai.transforms import (
     Compose, AsDiscrete, Activations
 )
+from typing import List, Optional, Union
 from octopi.datasets import io as dataio
 from copick_utils.io import writers
-from typing import List, Optional
 from octopi.models import common
 import torch, copick, gc, os
 from octopi.utils import io
@@ -18,9 +18,10 @@ class Predictor:
 
     def __init__(self, 
                  config: str,
-                 model_config: str,
-                 model_weights: str,
+                 model_config: Union[str, List[str]],
+                 model_weights: Union[str, List[str]],
                  apply_tta: bool = True,
+                 apply_modelsoup: bool = False,
                  device: Optional[str] = None):
 
         self.config = config
@@ -45,109 +46,147 @@ class Predictor:
             self.device = device
         print('Running Inference On: ', self.device)
 
-        # Check to see if the model weights file exists
-        if not os.path.exists(model_weights):
-            raise ValueError(f"Model weights file does not exist: {model_weights}")
-
-        # Load the model weights
-        model_builder = common.get_model(model_config['model']['architecture'])
-        model_builder.build_model(model_config['model'])
-        self.model = model_builder.model
-        state_dict = torch.load(model_weights, map_location=self.device, weights_only=True)
-        self.model.load_state_dict(state_dict)
-        self.model.to(self.device)
-        self.model.eval()
-
-       # Initialize TTA if enabled
+        # Initialize TTA if enabled
         self.apply_tta = apply_tta
-        if self.apply_tta: 
-            self.create_tta_augmentations() 
-            # self.post_transforms = Compose([
-            #     Activations(softmax=True)  # Keep probability output
-            # ])
-            self.softmax_transform = Compose([
-                Activations(softmax=True)  # Keep probability output
-            ])
-            
-            # Create the final discretization transform
-            self.discretize_transform = AsDiscrete(argmax=True)
-        else:
-            # Define the post-processing transforms
-            self.post_transforms = Compose([
-                Activations(softmax=True),
-                AsDiscrete(argmax=True)
-            ])
-            
-        
-    def _run_inference(self, input):
-        """Apply sliding window inference to the input."""
-        with torch.no_grad():
-            predictions = sliding_window_inference(
-                inputs=input,
-                roi_size=(self.dim_in, self.dim_in, self.dim_in),
-                sw_batch_size=4,  # one window is proecessed at a time
-                predictor=self.model,
-                overlap=0.5,
-            )
-            return [self.post_transforms(i) for i in decollate_batch(predictions)]
+        self.create_tta_augmentations() 
 
-    def _run_inference_tta(self, input_data):
-        """Memory-efficient TTA implementation that returns proper discrete segmentation maps."""
+        # Load the model soup if enabled
+        self.apply_modelsoup = apply_modelsoup
+        if self.apply_modelsoup:
+            self._load_model_soup(model_config, model_weights)
+        else:
+            # Load the single model
+            if not os.path.exists(model_weights):
+                raise ValueError(f"Model weights file does not exist: {model_weights}")
+            
+            model_builder = common.get_model(model_config['model']['architecture'])
+            model_builder.build_model(model_config['model'])
+            self.model = model_builder.model
+            state_dict = torch.load(model_weights, map_location=self.device, weights_only=True)
+            self.model.load_state_dict(state_dict)
+            self.model.to(self.device)
+            self.model.eval()
+            self.models = [self.model]
+
+    def _load_model_soup(self, model_config: dict, model_weights: Union[str, List[str]]):
+        """Load a list of models and their weights."""
         
+        # Handle single model or multiple models for soup
+        if isinstance(model_weights, str):
+            model_weights = [model_weights]  # Convert to list for uniform handling
+        
+        if self.apply_modelsoup and len(model_weights) == 1:
+            print("Warning: Model soup enabled but only one model provided. Disabling model soup.")
+            self.apply_modelsoup = False
+            return
+        
+        # Load the model(s)
+        self.models = []
+        model_builder = common.get_model(model_config['model']['architecture'])
+        for i, weights_path in enumerate(model_weights):
+            # Check if the weights file exists
+            if not os.path.exists(weights_path):
+                raise ValueError(f"Model weights file does not exist: {weights_path}")
+            
+            # Create model
+            model_builder.build_model(model_config['model'])
+            model = model_builder.model
+            
+            # Load weights
+            state_dict = torch.load(weights_path, map_location=self.device, weights_only=True)
+            model.load_state_dict(state_dict)
+            model.to(self.device)
+            model.eval()
+            
+            self.models.append(model)
+
+        print(f"Model soup: Enabled ({len(self.models)} models)")
+
+    def _run_single_model_inference(self, model, input_data):
+        """Run sliding window inference on a single model."""
+        return sliding_window_inference(
+            inputs=input_data,
+            roi_size=(self.dim_in, self.dim_in, self.dim_in),
+            sw_batch_size=4,
+            predictor=model,
+            overlap=0.5,
+        )
+
+    def _apply_tta_single_model(self, model, single_sample):
+        """Apply TTA to a single model and single sample."""
+        # Initialize probability accumulator
+        acc_probs = torch.zeros(
+            (1, self.Nclass, *single_sample.shape[2:]), 
+            dtype=torch.float32, device=self.device
+        )
+        
+        # Process each augmentation
+        with torch.no_grad():
+            for tta_transform, inverse_transform in zip(self.tta_transforms, self.inverse_tta_transforms):
+                # Apply transform
+                aug_sample = tta_transform(single_sample)
+                
+                # Run inference
+                predictions = self._run_single_model_inference(model, aug_sample)
+                
+                # Get softmax probabilities
+                probs = torch.softmax(predictions[0], dim=0)
+                
+                # Apply inverse transform
+                inv_probs = inverse_transform(probs)
+                
+                # Accumulate probabilities
+                acc_probs[0] += inv_probs
+                
+                # Clear memory
+                del predictions, probs, inv_probs, aug_sample
+                torch.cuda.empty_cache()
+        
+        # Average accumulated probabilities
+        acc_probs = acc_probs / len(self.tta_transforms)
+        
+        return acc_probs[0]  # Return shape [Nclass, Z, Y, X]
+
+    def _run_inference(self, input_data):
+        """
+        Main inference function that handles all combinations - Model Soup and/or TTA
+        """
         batch_size = input_data.shape[0]
         results = []
         
-        # Process one sample at a time
+        # Process one sample at a time for memory efficiency
         for sample_idx in range(batch_size):
-            # Extract single sample
             single_sample = input_data[sample_idx:sample_idx+1]
             
             # Initialize probability accumulator for this sample
-            # Shape: [1, Nclass, Z, Y, X]
             acc_probs = torch.zeros(
-                (1, self.Nclass, *single_sample.shape[2:]), 
+                (self.Nclass, *single_sample.shape[2:]), 
                 dtype=torch.float32, device=self.device
             )
             
-            # Process each augmentation
+            # Process each model
             with torch.no_grad():
-                for tta_transform, inverse_transform in zip(self.tta_transforms, self.inverse_tta_transforms):
-                    # Apply transform to single sample
-                    aug_sample = tta_transform(single_sample)
+                for model in self.models:
+                    # Apply TTA with this model
+                    if self.apply_tta:
+                        model_probs = self._apply_tta_single_model(model, single_sample)
+                    # Run inference without TTA
+                    else:
+                        predictions = self._run_single_model_inference(model, single_sample)
+                        model_probs = torch.softmax(predictions[0], dim=0)
+                        del predictions
                     
-                    # Free memory
+                    # Accumulate probabilities from this model
+                    acc_probs += model_probs
+                    del model_probs
                     torch.cuda.empty_cache()
-                    
-                    # Run inference (one sample at a time)
-                    predictions = sliding_window_inference(
-                        inputs=aug_sample,
-                        roi_size=(self.dim_in, self.dim_in, self.dim_in),
-                        sw_batch_size=4,  # Process one window at a time
-                        predictor=self.model,
-                        overlap=0.5,
-                    )
-                    
-                    # Get softmax probabilities
-                    probs = self.softmax_transform(predictions[0])  # Get first (only) item
-                    
-                    # Apply inverse transform with correct dimensions
-                    inv_probs = inverse_transform(probs)
-                    
-                    # Accumulate probabilities
-                    acc_probs[0] += inv_probs
-                    
-                    # Clear memory
-                    del predictions, probs, inv_probs, aug_sample
             
-            # Average accumulated probabilities
-            acc_probs = acc_probs / len(self.tta_transforms)
+            # Average probabilities across models (and TTA augmentations if applied)
+            acc_probs = acc_probs / len(self.models)
             
-            # Convert to discrete prediction - get argmax along class dimension
-            # This gives us a tensor of shape [1, Z, Y, X] with discrete class indices
-            discrete_pred = torch.argmax(acc_probs, dim=1)
-            
-            # Add to results - keeping only the spatial dimensions [Z, Y, X]
-            results.append(discrete_pred[0])
+            # Convert to discrete prediction
+            discrete_pred = torch.argmax(acc_probs, dim=0)
+            results.append(discrete_pred)
             
             # Clear memory
             del acc_probs, discrete_pred
@@ -158,7 +197,7 @@ class Predictor:
     def predict_on_gpu(self, 
                         runIDs: List[str],
                         voxel_spacing: float,
-                        tomo_algorithm: str ):
+                        tomo_algorithm: str):
 
         # Load data for the current batch
         test_loader, test_dataset = dataio.create_predict_dataloader(
@@ -174,22 +213,21 @@ class Predictor:
         with torch.no_grad():
             for data in tqdm(test_loader):
                 tomogram = data['image'].to(self.device)
-                if self.apply_tta: data['pred'] = self._run_inference_tta(tomogram)
-                else:              data['pred']  = self._run_inference(tomogram)
+                data['pred'] = self._run_inference(tomogram)
+                
                 for idx in range(len(data['image'])):
                     predictions.append(data['pred'][idx].squeeze(0).numpy(force=True)) 
 
         return predictions
 
     def batch_predict(self, 
-                      num_tomos_per_batch = 15, 
-                      runIDs: Optional[str] = None,
+                      num_tomos_per_batch: int = 15, 
+                      runIDs: Optional[List[str]] = None,
                       voxel_spacing: float = 10,
                       tomo_algorithm: str = 'denoised', 
                       segmentation_name: str = 'prediction',
                       segmentation_user_id: str = 'octopi',
                       segmentation_session_id: str = '0'):
-
         """Run inference on tomograms in batches."""                          
         
         # If runIDs are not provided, load all runs
@@ -202,10 +240,9 @@ class Predictor:
 
         # Iterate over batches of runIDs
         for i in range(0, len(runIDs), num_tomos_per_batch):
-
             # Get a batch of runIDs
             batch_ids = runIDs[i:i + num_tomos_per_batch]  
-            print('Running Inference on the Follow RunIDs: ', batch_ids)
+            print('Running Inference on the Following RunIDs: ', batch_ids)
 
             predictions = self.predict_on_gpu(batch_ids, voxel_spacing, tomo_algorithm)
 
@@ -225,27 +262,20 @@ class Predictor:
 
     def create_tta_augmentations(self):
         """Define TTA augmentations and inverse transforms."""
-
-        # Instead of Flip lets rotate around the first axis 3 times (90,180,270)
+        # Rotate around the YZ plane (dims 3,4 for input, dims 2,3 for output)
         self.tta_transforms = [
-            lambda x: x,                    # Identity (no augmentation)
-            lambda x: torch.rot90(x, k=1, dims=(3, 4)),  # 90° rotation
-            lambda x: torch.rot90(x, k=2, dims=(3, 4)),  # 180° rotation
-            lambda x: torch.rot90(x, k=3, dims=(3, 4)),  # 270° rotation
-            # lambda x: torch.flip(x, dims=(3,)),        # Flip along height (spatial_axis=1)
-            # lambda x: torch.flip(x, dims=(4,)),        # Flip along width (spatial_axis=2)  
-            # lambda x: torch.flip(x, dims=(3, 4)),      # Flip along both height and width
+            lambda x: x,                                    # Identity (no augmentation)
+            lambda x: torch.rot90(x, k=1, dims=(3, 4)),   # 90° rotation
+            lambda x: torch.rot90(x, k=2, dims=(3, 4)),   # 180° rotation
+            lambda x: torch.rot90(x, k=3, dims=(3, 4)),   # 270° rotation
         ]
 
         # Define inverse transformations (flip back to original orientation)
         self.inverse_tta_transforms = [
-            lambda x: x,                           # Identity (no transformation needed)
+            lambda x: x,                                    # Identity (no transformation needed)
             lambda x: torch.rot90(x, k=-1, dims=(2, 3)),  # Inverse of 90° (i.e. -90°)
             lambda x: torch.rot90(x, k=-2, dims=(2, 3)),  # Inverse of 180° (i.e. -180°)
             lambda x: torch.rot90(x, k=-3, dims=(2, 3)),  # Inverse of 270° (i.e. -270°)
-            # lambda x: torch.flip(x, dims=(2,)),        # Same as forward
-            # lambda x: torch.flip(x, dims=(3,)),        # Same as forward
-            # lambda x: torch.flip(x, dims=(2, 3)),      # Same as forward
         ]
 
 ###################################################################################################################################################
