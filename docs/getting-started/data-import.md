@@ -54,7 +54,7 @@ If you have tomograms stored locally in `*.mrc` format (e.g., from Warp, IMOD, o
 
 ```bash
 octopi import-mrc-volumes \
-    --input-folder /path/to/mrc/files \
+    --mrcs-path /path/to/mrc/files \
     --config /path/to/config.json \
     --target-tomo-type denoised \
     --input-voxel-size 5 \
