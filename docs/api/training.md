@@ -75,7 +75,7 @@ Key training parameters include:
 ### Basic Training Setup
 
 ```python
-from octopi.losses import FocalTverskyLoss
+from octopi.utils.losses import FocalTverskyLoss
 from monai.losses import TverskyLoss
 from octopi.workflows import train
 
@@ -187,7 +187,7 @@ from monai.losses import FocalLoss, TverskyLoss, DiceLoss, GeneralizedDiceLoss
 
 **Octopi Custom Loss Functions:**
 ```python
-from octopi.losses import FocalTverskyLoss, WeightedFocalTverskyLoss
+from octopi.utils.losses import FocalTverskyLoss, WeightedFocalTverskyLoss
 ```
 
 - **FocalTverskyLoss**: Combines Tversky's class balancing with Focal's hard example mining. The `gamma` parameter adds focusing power to the Tversky formulation.

@@ -28,6 +28,10 @@ Our deep learning-based pipeline streamlines the training and execution of 3D au
 ```bash
 pip install octopi
 ```
+**⚠️ Note:** One of the current dependencies is currently not working with pip 25. To temporarily reduce the pip version, run:
+```bash
+pip install --upgrade "pip<25"
+```
 
 ### Basic Usage
 
@@ -36,24 +40,10 @@ octopi provides two main command-line interfaces:
 ```bash
 # Main CLI for training, inference, and data processing
 octopi --help
-```
 
-The main `octopi` command provides subcommands for:
-- Data import and preprocessing
-- Training label preparation
-- Model training and exploration
-- Inference and particle localization
-
-```bash
 # HPC-specific CLI for submitting jobs to SLURM clusters
 octopi-slurm --help
 ```
-
-The `octopi-slurm` command provides utilities for:
-- Submitting training jobs to SLURM clusters
-- Managing distributed inference tasks
-- Handling batch processing on HPC systems
-
 ## 📚 Documentation
 
 For detailed documentation, tutorials, CLI and API reference, visit our [documentation](https://chanzuckerberg.github.io/octopi/).
