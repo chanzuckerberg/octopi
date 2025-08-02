@@ -7,7 +7,7 @@ from octopi.datasets import generators
 from octopi.pytorch import trainer 
 import multiprocess as mp
 import copick, torch, os
-from octopi import io
+from octopi.utils import io
 from tqdm import tqdm
     
 def train(config, target_info, tomo_algorithm, voxel_size, loss_function,
