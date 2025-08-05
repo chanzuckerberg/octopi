@@ -11,9 +11,22 @@ from octopi.utils import io
 from tqdm import tqdm
     
 def train(config, target_info, tomo_algorithm, voxel_size, loss_function,
-          model_config, model_weights = None, trainRunIDs = None, validateRunIDs = None,
+          model_config = None, model_weights = None, trainRunIDs = None, validateRunIDs = None,
           model_save_path = 'results', best_metric = 'fBeta2', num_epochs = 1000, use_ema = True):
 
+    # If No Model Configuration is Provided, Use the Default Configuration
+    if model_config is None:
+        root = copick.from_file(config)
+        model_config = {
+            'architecture': 'Unet',
+            'num_classes': root.pickable_objects[-1].label + 1,
+            'dim_in': 80,
+            'strides': [2, 2, 1],
+            'channels': [48, 64, 80, 80],
+            'dropout': 0.0, 'num_res_units': 1,
+        }
+        print('No Model Configuration Provided, Using Default Configuration')
+        print(model_config)
     
     data_generator = generators.TrainLoaderManager(
             config, 
