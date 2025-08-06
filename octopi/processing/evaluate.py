@@ -1,7 +1,7 @@
 from copick_utils.io import readers
 from scipy.spatial import distance
+import copick, json, os, yaml   
 from typing import List
-import copick, json, os
 import numpy as np
 
 class evaluator:
@@ -202,14 +202,27 @@ class evaluator:
             }    
             
             os.makedirs(save_path, exist_ok=True)
-            summary_metrics = { "input": self.input_params, "parameters": self.parameters, 
-                                    "summary_metrics": final_summary_metrics }
-            with open(os.path.join(save_path, 'average_metrics.json'), 'w') as f:
-                json.dump(summary_metrics, f, indent=4)
-            print(f'\nAverage Metrics saved to {os.path.join(save_path, "average_metrics.json")}')
+            summary_metrics = { "input": self.input_params, 
+                                "final_fbeta_score": final_fbeta,  
+                                "aggregated_particle_scores": {    # Optionally add per-particle details
+                                    name: {
+                                        "tp": counts['total_tp'],
+                                        "fp": counts['total_fp'], 
+                                        "fn": counts['total_fn'],
+                                        "weight": self.weights.get(name, 1)
+                                    } for name, counts in aggregated_counts.items()
+                                },
+                                "summary_metrics": final_summary_metrics, 
+                                "parameters": self.parameters,  }
+
+            # Save average metrics to YAML file
+            with open(os.path.join(save_path, 'average_metrics.yaml'), 'w') as f:
+                yaml.dump(summary_metrics, f, indent=4, default_flow_style=False, sort_keys=False)
+            print(f'\nAverage Metrics saved to {os.path.join(save_path, "average_metrics.yaml")}')
             
-            detailed_metrics = { "input": self.input_params, "parameters": self.parameters, 
-                                "metrics": metrics }
+            detailed_metrics = { "input": self.input_params,  
+                                  "metrics": metrics,
+                                 "parameters": self.parameters, }
             with open(os.path.join(save_path, 'metrics.json'), 'w') as f:
                 json.dump(detailed_metrics, f, indent=4)
             print(f'Metrics saved to {os.path.join(save_path, "metrics.json")}')
