@@ -140,7 +140,7 @@ def localize(config, voxel_size, seg_info, pick_user_id, pick_session_id, n_proc
             method = 'watershed', filter_size = 10, radius_min_scale = 0.4, radius_max_scale = 1.0,
             run_ids = None):
     """
-    Extract 3D Coordiantes from the Segmentation Maps
+    Extract 3D Coordinates from the Segmentation Maps
 
     Args:
         config (str): Path to the Copick Config File
