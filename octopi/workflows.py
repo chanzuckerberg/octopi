@@ -1,4 +1,4 @@
-from octopi.extract.localize import processs_localization
+from octopi.extract.localize import process_localization
 import octopi.processing.evaluate as octopi_evaluate
 from monai.metrics import ConfusionMatrixMetric
 from octopi.models import common as builder
@@ -171,7 +171,7 @@ def localize(config, voxel_size, seg_info, pick_user_id, pick_session_id, n_proc
     print(f"Using {n_procs} processes to parallelize across {n_run_ids} run IDs.")
     with mp.Pool(processes=n_procs) as pool:
         with tqdm(total=n_run_ids, desc="Localization", unit="run") as pbar:
-            worker_func = lambda run_id: processs_localization(
+            worker_func = lambda run_id: process_localization(
                 root.get_run(run_id),  
                 objects, 
                 seg_info,

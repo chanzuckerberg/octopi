@@ -1,6 +1,8 @@
 from concurrent.futures import ThreadPoolExecutor
-import threading
-import queue
+from octopi.pytorch.segmentation import Predictor
+from typing import List, Union, Optional
+from copick_utils.io import writers
+import queue, torch
 
 class MultiGPUPredictor(Predictor):
     
