@@ -5,13 +5,21 @@ This page covers running inference with trained octopi models, including segment
 ## Segmentation
 
 Run trained models on tomograms to generate segmentation masks. The segmentation process takes your trained model weights and configuration to produce probability maps for each object class defined in your training targets.
-Key segmentation parameters include:
 
-* **model_weights**: Path to your trained model weights (`.pth` file from training)
-* **model_config**: Path to model configuration (`.yaml` file from training)
-* **seg_info**: Tuple defining where to save segmentation results (`name`, `user_id`, `session_id`)
-* **use_tta**: Whether to use test-time augmentation for improved robustness
-* **run_ids**: Optional list of specific tomograms to process (None for all available)
+!!! info "Segmentation Parameters"
+    - **model_weights**: Path to your trained model weights (`.pth` file from training)
+    - **model_config**: Path to model configuration (`.yaml` file from training)
+    - **seg_info**: Tuple defining where to save segmentation results (`name`, `user_id`, `session_id`)
+    - **use_tta**: Whether to use test-time augmentation for improved robustness
+    - **run_ids**: Optional list of specific tomograms to process (None for all available)
+
+The algorithm automatically applies size filtering based on object radii defined in your Copick configuration, using scale factors of 0.4-1.0 times the expected radius.
+
+!!! tip 
+    We can enable **model soup ensembling** by providing a list of model weights (or optionally a single or list of model configs). 
+    
+    This technique averages predictions from multiple models, which is particularly useful for combining cross-validation fold models or experimenting with different architectures to improve robustness and reduce prediction variance.
+
 
 ### Running Segmentation
 
@@ -42,17 +50,18 @@ segment(
 
 <details markdown="1">
 <summary><strong>💡 Segmentation Function Reference</strong></summary>
+
 `segment(config, tomo_algorithm, voxel_size, model_weights, model_config, seg_info=['predict', 'octopi', '1'], use_tta=False)`
 
-The segmentation process applies your trained model to tomograms in batches of 15 for memory efficiency. It automatically detects all available run IDs and generates probability maps for each object class defined in your training targets. The resulting segmentation masks are saved to the Copick structure according to your specified parameters (under `seg_info`).
+The segmentation process applies your trained model(s) to tomograms in batches for memory efficiency. It supports both single model inference and Model Soup ensembling, with optional test-time augmentation. Predictions are averaged across models and augmentations, then converted to discrete segmentation masks.
 
 **Parameters:**
 
 - `config` (str): Path to Copick configuration file
-- `tomo_algorithm` (str): Tomogram algorithm identifier
+- `tomo_algorithm` (str): Tomogram algorithm identifier  
 - `voxel_size` (float): Voxel spacing in Angstroms
-- `model_weights` (str): Path to trained model weights (.pth file)
-- `model_config` (str): Path to model configuration (.yaml file)
+- `model_weights` (str or list): Path(s) to trained model weights (.pth file(s))
+- `model_config` (str or list): Path(s) to model configuration (.yaml file(s))
 - `seg_info` (tuple): Segmentation specification `(name, user_id, session_id)` (default: ['predict', 'octopi', '1'])
 - `use_tta` (bool): Enable test-time augmentation (default: False)
 
@@ -65,12 +74,11 @@ Segmentation masks saved to Copick structure with probability values for each ob
 
 Extract particle coordinates from segmentation masks using watershed algorithm. The localization process converts probability maps into discrete particle coordinates by identifying local maxima and applying size constraints.
 
-The localization uses the following parameters:
-
-- **seg_info**: Tuple specifying which segmentation to process `(name, user_id, session_id)`
-- **pick_user_id/pick_session_id**: Identifiers for saving the resulting coordinates
-- **voxel_size**: Voxel spacing for coordinate scaling
-- **method**: Particle detection algorithm (watershed by default)
+!!! info "Localization Parameters"
+    - **seg_info**: Tuple specifying which segmentation to process `(name, user_id, session_id)`
+    - **pick_user_id/pick_session_id**: Identifiers for saving the resulting coordinates
+    - **voxel_size**: Voxel spacing for coordinate scaling
+    - **method**: Particle detection algorithm (watershed by default)
 
 The algorithm automatically applies size filtering based on object radii defined in your Copick configuration, using scale factors of 0.4-1.0 times the expected radius.
 
@@ -134,13 +142,11 @@ $$\text{Recall} = \frac{\text{True Positives}}{\text{True Positives} + \text{Fal
 
 $$F_{\beta} = (1 + \beta^2) \cdot \frac{\text{precision} \cdot \text{recall}}{\beta^2 \cdot \text{precision} + \text{recall}}$$
 
-
-Key evaluation parameters include:
-
-- **gt_user_id/gt_session_id**: Ground truth annotation identifiers
-- **pred_user_id/pred_session_id**: Predicted coordinate identifiers
-- **distance_threshold**: Normalized distance threshold for matching (default: 0.5)
-- **run_ids**: Optional list of specific tomograms to evaluate (None for all available)
+!!! info "Evaluation Parameters"
+    - **gt_user_id/gt_session_id**: Ground truth annotation identifiers
+    - **pred_user_id/pred_session_id**: Predicted coordinate identifiers
+    - **distance_threshold**: Normalized distance threshold for matching (default: 0.5)
+    - **run_ids**: Optional list of specific tomograms to evaluate (None for all available)
 
 ### Running Evaluation
 

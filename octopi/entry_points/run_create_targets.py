@@ -169,7 +169,7 @@ def parse_args():
     # Parameters
     parameters_group = parser.add_argument_group("Parameters")
     parameters_group.add_argument("--tomo-alg", type=str, default="wbp", help="Tomogram reconstruction algorithm.")    
-    parameters_group.add_argument("--radius-scale", type=float, default=0.8, help="Scale factor for object radius.")
+    parameters_group.add_argument("--radius-scale", type=float, default=0.7, help="Scale factor for object radius.")
     parameters_group.add_argument("--voxel-size", type=float, default=10, help="Voxel size for tomogram reconstruction.")    
     
     output_group = parser.add_argument_group("Output Arguments")

@@ -11,7 +11,7 @@ from tqdm import tqdm
 import numpy as np
 import gc
 
-def processs_localization(run,  
+def process_localization(run,  
                           objects, 
                           seg_info: Tuple[str, str, str],
                           method: str = 'com', 

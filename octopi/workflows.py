@@ -1,4 +1,4 @@
-from octopi.extract import localize as octopi_localize
+from octopi.extract.localize import process_localization
 import octopi.processing.evaluate as octopi_evaluate
 from monai.metrics import ConfusionMatrixMetric
 from octopi.models import common as builder
@@ -7,13 +7,43 @@ from octopi.datasets import generators
 from octopi.pytorch import trainer 
 import multiprocess as mp
 import copick, torch, os
-from octopi import io
+from octopi.utils import io
 from tqdm import tqdm
     
 def train(config, target_info, tomo_algorithm, voxel_size, loss_function,
-          model_config, model_weights = None, trainRunIDs = None, validateRunIDs = None,
+          model_config = None, model_weights = None, trainRunIDs = None, validateRunIDs = None,
           model_save_path = 'results', best_metric = 'fBeta2', num_epochs = 1000, use_ema = True):
+    """
+    Train a UNet Model for Segmentation
 
+    Args:
+        config (str): Path to the Copick Config File
+        target_info (list): List containing the target user ID, target session ID, and target algorithm
+        tomo_algorithm (str): The tomographic algorithm to use for segmentation
+        voxel_size (float): The voxel size of the data
+        loss_function (str): The loss function to use for training
+        model_config (dict): The model configuration
+        model_weights (str): The path to the model weights
+        trainRunIDs (list): The list of run IDs to use for training
+        validateRunIDs (list): The list of run IDs to use for validation
+        model_save_path (str): The path to save the model
+        best_metric (str): The metric to use for early stopping
+        num_epochs (int): The number of epochs to train for
+    """
+
+    # If No Model Configuration is Provided, Use the Default Configuration
+    if model_config is None:
+        root = copick.from_file(config)
+        model_config = {
+            'architecture': 'Unet',
+            'num_classes': root.pickable_objects[-1].label + 1,
+            'dim_in': 80,
+            'strides': [2, 2, 1],
+            'channels': [48, 64, 80, 80],
+            'dropout': 0.0, 'num_res_units': 1,
+        }
+        print('No Model Configuration Provided, Using Default Configuration')
+        print(model_config)
     
     data_generator = generators.TrainLoaderManager(
             config, 
@@ -72,10 +102,20 @@ def train(config, target_info, tomo_algorithm, voxel_size, loss_function,
     io.save_results_to_json(results, results_save_name)
 
 def segment(config, tomo_algorithm, voxel_size, model_weights, model_config, 
-            seg_info = ['predict', 'octopi', '1'], use_tta = False):
+            seg_info = ['predict', 'octopi', '1'], use_tta = False, run_ids = None):
+    """
+    Segment a Dataset using a Trained Model or Ensemble of Models
 
-    # Lets Assume We Will Always Use All RunIDs
-    run_ids = None
+    Args:
+        config (str): Path to the Copick Config File
+        tomo_algorithm (str): The tomographic algorithm to use for segmentation
+        voxel_size (float): The voxel size of the data
+        model_weights (str, list): The path to the model weights or a list of paths to the model weights
+        model_config (str, list): The model configuration or a list of model configurations
+        seg_info (list): The segmentation information
+        use_tta (bool): Whether to use test time augmentation
+        run_ids (list): The list of run IDs to use for segmentation
+    """
 
     # Initialize the Predictor
     predict = segmentation.Predictor(
@@ -97,7 +137,24 @@ def segment(config, tomo_algorithm, voxel_size, model_weights, model_config,
     )
 
 def localize(config, voxel_size, seg_info, pick_user_id, pick_session_id, n_procs = 16,
-            method = 'watershed', filter_size = 10, radius_min_scale = 0.4, radius_max_scale = 1.0):
+            method = 'watershed', filter_size = 10, radius_min_scale = 0.4, radius_max_scale = 1.0,
+            run_ids = None):
+    """
+    Extract 3D Coordinates from the Segmentation Maps
+
+    Args:
+        config (str): Path to the Copick Config File
+        voxel_size (float): The voxel size of the data
+        seg_info (list): The segmentation information
+        pick_user_id (str): The user ID of the pick
+        pick_session_id (str): The session ID of the pick
+        n_procs (int): The number of processes to use for parallelization
+        method (str): The method to use for localization
+        filter_size (int): The filter size to use for localization
+        radius_min_scale (float): The minimum radius scale to use for localization
+        radius_max_scale (float): The maximum radius scale to use for localization
+        run_ids (list): The list of run IDs to use for localization
+    """
 
     # Load the Copick Config
     root = copick.from_file(config) 
@@ -106,14 +163,15 @@ def localize(config, voxel_size, seg_info, pick_user_id, pick_session_id, n_proc
     objects = [(obj.name, obj.label, obj.radius) for obj in root.pickable_objects if obj.is_particle]    
 
     # Get all RunIDs
-    run_ids = [run.name for run in root.runs]
+    if run_ids is None:
+        run_ids = [run.name for run in root.runs]
     n_run_ids = len(run_ids)
 
      # Run Localization - Main Parallelization Loop
     print(f"Using {n_procs} processes to parallelize across {n_run_ids} run IDs.")
     with mp.Pool(processes=n_procs) as pool:
         with tqdm(total=n_run_ids, desc="Localization", unit="run") as pbar:
-            worker_func = lambda run_id: localize.processs_localization(
+            worker_func = lambda run_id: process_localization(
                 root.get_run(run_id),  
                 objects, 
                 seg_info,
@@ -136,6 +194,19 @@ def evaluate(config,
              gt_user_id, gt_session_id,
              pred_user_id, pred_session_id,
              run_ids = None, distance_threshold = 0.5, save_path = None):
+    """
+    Evaluate the Localization on a Dataset
+
+    Args:
+        config (str): Path to the Copick Config File
+        gt_user_id (str): The user ID of the ground truth
+        gt_session_id (str): The session ID of the ground truth
+        pred_user_id (str): The user ID of the predicted coordinates
+        pred_session_id (str): The session ID of the predicted coordinates
+        run_ids (list): The list of run IDs to use for evaluation
+        distance_threshold (float): The distance threshold to use for evaluation
+        save_path (str): The path to save the evaluation results
+    """
              
     print('Running Evaluation on the Following Query:')
     print(f'Distance Threshold: {distance_threshold}')

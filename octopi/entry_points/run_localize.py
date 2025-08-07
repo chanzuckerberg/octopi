@@ -58,7 +58,7 @@ def pick_particles(
     print(f"Using {n_procs} processes to parallelize across {n_run_ids} run IDs.")
     with mp.Pool(processes=n_procs) as pool:
         with tqdm(total=n_run_ids, desc="Localization", unit="run") as pbar:
-            worker_func = lambda run_id: localize.processs_localization(
+            worker_func = lambda run_id: localize.process_localization(
                 root.get_run(run_id),  
                 objects, 
                 seg_info,
