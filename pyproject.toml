@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "octopi"
-dynamic = ["version"] 
+version = "1.1.0"  
 description = "Model architecture exploration for cryoET particle picking"
 authors = [
     {name = "Jonathan Schwartz"},
@@ -69,13 +69,15 @@ docs = [
 octopi = "octopi.main:cli_main"
 octopi-slurm = "octopi.main:cli_slurm_main"
 
+# Keep the hatch.version config so release-please can update both files
 [tool.hatch.version]
 path = "octopi/__init__.py"
+pattern = "__version__ = ['\"](?P<version>[^'\"]*)['\"]"
 
 [tool.hatch.metadata]
 allow-direct-references = true
 dependency-overrides = [
-    "numpy>=2"  # or whatever version you need
+    "numpy>=2"
 ]
 
 [project.urls]
