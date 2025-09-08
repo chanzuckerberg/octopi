@@ -30,9 +30,10 @@ Octopi is availableon PyPI and can be installed using pip:
 pip install octopi
 ```
 
-⚠️ **Note**: One of the current dependencies is currently not working with pip 25. To temporarily reduce the pip version, run:
+⚠️ **Note**: One of the current dependencies is currently not working with pip 25.1. We recommend using pip 25.2 or higher,
+or [`uv pip`](https://docs.astral.sh/uv/pip/) when installing octopi.
 ```bash
-pip install --upgrade "pip<25"
+pip install --upgrade "pip>=25.2"
 ```
 
 ### Basic Usage
