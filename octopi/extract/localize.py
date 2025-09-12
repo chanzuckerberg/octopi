@@ -26,19 +26,25 @@ def process_localization(run,
     if method not in ['watershed', 'com']:
         raise ValueError(f"Invalid method '{method}'. Expected 'watershed' or 'com'.")
 
-    # Get Segmentation
-    seg = readers.segmentation(
-        run, voxel_size, 
-        seg_info[0], 
-        user_id=seg_info[1], 
-        session_id=seg_info[2],
-        raise_error=False)
+    # Get Segmentation with Error Handling
+    try:
+        seg = readers.segmentation(
+            run, float(voxel_size), 
+            seg_info[0], 
+            user_id=seg_info[1], 
+            session_id=seg_info[2],
+            raise_error=False)
 
-    # Preprocess Segmentation
-    # seg = preprocess_segmentation(seg, voxel_size, objects)
+        # Preprocess Segmentation
+        # seg = preprocess_segmentation(seg, voxel_size, objects)
 
-    # If No Segmentation is Found, Return
-    if seg is None:
+        # If No Segmentation is Found, Return
+        if seg is None:
+            print(f"No segmentation found for {run.name}.")
+            return
+
+    except Exception as e:
+        print(f"Error occurred while reading segmentation from {run.name}: {e}")
         return
     
     # Iterate through all user pickable objects
@@ -66,11 +72,10 @@ def process_localization(run,
             # Convert the Picks back to Angstrom
             points *= voxel_size
 
-            # Save Picks
-            try:
-                picks = run.new_picks(object_name = obj[0], session_id = pick_session_id, user_id=pick_user_id)
-            except:
-                picks = run.get_picks(object_name = obj[0], session_id = pick_session_id, user_id=pick_user_id)[0]
+            # Save Picks - Overwrite if exists
+            picks = run.new_picks(
+                object_name = obj[0], session_id = pick_session_id, 
+                user_id=pick_user_id, exist_ok=True)
 
             # Assign Identity As Orientation
             orientations = np.zeros([points.shape[0], 4, 4])
@@ -203,59 +208,3 @@ def remove_repeated_picks(coordinates, distanceThreshold, pixelSize = 1):
 
     return unique_coordinates
 
-def preprocess_segmentation(segmentation, voxel_size, particle_info):
-    """
-    Remove tiny fragments that aren't real particles
-    
-    Args:
-        segmentation (np.ndarray): The multilabel segmentation array
-        particle_info (list): List of tuples containing (name, segment_id, radius)
-        
-    Returns:
-        np.ndarray: Processed segmentation with small fragments removed
-    """
-    import numpy as np
-    from skimage.morphology import remove_small_objects
-    
-    processed_seg = segmentation.copy()
-    
-    # Map segment IDs to particle types and their minimum sizes
-    segment_to_info = {}
-    for name, segment_id, radius in particle_info:
-        # # For small particles, use a larger minimum size
-        # if radius < 135:
-        #     scale = 0.65
-        # # Normal threshold for other particles
-        # else:
-        #     scale = 0.4
-        scale = 0.3
-        radius = radius / voxel_size
-        min_size = (4/3) * np.pi * ((radius * 0.5) ** 3)
-        
-        segment_to_info[segment_id] = {
-            'name': name,
-            'min_size': min_size
-        }
-    
-    # Get unique labels
-    unique_labels = np.unique(segmentation)
-    unique_labels = unique_labels[unique_labels > 0]  # Skip background
-    
-    # Process each label
-    for label in unique_labels:
-        if label not in segment_to_info:
-            continue
-            
-        # Create binary mask for this label
-        mask = segmentation == label
-        
-        # Get minimum size for this particle type
-        min_size = segment_to_info[label]['min_size']
-        
-        # Remove small objects
-        cleaned_mask = remove_small_objects(mask, min_size=min_size * scale)
-        
-        # Update segmentation
-        processed_seg[mask & ~cleaned_mask] = 0
-    
-    return processed_seg

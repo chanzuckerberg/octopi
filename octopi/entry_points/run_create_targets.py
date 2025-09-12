@@ -186,11 +186,12 @@ def cli():
     output_yaml = f'create-targets_{args.target_user_id}_{args.target_session_id}_{args.target_segmentation_name}.yaml'
     save_parameters(args, output_yaml)      
 
-    if args.target:
+    # Check if either target or seg_target is provided
+    if args.target is not None or args.seg_target:
         # If at least one --target is provided, call create_sub_train_targets
         create_sub_train_targets(
             config=args.config,
-            pick_targets=args.target,
+            pick_targets=args.target if args.target else [],
             seg_targets=args.seg_target,
             voxel_size=args.voxel_size,
             radius_scale=args.radius_scale,
