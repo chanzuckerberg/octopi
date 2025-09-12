@@ -3,6 +3,7 @@ from copick_utils.io import readers, writers
 from typing import List
 from tqdm import tqdm
 import numpy as np
+import zarr
 
 def generate_targets(
     root,
@@ -54,11 +55,20 @@ def generate_targets(
         numPicks = 0
         run = root.get_run(runID)
 
-        # Get Tomogram 
-        tomo = readers.tomogram(run, voxel_size, tomo_algorithm)
+        # Get Target Shape
+        vs = run.get_voxel_spacing(voxel_size)
+        if vs is None:
+            print(f"Warning: skipping run {runID} with no voxel spacing {voxel_size}")
+            continue
+        tomo = vs.get_tomogram(tomo_algorithm)
+        if tomo is None:
+            print(f"Warning: skipping run {runID} with no tomogram {tomo_algorithm}")
+            continue
         
         # Initialize Target Volume
-        target = np.zeros(tomo.shape, dtype=np.uint8)
+        loc = tomo.zarr()
+        shape = zarr.open(loc)['0'].shape
+        target = np.zeros(shape, dtype=np.uint8)
 
         # Generate Targets
         # Applicable segmentations
@@ -104,7 +114,7 @@ def generate_targets(
                                 )
 
         # Write Segmentation for non-empty targets
-        if target.max() > 0 and numPicks > 0:
+        if target.max() > 0:
             tqdm.write(f'Annotating {numPicks} picks in {runID}...')    
             writers.segmentation(run, target, target_user_name, 
                                name = target_segmentation_name, session_id= target_session_id, 
