@@ -88,15 +88,16 @@ def train_model(
     # Create UNet-Trainer
     model_trainer = trainer.ModelTrainer(model, device, loss_function, metrics_function, optimizer)
 
+    # Save parameters and results
+    parameters_save_name = os.path.join(model_save_path, "model_config.yaml")
+    io.save_parameters_to_yaml(model_builder, model_trainer, data_generator, parameters_save_name)
+
+    # Train the Model 
     results = model_trainer.train(
         data_generator, model_save_path, max_epochs=num_epochs,
         crop_size=model_config['dim_in'], my_num_samples=num_tomo_crops,
         val_interval=val_interval, best_metric=best_metric, verbose=True
     )
-    
-    # Save parameters and results
-    parameters_save_name = os.path.join(model_save_path, "model_config.yaml")
-    io.save_parameters_to_yaml(model_builder, model_trainer, data_generator, parameters_save_name)
 
     # TODO: Write Results to Zarr or Another File Format? 
     results_save_name = os.path.join(model_save_path, "results.json")

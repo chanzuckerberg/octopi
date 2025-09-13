@@ -88,7 +88,7 @@ def generate_targets(
             segvol = seg.numpy()
             # Set all non-zero values to the class label
             segvol[segvol > 0] = classLabel
-            target[:] = segvol 
+            target = np.maximum(target, segvol)
 
         # Applicable picks
         query = []
