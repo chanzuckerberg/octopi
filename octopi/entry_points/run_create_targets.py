@@ -183,8 +183,7 @@ def cli():
     args = parse_args()
 
     # Save JSON with Parameters
-    output_yaml = f'create-targets_{args.target_user_id}_{args.target_session_id}_{args.target_segmentation_name}.yaml'
-    save_parameters(args, output_yaml)      
+    save_parameters(args)      
 
     # Check if either target or seg_target is provided
     if args.target is not None or args.seg_target:
@@ -258,6 +257,12 @@ def save_parameters(args, output_path: str):
     }
 
      # Check if the YAML file already exists
+    root = copick.from_file(args.config)
+    basepath = os.path.join(root.config.overlay_root, 'logs')
+    os.makedirs(basepath, exist_ok=True)
+    output_path = os.path.join(
+        basepath, 
+        f'create-targets_{args.target_user_id}_{args.target_session_id}_{args.target_segmentation_name}.yaml')
     if os.path.exists(output_path):
         # Load the existing content
         with open(output_path, 'r') as f:
