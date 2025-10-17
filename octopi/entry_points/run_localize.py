@@ -124,7 +124,6 @@ def cli():
         f'localize-{args.pick_user_id}_{args.pick_session_id}.yaml')
     save_parameters(args, output_path)    
 
-    import pdb; pdb.set_trace()
 
     # Set multiprocessing start method
     mp.set_start_method("spawn")
