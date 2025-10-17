@@ -7,9 +7,9 @@ from monai.transforms import (
 )
 from typing import List, Optional, Union
 from octopi.datasets import io as dataio
+import torch, copick, gc, os, pprint
 from copick_utils.io import writers
 from octopi.models import common
-import torch, copick, gc, os
 from octopi.utils import io
 from tqdm import tqdm
 import numpy as np
@@ -47,12 +47,14 @@ class Predictor:
         if isinstance(model_weights, str):
             model_weights = [model_weights]
         self.apply_modelsoup = len(model_weights) > 1
+        self.model_weights = model_weights
 
         # Handle Single Model Config or Multiple Model Configs
         if isinstance(model_config, str):
             model_config = [model_config] * len(model_weights)
         elif len(model_config) != len(model_weights):
             raise ValueError("Number of model configs must match number of model weights.")
+        self.model_config = model_config            
 
         # Load the model(s)
         self._load_models(model_config, model_weights)    
@@ -221,7 +223,10 @@ class Predictor:
                       segmentation_name: str = 'prediction',
                       segmentation_user_id: str = 'octopi',
                       segmentation_session_id: str = '0'):
-        """Run inference on tomograms in batches."""                          
+        """Run inference on tomograms in batches."""    
+
+        # Print Save Inference Parameters
+        self.save_parameters(tomo_algorithm, voxel_spacing, [segmentation_name, segmentation_user_id, segmentation_session_id])
         
         # If runIDs are not provided, load all runs
         if runIDs is None:
@@ -251,7 +256,7 @@ class Predictor:
             torch.cuda.empty_cache()  # Clear unused GPU memory
             gc.collect()  # Trigger garbage collection for CPU memory
 
-        print('Predictions Complete!')
+        print('✅ Predictions Complete!')
 
     def create_tta_augmentations(self):
         """Define TTA augmentations and inverse transforms."""
@@ -270,3 +275,48 @@ class Predictor:
             lambda x: torch.rot90(x, k=-2, dims=(2, 3)),  # Inverse of 180° (i.e. -180°)
             lambda x: torch.rot90(x, k=-3, dims=(2, 3)),  # Inverse of 270° (i.e. -270°)
         ]
+
+    def save_parameters(self, 
+        tomo_algorithm: str, 
+        voxel_size: float, 
+        seg_info: List[str]
+    ):
+        """
+        Save inference parameters to a YAML file for record-keeping and reproducibility.
+        """
+
+        # Load the model config
+        model_config = io.load_yaml(self.model_config[0])
+
+        # Create parameters dictionary
+        params = {
+            "inputs": {
+                "config": self.config,
+                "tomo_alg": tomo_algorithm,
+                "voxel_size": voxel_size
+            },
+            'model': {
+                'configs': self.model_config,
+                'weights': self.model_weights
+            },
+            'labels': model_config['labels'],
+            "outputs": {
+                "seg_name": seg_info[0],
+                "seg_user_id": seg_info[1],
+                "seg_session_id": seg_info[2]
+            }
+        }
+
+        # Print the parameters
+        print(f"\nParameters for Inference (Segment Prediction):")
+        pprint.pprint(params); print()
+
+        # Save to YAML file
+        overlay_root = self.root.config.overlay_root
+        if overlay_root[:8] == 'local://': overlay_root = overlay_root[8:]
+        basepath = os.path.join(overlay_root, 'logs')
+        os.makedirs(basepath, exist_ok=True)
+        output_path = os.path.join(
+            basepath,
+            f'octopi-segment_{seg_info[1]}_{seg_info[2]}_{seg_info[0]}.yaml')
+        io.save_parameters_yaml(params, output_path)
