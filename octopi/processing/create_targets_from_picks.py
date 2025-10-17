@@ -152,8 +152,7 @@ def generate_targets(
     print('✅ Creation of targets complete!')
 
     # Save Parameters
-    overlay_root = root.config.overlay_root
-    if overlay_root[:8] == 'local://': overlay_root = overlay_root[8:]
+    overlay_root = io.remove_prefix(root.config.overlay_root)
     basepath = os.path.join(overlay_root, 'logs')
     os.makedirs(basepath, exist_ok=True)
     labels = {name: info['label'] for name, info in train_targets.items()}

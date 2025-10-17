@@ -116,14 +116,11 @@ def cli():
 
     # Save JSON with Parameters
     root = copick.from_file(args.config)
-    basepath = os.path.join(root.config.overlay_root, 'logs')
-    if basepath[:8] == 'local://': basepath = basepath[8:]
+    overlay_root = io.remove_prefix(root.config.overlay_root)
+    basepath = os.path.join(overlay_root, 'logs')
     os.makedirs(basepath, exist_ok=True)
-    output_path = os.path.join(
-        basepath, 
-        f'localize-{args.pick_user_id}_{args.pick_session_id}.yaml')
+    output_path = os.path.join(basepath, f'localize-{args.pick_user_id}_{args.pick_session_id}.yaml')
     save_parameters(args, output_path)    
-
 
     # Set multiprocessing start method
     mp.set_start_method("spawn")

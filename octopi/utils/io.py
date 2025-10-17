@@ -147,12 +147,10 @@ def check_target_config_path(data_generator):
 
     # Get the Overlay and Static Roots
     root = copick.from_file(config_path)
-    overlay_root = root.config.overlay_root
-    static_root = root.config.static_root
 
-    # Remove the local:// prefix from static_root if it exists
-    if overlay_root[:8] == 'local://': overlay_root = overlay_root[8:]     
-    if static_root is not None and static_root[:8] == 'local://': static_root = static_root[8:]            
+    # Remove the local:// prefix from static_root if it exists  
+    overlay_root = remove_prefix(root.config.overlay_root)   
+    static_root = remove_prefix(root.config.static_root)
     
     # Two Search Patterns, Either only a name provided or name, user_id, session_id
     if data_generator.target_session_id is None:
@@ -175,3 +173,14 @@ def check_target_config_path(data_generator):
     with open(path, 'r') as f:
         target_config = yaml.safe_load(f)
     return target_config
+
+def remove_prefix(text: str) -> str:
+    """
+    Remove a prefix from a string if it exists.
+    """
+    # Check if the text is None
+    if text is None:
+        return None
+    elif text[:8] == 'local://':
+        text = text[8:]
+    return text

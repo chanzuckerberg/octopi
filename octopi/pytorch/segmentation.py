@@ -312,8 +312,7 @@ class Predictor:
         pprint.pprint(params); print()
 
         # Save to YAML file
-        overlay_root = self.root.config.overlay_root
-        if overlay_root[:8] == 'local://': overlay_root = overlay_root[8:]
+        overlay_root = io.remove_prefix(self.root.config.overlay_root)
         basepath = os.path.join(overlay_root, 'logs')
         os.makedirs(basepath, exist_ok=True)
         output_path = os.path.join(
