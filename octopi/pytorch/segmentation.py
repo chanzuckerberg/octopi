@@ -318,5 +318,5 @@ class Predictor:
         os.makedirs(basepath, exist_ok=True)
         output_path = os.path.join(
             basepath,
-            f'octopi-segment_{seg_info[1]}_{seg_info[2]}_{seg_info[0]}.yaml')
+            f'segment-{seg_info[1]}_{seg_info[2]}_{seg_info[0]}.yaml')
         io.save_parameters_yaml(params, output_path)

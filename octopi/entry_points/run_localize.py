@@ -59,7 +59,7 @@ def pick_particles(
     with mp.Pool(processes=n_procs) as pool:
         with tqdm(total=n_run_ids, desc="Localization", unit="run") as pbar:
             worker_func = lambda run_id: localize.process_localization(
-                root.get_run(run_id),  
+                root.get_run(run_id),
                 objects, 
                 seg_info,
                 method, 
@@ -73,6 +73,8 @@ def pick_particles(
 
             for _ in pool.imap_unordered(worker_func, run_ids, chunksize=1):
                 pbar.update(1)
+
+    
 
     print('Localization Complete!')
 
@@ -115,11 +117,14 @@ def cli():
     # Save JSON with Parameters
     root = copick.from_file(args.config)
     basepath = os.path.join(root.config.overlay_root, 'logs')
+    if basepath[:8] == 'local://': basepath = basepath[8:]
     os.makedirs(basepath, exist_ok=True)
     output_path = os.path.join(
         basepath, 
-        f'localize_{args.pick_user_id}_{args.pick_session_id}.yaml')
+        f'localize-{args.pick_user_id}_{args.pick_session_id}.yaml')
     save_parameters(args, output_path)    
+
+    import pdb; pdb.set_trace()
 
     # Set multiprocessing start method
     mp.set_start_method("spawn")
@@ -160,7 +165,6 @@ def save_parameters(args: argparse.Namespace,
             "radius_min_scale": args.radius_min_scale,
             "radius_max_scale": args.radius_max_scale,
             "filter_size": args.filter_size,
-            "runIDs": args.runIDs
         }
     }
 
