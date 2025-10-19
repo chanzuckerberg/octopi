@@ -1,5 +1,23 @@
 # Changelog
 
+## [1.3.0](https://github.com/chanzuckerberg/octopi/compare/octopi-v1.2.0...octopi-v1.3.0) (2025-10-19)
+
+
+### ✨ Features
+
+* logging ([#26](https://github.com/chanzuckerberg/octopi/issues/26)) ([7ff5e72](https://github.com/chanzuckerberg/octopi/commit/7ff5e723796d8a8ef3fdb46f8f07fa7f527b6a11))
+
+
+### 🐞 Bug Fixes
+
+* allow users to write multiple segmentation targets ([#25](https://github.com/chanzuckerberg/octopi/issues/25)) ([e19509f](https://github.com/chanzuckerberg/octopi/commit/e19509f322f53fde23c8e597ee00b549f7034874))
+* minor fixes to writing of new picks and generating segmentation targets ([#24](https://github.com/chanzuckerberg/octopi/issues/24)) ([7a9b7af](https://github.com/chanzuckerberg/octopi/commit/7a9b7af535f620d636319f30428b3edd838f1195))
+
+
+### 📝 Documentation
+
+* Update README to reflect pip 25.2 updates ([#22](https://github.com/chanzuckerberg/octopi/issues/22)) ([3cd6b4c](https://github.com/chanzuckerberg/octopi/commit/3cd6b4ce1b2145b5c474eee9e3f1fcabb384df3e))
+
 ## [1.2.0](https://github.com/chanzuckerberg/octopi/compare/octopi-v1.1.0...octopi-v1.2.0) (2025-08-07)
 
 
