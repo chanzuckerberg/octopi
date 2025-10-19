@@ -1,7 +1,8 @@
 from octopi.extract import membranebound_extract as extract
-from octopi.utils import parsers
 import argparse, json, pprint, copick, json
 from typing import List, Tuple, Optional
+from octopi.utils import parsers
+import octopi.utils.io as io
 import multiprocess as mp
 from tqdm import tqdm
 
@@ -112,7 +113,7 @@ def save_parameters(args: argparse.Namespace,
     pprint.pprint(params_dict); print()
 
     # Save parameters to YAML file
-    utils.save_parameters_yaml(params_dict, output_path) 
+    io.save_parameters_yaml(params_dict, output_path) 
 
 if __name__ == "__main__":
     cli()

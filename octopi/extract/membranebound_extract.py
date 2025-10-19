@@ -20,16 +20,12 @@ def process_membrane_bound_extract(run,
     Args:
         run: CoPick run object.
         voxel_size: Voxel size for coordinate scaling.
-        segmentation_name: Name of the segmentation object.
-        segmentation_user_id: User ID for the segmentation.
-        segmentation_session_id: Session ID for the segmentation.
-        picks_name: Name of the particle picks object.
-        picks_user_id: User ID for the particle picks.
-        picks_session_id: Session ID for the particle picks.
+        picks_info: Tuple containing (name, user_id, session_id) for the particle picks.
+        membrane_info: Tuple containing (name, user_id, session_id) for the membrane segmentation.
+        organelle_info: Tuple containing (name, user_id, session_id) for the organelle segmentation.
         save_user_id: User ID for saving processed picks.
         save_session_id: Session ID for saving close picks.
         distance_threshold: Maximum distance to consider a particle close to the membrane.
-        organelle_seg: Whether to compute organelle centers from segmentation.
     """  
 
     # Increment session ID for the second class
@@ -54,13 +50,20 @@ def process_membrane_bound_extract(run,
     if membrane_info is None:
         # Flag to distinguish between organelle and membrane segmentation
         membranes_provided = False
-        seg = readers.segmentation(
+        seg = safe_segmentation_read(
             run, 
-            voxel_size, 
             organelle_info[0],
-            user_id=organelle_info[1], 
-            session_id=organelle_info[2],
-            raise_error=False)
+            organelle_info[1], 
+            organelle_info[2],
+            voxel_size=voxel_size
+        )
+        # seg = readers.segmentation(
+        #     run, 
+        #     voxel_size, 
+        #     organelle_info[0],
+        #     user_id=organelle_info[1], 
+        #     session_id=organelle_info[2],
+        #     raise_error=False)
         # If No Segmentation is Found, Return
         if seg is None: return     
         elif nPoints == 0 or np.unique(seg).max() == 0:
@@ -69,24 +72,38 @@ def process_membrane_bound_extract(run,
     else:
         # Read both Organelle and Membrane Segmentations
         membranes_provided = True
-        seg = readers.segmentation(
+        seg = safe_segmentation_read(
             run, 
-            voxel_size, 
             membrane_info[0],
-            user_id=membrane_info[1], 
-            session_id=membrane_info[2],
-            raise_error=False)
-
-        organelle_seg = readers.segmentation(
+            membrane_info[1], 
+            membrane_info[2],
+            voxel_size=voxel_size
+        )
+        organelle_seg = safe_segmentation_read(
             run, 
-            voxel_size, 
             organelle_info[0],
-            user_id=organelle_info[1], 
-            session_id=organelle_info[2],
-            raise_error=False)
+            organelle_info[1], 
+            organelle_info[2],
+            voxel_size
+        )
+        # seg = readers.segmentation(
+        #     run, 
+        #     voxel_size, 
+        #     membrane_info[0],
+        #     user_id=membrane_info[1], 
+        #     session_id=membrane_info[2],
+        #     raise_error=False)
+
+        # organelle_seg = readers.segmentation(
+        #     run, 
+        #     voxel_size, 
+        #     organelle_info[0],
+        #     user_id=organelle_info[1], 
+        #     session_id=organelle_info[2],
+        #     raise_error=False)
         
         # If No Segmentation is Found, Return
-        if seg is None or seg is None: return
+        if seg is None or organelle_seg is None: return
         elif nPoints == 0 or np.unique(seg).max() == 0:
             print(f'[Warning] RunID: {run.name} - Organelle-Seg Unique Values: {np.unique(seg)}, nPoints: {nPoints}')
             return
@@ -134,18 +151,26 @@ def process_membrane_bound_extract(run,
         
         # Save the close points in CoPick project
         if len(close_indices) > 0:
-            try:
-                close_picks = run.new_picks(object_name=picks_info[0], user_id=save_user_id, session_id=save_session_id)
-            except:
-                close_picks = run.get_picks(object_name=picks_info[0], user_id=save_user_id, session_id=save_session_id)[0]
+
+            close_picks = run.new_picks(
+                object_name=picks_info[0], user_id=save_user_id, 
+                session_id=save_session_id, exist_ok=True)
+            # try:
+            #     close_picks = run.new_picks(object_name=picks_info[0], user_id=save_user_id, session_id=save_session_id)
+            # except:
+            #     close_picks = run.get_picks(object_name=picks_info[0], user_id=save_user_id, session_id=save_session_id)[0]
             close_picks.from_numpy(coordinates[close_indices], orientations[close_indices])
 
         # Save the far points Coordinates in another CoPick pick
-        if len(far_indices) > 0:                       
-            try:
-                far_picks = run.new_picks(object_name=picks_info[0], user_id=save_user_id, session_id=new_session_id)
-            except:
-                far_picks = run.get_picks(object_name=picks_info[0], user_id=save_user_id, session_id=new_session_id)[0]
+        if len(far_indices) > 0:       
+
+            far_picks = run.new_picks(
+                object_name=picks_info[0], user_id=save_user_id, 
+                session_id=new_session_id, exist_ok=True)                
+            # try:
+            #     far_picks = run.new_picks(object_name=picks_info[0], user_id=save_user_id, session_id=new_session_id)
+            # except:
+            #     far_picks = run.get_picks(object_name=picks_info[0], user_id=save_user_id, session_id=new_session_id)[0]
 
             # Assume We Don't Know The Orientation for Anything Far From Membranes
             empty_orientations =  np.zeros(orientations[far_indices].shape)
@@ -261,3 +286,17 @@ def mCalcAngles(mbProtein, membrane_point):
     angTilt = float("{:.2f}".format(angTilt))
 
     return (angRot, angTilt, 0) 
+
+def safe_segmentation_read(run, name, user_id, session_id, voxel_size):
+    """Safely read a segmentation, returning None if not found."""
+    try:
+        return readers.segmentation(
+                run, 
+                voxel_size, 
+                name,
+                user_id=user_id, 
+                session_id=session_id,
+                raise_error=False)
+    except Exception as e:
+        print(f'[Warning] RunID: {run.name} - Error reading segmentation {name}, {user_id}, {session_id}: {e}')
+        return None
