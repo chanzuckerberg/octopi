@@ -116,10 +116,6 @@ def cli():
     if args.seg_info[2] is None:
         args.seg_info[2] = "1"
 
-    # Save JSON with Parameters
-    output_json = f'segment-predict_{args.seg_info[1]}_{args.seg_info[2]}_{args.seg_info[0]}.yaml'
-    save_parameters(args, output_json)
-
     # Call the inference function with parsed arguments
     inference(
         copick_config_path=args.config,
@@ -131,36 +127,3 @@ def cli():
         tomo_batch_size=args.tomo_batch_size,
         run_ids=args.run_ids,
     )
-
-def save_parameters(args: argparse.Namespace, 
-                    output_path: str):  
-
-    # Load the model config
-    model_config = io.load_yaml(args.model_config)
-
-    # Create parameters dictionary
-    params = {
-        "inputs": {
-            "config": args.config,
-            "model_config": args.model_config,
-            "model_weights": args.model_weights,
-            "tomo_algorithm": args.tomo_alg,
-            "voxel_size": args.voxel_size
-        },
-        "outputs": {
-            "segmentation_name": args.seg_info[0],
-            "segmentation_user_id": args.seg_info[1],
-            "segmentation_session_id": args.seg_info[2]
-        },
-        'model': model_config['model']
-    }            
-
-    # Print the parameters
-    print(f"\nParameters for Inference (Segment Prediction):")
-    pprint.pprint(params); print()
-
-    # Save to YAML file
-    io.save_parameters_yaml(params, output_path)
-
-if __name__ == "__main__":
-    cli()

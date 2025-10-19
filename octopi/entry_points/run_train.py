@@ -1,12 +1,12 @@
 from octopi.datasets import generators, multi_config_generator
 from monai.losses import DiceLoss, FocalLoss, TverskyLoss
-from octopi.models import common as builder
 from monai.metrics import ConfusionMatrixMetric
-from octopi.utils import parsers, io
+from octopi.models import common as builder
+from typing import List, Optional, Tuple
 from octopi.entry_points import common 
+from octopi.utils import parsers, io
 from octopi.pytorch import trainer 
 import torch, os, argparse
-from typing import List, Optional, Tuple
 
 def train_model(
     copick_config_path: str,
@@ -27,11 +27,15 @@ def train_model(
     best_metric: str = 'avg_f1',
     data_split: str = '0.8'
     ):
+    """
+    Train a 3D U-Net model using the specified CoPick configuration and target information.
+    """
 
     # Initialize the data generator to manage training and validation datasets
     print(f'Training with {copick_config_path}\n')
+
+    # Multi-config training
     if isinstance(copick_config_path, dict):
-        # Multi-config training
         data_generator = multi_config_generator.MultiConfigTrainLoaderManager(
             copick_config_path, 
             target_info[0], 
@@ -41,8 +45,7 @@ def train_model(
             voxel_size = voxel_size,
             Nclasses = model_config['num_classes'],
             tomo_batch_size = tomo_batch_size )
-    else:
-        # Single-config training
+    else:  # Single-config training
         data_generator = generators.TrainLoaderManager(
             copick_config_path, 
             target_info[0], 
@@ -51,8 +54,7 @@ def train_model(
             tomo_algorithm = tomo_algorithm,
             voxel_size = voxel_size,
             Nclasses = model_config['num_classes'],
-            tomo_batch_size = tomo_batch_size ) 
-    
+            tomo_batch_size = tomo_batch_size )
 
     # Get the data splits
     ratios = parsers.parse_data_split(data_split)
@@ -61,6 +63,10 @@ def train_model(
         validateRunIDs = validateRunIDs,
         train_ratio = ratios[0], val_ratio = ratios[1], test_ratio = ratios[2],
         create_test_dataset = False)
+
+    # Find the configuration file with labels
+    if data_generator.target_session_id is None:
+        root = copick.from_file(copick_config_path)
     
     # Get the reload frequency
     data_generator.get_reload_frequency(num_epochs)
@@ -88,10 +94,6 @@ def train_model(
     # Create UNet-Trainer
     model_trainer = trainer.ModelTrainer(model, device, loss_function, metrics_function, optimizer)
 
-    # Save parameters and results
-    parameters_save_name = os.path.join(model_save_path, "model_config.yaml")
-    io.save_parameters_to_yaml(model_builder, model_trainer, data_generator, parameters_save_name)
-
     # Train the Model 
     results = model_trainer.train(
         data_generator, model_save_path, max_epochs=num_epochs,
@@ -99,7 +101,11 @@ def train_model(
         val_interval=val_interval, best_metric=best_metric, verbose=True
     )
 
-    # TODO: Write Results to Zarr or Another File Format? 
+    # Save parameters and results
+    parameters_save_name = os.path.join(model_save_path, "model_config.yaml")
+    io.save_parameters_to_yaml(model_builder, model_trainer, data_generator, parameters_save_name)
+
+    # TODO: Write Results to CSV...
     results_save_name = os.path.join(model_save_path, "results.json")
     io.save_results_to_json(results, results_save_name)
 
@@ -196,6 +202,4 @@ def get_model_config(channels, strides, res_units, Nclass, dim_in):
         'dim_in': dim_in
     }
     return model_config
-
-if __name__ == "__main__":
-    cli()
+    

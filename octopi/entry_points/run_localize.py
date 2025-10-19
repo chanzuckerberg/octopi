@@ -1,7 +1,7 @@
 from octopi.entry_points import common
 from octopi.utils import parsers, io
 from octopi.extract import localize
-import copick, argparse, pprint
+import copick, argparse, pprint, os
 from typing import List, Tuple
 import multiprocess as mp
 from tqdm import tqdm
@@ -59,7 +59,7 @@ def pick_particles(
     with mp.Pool(processes=n_procs) as pool:
         with tqdm(total=n_run_ids, desc="Localization", unit="run") as pbar:
             worker_func = lambda run_id: localize.process_localization(
-                root.get_run(run_id),  
+                root.get_run(run_id),
                 objects, 
                 seg_info,
                 method, 
@@ -73,6 +73,8 @@ def pick_particles(
 
             for _ in pool.imap_unordered(worker_func, run_ids, chunksize=1):
                 pbar.update(1)
+
+    
 
     print('Localization Complete!')
 
@@ -113,8 +115,12 @@ def cli():
     args = localize_parser(parser_description)
 
     # Save JSON with Parameters
-    output_yaml = f'localize_{args.pick_user_id}_{args.pick_session_id}.yaml'    
-    save_parameters(args, output_yaml)    
+    root = copick.from_file(args.config)
+    overlay_root = io.remove_prefix(root.config.overlay_root)
+    basepath = os.path.join(overlay_root, 'logs')
+    os.makedirs(basepath, exist_ok=True)
+    output_path = os.path.join(basepath, f'localize-{args.pick_user_id}_{args.pick_session_id}.yaml')
+    save_parameters(args, output_path)    
 
     # Set multiprocessing start method
     mp.set_start_method("spawn")
@@ -155,7 +161,6 @@ def save_parameters(args: argparse.Namespace,
             "radius_min_scale": args.radius_min_scale,
             "radius_max_scale": args.radius_max_scale,
             "filter_size": args.filter_size,
-            "runIDs": args.runIDs
         }
     }
 
@@ -169,37 +174,3 @@ def save_parameters(args: argparse.Namespace,
 if __name__ == "__main__":
     cli()
 
-# def time_pick_particles():
-#     import json, time
-
-#     # Set multiprocessing start method
-#     mp.set_start_method("spawn")
-
-#     copick_config_path = "/mnt/simulations/ml_challenge/ml_config.json"  # Replace with your actual path
-#     n_procs_list = [1, 4, 8, 16, 32]  # Adjust based on your needs
-#     n_procs_list = [32, 16, 8, 4, 1]
-#     timing_results = {}
-
-#     session_id = 1
-#     for n_procs in n_procs_list:
-#         print(f"Testing with {n_procs} processes...")
-#         start_time = time.time()
-#         pick_particles(
-#             copick_config_path=copick_config_path,
-#             pick_session_id=str(session_id),
-#             n_procs=n_procs
-#         )
-#         elapsed_time = time.time() - start_time
-#         timing_results[n_procs] = elapsed_time
-#         print(f"Elapsed time with {n_procs} processes: {elapsed_time:.2f} seconds")
-
-#         session_id +=1 
-
-#     # Save timing results to a JSON file
-#     with open("timing_results.json", "w") as f:
-#         json.dump(timing_results, f, indent=4)
-
-#     print("Timing results saved to 'timing_results.json'")
-
-# if __name__ == "__main__":
-#     time_pick_particles()
