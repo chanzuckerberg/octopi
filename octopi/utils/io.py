@@ -4,6 +4,8 @@ File I/O utilities for YAML and JSON operations.
 
 import os, json, yaml, copick, glob
 
+from copick.impl.filesystem import CopickConfigFSSpec
+
 
 # Create a custom dumper that uses flow style for lists only.
 class InlineListDumper(yaml.SafeDumper):
@@ -148,9 +150,13 @@ def check_target_config_path(data_generator):
     # Get the Overlay and Static Roots
     root = copick.from_file(config_path)
 
-    # Remove the local:// prefix from static_root if it exists  
-    overlay_root = remove_prefix(root.config.overlay_root)   
-    static_root = remove_prefix(root.config.static_root)
+    # Remove the local:// prefix from static_root if it exists
+    if isinstance(root, CopickConfigFSSpec):
+        overlay_root = remove_prefix(root.config.overlay_root)
+        static_root = remove_prefix(root.config.static_root)
+    else:
+        overlay_root = remove_prefix(root.config.overlay_root)
+        static_root = None
     
     # Two Search Patterns, Either only a name provided or name, user_id, session_id
     if data_generator.target_session_id is None:
