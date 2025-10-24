@@ -149,8 +149,11 @@ def check_target_config_path(data_generator):
     root = copick.from_file(config_path)
 
     # Remove the local:// prefix from static_root if it exists  
-    overlay_root = remove_prefix(root.config.overlay_root)   
-    static_root = remove_prefix(root.config.static_root)
+    overlay_root = remove_prefix(root.config.overlay_root)
+    try:  # Check if static_root is available
+        static_root = remove_prefix(root.config.static_root)
+    except: # If not, set it to None
+        static_root = None
     
     # Two Search Patterns, Either only a name provided or name, user_id, session_id
     if data_generator.target_session_id is None:
