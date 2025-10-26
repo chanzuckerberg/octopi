@@ -54,10 +54,11 @@ class BayesianModelSearch:
         }
         self.config['dim_in'] = self.sampling['crop_size']
 
-    def _define_optimizer(self):
+    def _define_optimizer(self, trial):
         # Define optimizer
-        lr0 = 1e-3
-        self.optimizer = torch.optim.Adam(self.model.parameters(), lr=lr0, weight_decay=1e-5)
+        lr0 = trial.suggest_float("lr", 1e-5, 1e-3, log=True)
+        wd  = trial.suggest_float("weight_decay", 1e-6, 1e-2, log=True)
+        self.optimizer = torch.optim.AdamW(self.model.parameters(), lr=lr0, weight_decay=wd)
 
     def _train_model(self, trial, model_trainer, epochs, val_interval, crop_size, num_samples, best_metric):
         """Handles model training and error handling."""
@@ -71,7 +72,8 @@ class BayesianModelSearch:
                 my_num_samples=num_samples,
                 best_metric=best_metric,
                 use_mlflow=True,
-                verbose=False
+                verbose=False,
+                trial=trial
             )
             return results['best_metric']
 
@@ -101,7 +103,7 @@ class BayesianModelSearch:
             self.my_build_model(trial)
 
             # Create trainer
-            self._define_optimizer()
+            self._define_optimizer(trial)
             model_trainer = trainer.ModelTrainer(self.model, self.device, self.loss_function, self.metrics_function, self.optimizer)
 
             # Train model and evaluate score
@@ -160,45 +162,42 @@ class BayesianModelSearch:
         """
         self.device, self.client, self.target_run_id = self._setup_parallel_trial_run(trial, parent_run, gpu_count)
         
-        # Build model
+        # Build model + trainer
         self.my_build_model(trial)
-
-        # Create trainer
-        self._define_optimizer()
-        model_trainer = trainer.ModelTrainer(self.model, self.device, self.loss_function, self.metrics_function, self.optimizer)
+        self._define_optimizer(trial)
+        model_trainer = trainer.ModelTrainer(
+            self.model, self.device, self.loss_function, 
+            self.metrics_function, self.optimizer
+        )
         model_trainer.set_parallel_mlflow(self.client, self.target_run_id)
 
-        # # Train model
-        # score = self._train_model(
-        #     trial, model_trainer, epochs, val_interval, 
-        #     self.sampling['crop_size'], self.sampling['num_samples'], 
-        #     best_metric)
-
         # Train Model, with error handling
+        score = None
+        run_status = "FAILED"   # default; overwritten on success/prune
         try:
             score = self._train_model(
                 trial, model_trainer, epochs, val_interval, 
                 self.sampling['crop_size'], self.sampling['num_samples'], 
                 best_metric)
+            # Save best model and mark run as finished
+            run_status = "FINISHED"
+            self._save_best_model(trial, model_trainer, score)
+            return score
+        except optuna.TrialPruned:
+            run_status = "KILLED"  # communicates early stop 
+            raise
         except Exception as e:
+            run_status = "FAILED"
             print(f"[Trial Failed] Unexpected error: {e}")
             trial.set_user_attr("error", str(e))
             raise optuna.TrialPruned()
-        
-        # Log training parameters
-        params = {
-            'model': self.model_builder.get_model_parameters(),
-            'optimizer': io.get_optimizer_parameters(model_trainer)
-        }    
-        model_trainer.my_log_params(io.flatten_params(params))
-        model_trainer.my_log_params({"parent_run_name": parent_run.info.run_name})
-
-        # Save best model
-        self._save_best_model(trial, model_trainer, score)
-
-        # Cleanup
-        self.cleanup(model_trainer, self.optimizer)
-        return score
+        finally:
+            self.cleanup(model_trainer, parent_run)
+            try:
+                if self.client is not None and self.target_run_id is not None:
+                    self.client.set_terminated(self.target_run_id, status=run_status)
+            except Exception as e:
+                print(f"[Cleanup Failed] Unexpected error: {e}")
 
     def _save_best_model(self, trial, model_trainer, score):
         """Saves the best model if it improves upon previous scores."""
@@ -213,13 +212,21 @@ class BayesianModelSearch:
         try:
             return trial.study.best_value
         except ValueError:
-            return 0
+            return -float('inf')
 
-    def cleanup(self, model_trainer, optimizer):
+    def cleanup(self, model_trainer, parent_run):
         """Handles cleanup of resources."""
 
+        # Log training parameters
+        params = {
+            'model': self.model_builder.get_model_parameters(),
+            'optimizer': io.get_optimizer_parameters(model_trainer)
+        }    
+        model_trainer.my_log_params(io.flatten_params(params))
+        model_trainer.my_log_params({"parent_run_name": parent_run.info.run_name})
+
         # Delete the trainer and optimizer objects
-        del model_trainer, optimizer
+        del model_trainer, self.optimizer
 
         # If the model object holds GPU memory, delete it explicitly and set it to None
         if hasattr(self, "model"):
@@ -235,8 +242,3 @@ class BayesianModelSearch:
         torch.cuda.empty_cache()
         gc.collect()
 
-        # Try Terminating Multi-GPU Runs, if not run current run (works for single GPU runs)
-        try:
-            self.client.set_terminated(self.target_run_id, status="FINISHED")
-        except:
-            mlflow.end_run()

@@ -227,14 +227,10 @@ class ModelSearchSubmit:
     def _get_optuna_sampler(self):
         """Returns Optuna's TPE sampler with default settings."""
         return optuna.samplers.TPESampler(
-            n_startup_trials=10,
+            n_startup_trials=5,
             n_ei_candidates=24,
             multivariate=True
         )
-        # return optuna.samplers.BoTorchSampler(
-        #     n_startup_trials=10,
-        #     multivariate=True
-        # )
 
     def get_optuna_study(self):
         """Returns the Optuna study object."""
