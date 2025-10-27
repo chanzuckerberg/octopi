@@ -75,7 +75,7 @@ Key training parameters include:
 ### Basic Training Setup
 
 ```python
-from octopi.losses import FocalTverskyLoss
+from octopi.utils.losses import FocalTverskyLoss
 from monai.losses import TverskyLoss
 from octopi.workflows import train
 
@@ -111,7 +111,8 @@ loss_function = TverskyLoss(
 # Train the model
 train(
     config, target_info, 'denoised', 10.012, loss_function,
-    model_config, trainRunIDs=trainRunIDs, validateRunIDs=valRunIDs
+    model_config, trainRunIDs=trainRunIDs, validateRunIDs=valRunIDs,
+    model_save_path=results_folder,
 )
 ```
 
