@@ -59,6 +59,8 @@ def get_optimizer_parameters(trainer):
     """
     Extract optimizer parameters from a trainer object.
     """
+    # if 'trainer.optimizer.__class__.__name__' == 'AdamW':
+    #     wd = trainer.optimizer.param_groups[0]['weight_decay']
     optimizer_parameters = {
         'my_num_samples': trainer.num_samples,  
         'val_interval': trainer.val_interval,

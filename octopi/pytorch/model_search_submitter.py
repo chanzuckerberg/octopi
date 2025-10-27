@@ -244,7 +244,11 @@ class ModelSearchSubmit:
 
     def _get_optuna_pruner(self):
         """Returns Optuna's pruning strategy."""
-        return optuna.pruners.MedianPruner()
+        return optuna.pruners.MedianPruner(
+            n_startup_trials=10,    # let at least 10 full trials run before pruning
+            n_warmup_steps=300,     # don’t prune before 300 epochs/steps
+            interval_steps=5       # check every 10 validation intervals
+        )
 
     def save_contour_plot_as_png(self, study):
         """

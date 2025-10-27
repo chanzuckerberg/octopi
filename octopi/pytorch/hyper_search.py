@@ -56,9 +56,8 @@ class BayesianModelSearch:
 
     def _define_optimizer(self, trial):
         # Define optimizer
-        lr0 = trial.suggest_float("lr", 1e-5, 1e-3, log=True)
-        wd  = trial.suggest_float("weight_decay", 1e-6, 1e-2, log=True)
-        self.optimizer = torch.optim.AdamW(self.model.parameters(), lr=lr0, weight_decay=wd)
+        # lr0 = trial.suggest_float("lr", 1e-4, 1e-3, log=True)
+        self.optimizer = torch.optim.AdamW(self.model.parameters(), lr=1e-3, weight_decay=1e-4)
 
     def _train_model(self, trial, model_trainer, epochs, val_interval, crop_size, num_samples, best_metric):
         """Handles model training and error handling."""
