@@ -47,8 +47,7 @@ def get_random_transforms( input_dim, num_samples, Nclasses):
         ),
         # Only rotate around the first axis (keeping the missing wedge orientation consistent)
         RandRotate90d(keys=["image", "label"], prob=0.5, spatial_axes=[1, 2], max_k=3),
-        # Avoid flipping along the first axis (where the missing wedge is)
-        RandFlipd(keys=["image", "label"], prob=0.5, spatial_axis=0),  # Removed
+        RandFlipd(keys=["image", "label"], prob=0.5, spatial_axis=0),
         RandFlipd(keys=["image", "label"], prob=0.5, spatial_axis=1),
         RandFlipd(keys=["image", "label"], prob=0.5, spatial_axis=2),        
         RandomOrder([

@@ -3,7 +3,7 @@ from monai.inferers import sliding_window_inference
 from octopi.utils import stopping_criteria
 from monai.transforms import AsDiscrete
 from monai.data import decollate_batch
-import torch, os, mlflow, re
+import torch, os, mlflow, re, optuna
 import torch_ema as ema
 from tqdm import tqdm 
 import numpy as np
@@ -92,12 +92,13 @@ class ModelTrainer:
                 
                 # Apply sliding window inference
                 # roi_size=self.input_dim, # try setting a set size of 128, 144 or 160? 
+                roi = (max(128, self.crop_size)) * 3
                 val_outputs = sliding_window_inference(
                     inputs=val_inputs, 
-                    roi_size=(144,144,144),
-                    sw_batch_size=4,
+                    roi_size=roi,
+                    sw_batch_size=2,
                     predictor=self.model, 
-                    overlap=0.5,
+                    overlap=0.25,
                     device=self.device
                 )
 
@@ -138,7 +139,8 @@ class ModelTrainer:
         lr_scheduler_type: str = 'cosine', 
         best_metric: str = 'avg_f1',
         use_mlflow: bool = False,
-        verbose: bool = False
+        verbose: bool = False,
+        trial: optuna.trial.Trial = None
     ):
 
         # best lr scheduler options are cosine or reduce
@@ -169,19 +171,24 @@ class ModelTrainer:
         self.post_label = AsDiscrete(to_onehot=Nclass)                             
 
         # Produce Dataloaders for the First Training Iteration
-        self.train_loader, self.val_loader = data_load_gen.create_train_dataloaders(crop_size=crop_size, num_samples=my_num_samples)
+        self.train_loader, self.val_loader = data_load_gen.create_train_dataloaders(
+            crop_size=crop_size, num_samples=my_num_samples
+        )
         self.input_dim = data_load_gen.input_dim
 
         # Save the original learning rate
         original_lr = self.optimizer.param_groups[0]['lr']
+        self.base_lr = original_lr
         self.load_learning_rate_scheduler(lr_scheduler_type)
 
         # Initialize tqdm around the epoch loop
-        for epoch in tqdm(range(max_epochs), desc="Training Progress", unit="epoch"):
+        for epoch in tqdm(range(max_epochs), desc=f"Training on GPU: {self.device}", unit="epoch"):
 
             # Reload dataloaders periodically
             if data_load_gen.reload_frequency > 0 and (epoch + 1) % data_load_gen.reload_frequency == 0:
-                self.train_loader, self.val_loader = data_load_gen.create_train_dataloaders(num_samples=my_num_samples)
+                self.train_loader, self.val_loader = data_load_gen.create_train_dataloaders(
+                    crop_size=crop_size, num_samples=my_num_samples
+                )
                 # Lower the learning rate for the warm-up period
                 for param_group in self.optimizer.param_groups:
                     param_group['lr'] = original_lr * self.warmup_lr_factor
@@ -244,6 +251,13 @@ class ModelTrainer:
                         fig=self.fig, 
                         axs=self.axs)
 
+                # Report/prune right after a validation step
+                objective_val = self.results[best_metric][-1][1]   # e.g., avg_f1 or avg_fbeta
+                if trial:
+                    trial.report(objective_val, step=epoch + 1)
+                    if trial.should_prune():
+                        raise optuna.TrialPruned()                        
+
                 # After Validation Metrics are Logged, Check for Early Stopping
                 if self.stopping_criteria.should_stop_training(epoch_loss, results=self.results, check_metrics=True):
                     tqdm.write(f"Training stopped early due to {self.stopping_criteria.get_stopped_reason()}")
@@ -295,9 +309,13 @@ class ModelTrainer:
         """
         # Apply warm-up logic
         if (epoch + 1) <= self.warmup_epochs:
+            scale = (epoch + 1) / self.warmup_epochs
             for param_group in self.optimizer.param_groups:
-                param_group['lr'] = original_lr * self.warmup_lr_factor
-            return False  # Continue training
+                param_group['lr'] = self.base_lr * (0.1 + 0.9 * scale)  # 10% -> 100% over warmup
+            return False # Continue training
+            # for param_group in self.optimizer.param_groups:
+            #     param_group['lr'] = original_lr * self.warmup_lr_factor
+            # return False  # Continue training
 
         # Step the scheduler
         if isinstance(self.lr_scheduler, torch.optim.lr_scheduler.CosineAnnealingLR):
