@@ -111,7 +111,7 @@ def generate_targets(
 
         # Add Segmentations to Target
         for seg in query_seg:
-            classLabel = root.get_object(seg.name).label
+            classLabel = train_targets[seg.name]['label']
             segvol = seg.numpy()
             # Set all non-zero values to the class label
             segvol[segvol > 0] = classLabel

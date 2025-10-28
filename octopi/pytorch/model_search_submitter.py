@@ -14,7 +14,6 @@ class ModelSearchSubmit:
         target_session_id: str,
         tomo_algorithm: str,
         voxel_size: float,
-        Nclass: int,
         model_type: str,
         best_metric: str = 'avg_f1',
         num_epochs: int = 1000,
@@ -58,7 +57,6 @@ class ModelSearchSubmit:
         self.target_session_id = target_session_id
         self.tomo_algorithm = tomo_algorithm
         self.voxel_size = voxel_size
-        self.Nclass = Nclass
         self.model_type = model_type
         self.mlflow_experiment_name = mlflow_experiment_name
         self.random_seed = random_seed
@@ -92,7 +90,6 @@ class ModelSearchSubmit:
                 target_user_id=self.target_user_id,
                 tomo_algorithm=self.tomo_algorithm,
                 voxel_size=self.voxel_size,
-                Nclasses=self.Nclass,
                 tomo_batch_size=self.tomo_batch_size
             )
         else:
@@ -103,7 +100,6 @@ class ModelSearchSubmit:
                 target_user_id=self.target_user_id,
                 tomo_algorithm=self.tomo_algorithm,
                 voxel_size=self.voxel_size,
-                Nclasses=self.Nclass,
                 tomo_batch_size=self.tomo_batch_size
             )
 
@@ -118,6 +114,7 @@ class ModelSearchSubmit:
         
         # Get the reload frequency
         self.data_generator.get_reload_frequency(self.num_epochs)
+        self.Nclass = self.data_generator.Nclasses
         
     def _print_input_configs(self):
         """Prints training configuration for debugging purposes."""

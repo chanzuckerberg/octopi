@@ -239,6 +239,7 @@ class ModelTrainer:
                 if not self.use_mlflow:
                     self.fig, self.axs = viz.plot_training_results(
                         self.results, 
+                        data_load_gen.class_names,
                         save_plot=os.path.join(model_save_path, "net_train_history.png"), 
                         fig=self.fig, 
                         axs=self.axs)

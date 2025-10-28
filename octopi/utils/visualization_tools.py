@@ -152,7 +152,7 @@ def plot_training_results(
     # Determine the number of classes and names
     num_classes = len([key for key in results.keys() if key.startswith('recall_class')])
 
-    if class_names is None or len(class_names) != num_classes - 1:
+    if class_names is None or len(class_names) != num_classes:
         class_names = [f"Class {i+1}" for i in range(num_classes)]
 
     # Plot Recall in the top-right
@@ -192,10 +192,3 @@ def plot_training_results(
     fig.canvas.draw()
 
     return fig, axs
-
-    # if save_plot: 
-    #     fig.savefig(save_plot)
-    # else:
-    #     plt.show()
-    #     # # Just draw the plot without displaying
-    #     # fig.canvas.draw()

@@ -26,6 +26,7 @@ def create_sub_train_targets(
     train_targets = defaultdict(dict)
 
     # Create dictionary for particle targets
+    value = 1 
     for t in pick_targets:
         # Parse the target
         obj_name, user_id, session_id = t 
@@ -37,7 +38,7 @@ def create_sub_train_targets(
             continue
         
         # Get the label and radius of the object
-        label = obj.label
+        label = value # Assign labels sequentially
         info = {
             "label": label,
             "user_id": user_id,
@@ -46,9 +47,10 @@ def create_sub_train_targets(
             "radius": root.get_object(obj_name).radius,
         }
         train_targets[obj_name] = info
+        value += 1
 
     # Create dictionary for segmentation targets
-    train_targets = add_segmentation_targets(root, seg_targets, train_targets)
+    train_targets = add_segmentation_targets(root, seg_targets, train_targets, value)   
 
     create_targets.generate_targets(
         config, train_targets, voxel_size, tomogram_algorithm, radius_scale,
@@ -101,6 +103,7 @@ def add_segmentation_targets(
     root,
     seg_targets,
     train_targets: dict,
+    start_value: int = -1
     ):
 
     # Create dictionary for segmentation targets
@@ -110,9 +113,15 @@ def add_segmentation_targets(
         obj_name, user_id, session_id = s
 
         # Add Segmentation Target
+        if start_value > 0:
+            value = start_value
+            start_value += 1
+        else:
+            value = root.get_object(obj_name).label
+
         try:
             info = {
-                "label": root.get_object(obj_name).label,
+                "label": value,
                 "user_id": user_id,
                 "session_id": session_id,
                 "is_particle_target": False,                 

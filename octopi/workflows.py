@@ -10,9 +10,10 @@ import copick, torch, os
 from octopi.utils import io
 from tqdm import tqdm
     
-def train(config, target_info, tomo_algorithm, voxel_size, loss_function,
-          model_config = None, model_weights = None, trainRunIDs = None, validateRunIDs = None,
-          model_save_path = 'results', best_metric = 'fBeta2', num_epochs = 1000, use_ema = True):
+def train(data_generator, loss_function,
+          model_config = None, model_weights = None, lr0 = 1e-3,
+          model_save_path = 'results', best_metric = 'fBeta2', 
+          num_epochs = 1000, use_ema = True):
     """
     Train a UNet Model for Segmentation
 
@@ -36,7 +37,7 @@ def train(config, target_info, tomo_algorithm, voxel_size, loss_function,
         root = copick.from_file(config)
         model_config = {
             'architecture': 'Unet',
-            'num_classes': root.pickable_objects[-1].label + 1,
+            'num_classes': data_generator.Nclasses,
             'dim_in': 80,
             'strides': [2, 2, 1],
             'channels': [48, 64, 80, 80],
@@ -44,25 +45,6 @@ def train(config, target_info, tomo_algorithm, voxel_size, loss_function,
         }
         print('No Model Configuration Provided, Using Default Configuration')
         print(model_config)
-    
-    data_generator = generators.TrainLoaderManager(
-            config, 
-            target_info[0], 
-            target_session_id = target_info[2],
-            target_user_id = target_info[1],
-            tomo_algorithm = tomo_algorithm,
-            voxel_size = voxel_size,
-            Nclasses = model_config['num_classes'],
-            tomo_batch_size = 15 ) 
-
-    data_generator.get_data_splits(
-        trainRunIDs = trainRunIDs,
-        validateRunIDs = validateRunIDs,
-        train_ratio = 0.9, val_ratio = 0.1, test_ratio = 0.0,
-        create_test_dataset = False)
-
-    # Get the reload frequency
-    data_generator.get_reload_frequency(num_epochs)
 
     # Monai Functions
     metrics_function = ConfusionMatrixMetric(include_background=False, metric_name=["recall",'precision','f1 score'], reduction="none")
@@ -79,14 +61,16 @@ def train(config, target_info, tomo_algorithm, voxel_size, loss_function,
     model.to(device) 
 
     # Optimizer
-    optimizer = torch.optim.Adam(model.parameters(), 1e-3)
+    optimizer = torch.optim.AdamW(model.parameters(), lr=lr0, weight_decay=1e-4)
 
     # Create UNet-Trainer
     model_trainer = trainer.ModelTrainer(
-        model, device, loss_function, metrics_function, optimizer,
-        use_ema = use_ema
+        model, device, loss_function, metrics_function, 
+        optimizer, use_ema = use_ema
     )
 
+    # Train the Model
+    print(f'Starting Training...\nSaving Training Results to: {model_save_path}/\n')
     results = model_trainer.train(
         data_generator, model_save_path, max_epochs=num_epochs,
         crop_size=model_config['dim_in'], my_num_samples=16,
@@ -97,9 +81,9 @@ def train(config, target_info, tomo_algorithm, voxel_size, loss_function,
     parameters_save_name = os.path.join(model_save_path, "model_config.yaml")
     io.save_parameters_to_yaml(model_builder, model_trainer, data_generator, parameters_save_name)
 
-    # TODO: Write Results to Zarr or Another File Format? 
-    results_save_name = os.path.join(model_save_path, "results.json")
-    io.save_results_to_json(results, results_save_name)
+    # TODO: Write Results to CSV...
+    results_save_name = os.path.join(model_save_path, "results.csv")
+    io.save_results_to_csv(results, results_save_name)
 
 def segment(config, tomo_algorithm, voxel_size, model_weights, model_config, 
             seg_info = ['predict', 'octopi', '1'], use_tta = False, run_ids = None):
