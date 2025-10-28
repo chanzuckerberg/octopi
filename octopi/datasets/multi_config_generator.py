@@ -16,8 +16,8 @@ class MultiConfigTrainLoaderManager(TrainLoaderManager):
                  target_user_id: str = None,
                  voxel_size: float = 10, 
                  tomo_algorithm: List[str] = ['wbp'], 
-                 tomo_batch_size: int = 15, 
-                 Nclasses: int = 3):
+                 tomo_batch_size: int = 15
+                 ):
         """
         Initialize MultiConfigTrainLoaderManager with multiple configs.
 
@@ -38,7 +38,6 @@ class MultiConfigTrainLoaderManager(TrainLoaderManager):
         self.tomo_algorithm = tomo_algorithm
 
         # Data management parameters
-        self.Nclasses = Nclasses
         self.tomo_batch_size = tomo_batch_size
         self.reload_training_dataset = True
         self.reload_validation_dataset = True

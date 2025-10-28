@@ -1,6 +1,7 @@
 from octopi.datasets import dataset, augment, cached_datset
 from monai.data import DataLoader, SmartCacheDataset, CacheDataset, Dataset
 from typing import List, Optional
+from octopi.utils import io as io2
 from octopi.datasets import io
 import torch, os, random, gc
 import multiprocess as mp
@@ -14,8 +15,8 @@ class TrainLoaderManager:
                  target_user_id: str = None,
                  voxel_size: float = 10, 
                  tomo_algorithm: List[str] = ['wbp'], 
-                 tomo_batch_size: int = 15, # Number of Tomograms to Load Per Sub-Epoch    
-                 Nclasses: int = 3): # Number of Objects + Background
+                 tomo_batch_size: int = 15
+                 ): 
 
         # Read Copick Projectdd
         self.config = config
@@ -30,13 +31,11 @@ class TrainLoaderManager:
         self.voxel_size = voxel_size
         self.tomo_algorithm = tomo_algorithm
 
-        self.Nclasses = Nclasses
-        self.tomo_batch_size = tomo_batch_size
-
         self.reload_training_dataset = True
         self.reload_validation_dataset = True
         self.val_loader = None
         self.train_loader = None
+        self.tomo_batch_size = tomo_batch_size
 
         # Initialize the input dimensions   
         self.nx = None
@@ -116,6 +115,9 @@ class TrainLoaderManager:
                 return_test_dataset = create_test_dataset
             )
 
+        # Get Class Info from the Training Dataset
+        self._get_class_info(trainRunIDs)
+
         # Swap if Test Runs is Larger than Validation Runs
         if create_test_dataset and len(testRunIDs) > len(validateRunIDs):
             testRunIDs, validateRunIDs = validateRunIDs, testRunIDs
@@ -150,6 +152,33 @@ class TrainLoaderManager:
         self._initialize_train_iterators()
 
         return self.myRunIDs
+
+    def _get_class_info(self, trainRunDs):
+
+        # Fetch a segmentation to determine class names and number of classes
+        for runID in trainRunDs:
+            run = self.root.get_run(runID)
+            seg = run.get_segmentations(name=self.target_name, 
+                                        session_id=self.target_session_id, 
+                                        user_id=self.target_user_id,
+                                        voxel_size=float(self.voxel_size))
+            if len(seg) == 0:
+                continue
+
+            # If Session ID or User ID are None, Set Them Based on the First Found Segmentation
+            if self.target_session_id is None:
+                self.target_session_id = seg[0].session_id
+            if self.target_user_id is None:
+                self.target_user_id = seg[0].user_id
+
+            # Read Yaml Config to Get Number of Classes and Class Names
+            target_config = io2.check_target_config_path(self)
+            class_names = target_config['input']['labels']
+            self.Nclasses = len(class_names) + 1
+            self.class_names = [name for name, idx in sorted(class_names.items(), key=lambda x: x[1])]
+
+            # We Only need to read One Segmentation to Get Class Info
+            break
     
     def _get_padded_list(self, data_list, batch_size):
         # Calculate padding needed to make `data_list` a multiple of `batch_size`

@@ -37,7 +37,6 @@ def optuna_parser(parser_description, add_slurm: bool = False):
     model_group.add_argument("--model-type", type=str, default='Unet', required=False, 
                              choices=['Unet', 'AttentionUnet', 'MedNeXt', 'SegResNet'],
                              help="Model type to use for training")
-    model_group.add_argument("--Nclass", type=int, default=3, required=False, help="Number of prediction classes in the model")
 
     train_group = parser.add_argument_group("Training Arguments")
     common.add_train_parameters(train_group, octopi = True)
@@ -78,7 +77,6 @@ def cli():
         target_session_id=args.target_info[2],
         tomo_algorithm=args.tomo_alg,
         voxel_size=args.voxel_size,
-        Nclass=args.Nclass,
         model_type=args.model_type,
         mlflow_experiment_name=args.mlflow_experiment_name,
         random_seed=args.random_seed,
@@ -109,8 +107,7 @@ def save_parameters(args: argparse.Namespace,
             "copick_config": args.config,
             "target_info": args.target_info,
             "tomo_algorithm": args.tomo_alg,
-            "voxel_size": args.voxel_size,
-            "Nclass": args.Nclass,            
+            "voxel_size": args.voxel_size,          
         },
         "optimization": {
             "model_type": args.model_type,
