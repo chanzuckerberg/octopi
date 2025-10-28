@@ -11,8 +11,9 @@ from octopi.utils import io
 from tqdm import tqdm
     
 def train(data_generator, loss_function,
-          model_config = None, model_weights = None,
-          model_save_path = 'results', best_metric = 'fBeta2', num_epochs = 1000, use_ema = True):
+          model_config = None, model_weights = None, lr0 = 1e-3,
+          model_save_path = 'results', best_metric = 'fBeta2', 
+          num_epochs = 1000, use_ema = True):
     """
     Train a UNet Model for Segmentation
 
@@ -60,7 +61,7 @@ def train(data_generator, loss_function,
     model.to(device) 
 
     # Optimizer
-    optimizer = torch.optim.AdamW(model.parameters(), lr, weight_decay=1e-4)
+    optimizer = torch.optim.AdamW(model.parameters(), lr=lr0, weight_decay=1e-4)
 
     # Create UNet-Trainer
     model_trainer = trainer.ModelTrainer(

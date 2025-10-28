@@ -56,6 +56,16 @@ def get_loss_function(trial, loss_name = None):
 
     return loss_function
 
+def get_default_unet_params():
+
+    model_config = {
+            'architecture': 'Unet',
+            'dim_in': 80,
+            'strides': [2, 2, 1],
+            'channels': [48, 64, 80, 80],
+            'dropout': 0.0, 'num_res_units': 1,
+        }
+    return model_config
 
 #### TODO : Models to try Adding? 
 # 1. Swin UNETR 

@@ -54,7 +54,6 @@ def train_model(
             tomo_batch_size = tomo_batch_size )
 
     # Get the data splits
-    model_config['num_classes'] = data_generator.Nclasses
     ratios = parsers.parse_data_split(data_split)
     data_generator.get_data_splits(
         trainRunIDs = trainRunIDs,
@@ -64,6 +63,7 @@ def train_model(
     
     # Get the reload frequency
     data_generator.get_reload_frequency(num_epochs)
+    model_config['num_classes'] = data_generator.Nclasses
 
     # Monai Functions
     alpha = tversky_alpha
@@ -72,8 +72,9 @@ def train_model(
     
     # Train the Model
     train(
-        data_generator, loss_function, model_config,
-        beta_metric = best_metric, num_epochs = num_epochs,
+        data_generator, loss_function, model_config, model_weights,
+        best_metric = best_metric, num_epochs = num_epochs,
+        model_save_path = model_save_path, lr0 = lr
     )
 
 def train_model_parser(parser_description, add_slurm: bool = False):
