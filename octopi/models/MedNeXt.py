@@ -27,7 +27,7 @@ class myMedNeXt:
             decoder_expansion_ratio=self.config["decoder_expansion_ratio"],
             bottleneck_expansion_ratio=self.config["bottleneck_expansion_ratio"],
             kernel_size=self.config["kernel_size"],
-            deep_supervision=self.config["deep_supervision"],
+            deep_supervision=False,
             norm_type=self.config["norm_type"],
             global_resp_norm=self.config["global_resp_norm"],
             blocks_down=self.config["blocks_down"],
@@ -50,8 +50,8 @@ class myMedNeXt:
         decoder_expansion_ratio = trial.suggest_int("decoder_expansion_ratio", 1, 3)
         bottleneck_expansion_ratio = trial.suggest_int("bottleneck_expansion_ratio", 1, 4)
         kernel_size = trial.suggest_categorical("kernel_size", [3, 5])
-        deep_supervision = trial.suggest_categorical("deep_supervision", [True, False])
-        norm_type = trial.suggest_categorical("norm_type", ["group", "instance"])
+        deep_supervision = trial.suggest_categorical("deep_supervision", [False])
+        norm_type = trial.suggest_categorical("norm_type", ["group"])  #"layer" causes crash
         # For extremely low SNR, you might opt to disable global response normalization
         global_resp_norm = trial.suggest_categorical("global_resp_norm", [True, False])
         
