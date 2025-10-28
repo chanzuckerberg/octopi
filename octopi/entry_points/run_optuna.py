@@ -41,12 +41,23 @@ def optuna_parser(parser_description, add_slurm: bool = False):
 
     train_group = parser.add_argument_group("Training Arguments")
     common.add_train_parameters(train_group, octopi = True)
-    train_group.add_argument("--random-seed", type=int, default=42, required=False, 
+    train_group.add_argument("--random-seed", type=int, default=42, required=False,
                              help="Random seed for reproducibility (default: 42).")
+
+    # Worker mode arguments for distributed execution
+    worker_group = parser.add_argument_group("Distributed Execution Arguments")
+    worker_group.add_argument("--worker-mode", action="store_true", default=False,
+                              help="Run as a worker that processes a single trial from an existing study.")
+    worker_group.add_argument("--study-name", type=str, default=None,
+                              help="Name of existing Optuna study to connect to (required for worker mode).")
+    worker_group.add_argument("--study-db-path", type=str, default=None,
+                              help="Path to SQLite database containing the study (required for worker mode).")
+    worker_group.add_argument("--num-workers", type=int, default=None,
+                              help="Number of SLURM worker jobs to submit (coordinator mode only).")
 
     if add_slurm:
         slurm_group = parser.add_argument_group("SLURM Arguments")
-        common.add_slurm_parameters(slurm_group, 'optuna')
+    common.add_slurm_parameters(slurm_group, 'optuna')
 
     args = parser.parse_args()
     return args
@@ -54,7 +65,8 @@ def optuna_parser(parser_description, add_slurm: bool = False):
 # Entry point with argparse
 def cli():
     """
-    CLI entry point for running optuna model archetecture search.
+    CLI entry point for running optuna model architecture search.
+    Supports both coordinator mode (creates study + submits workers) and worker mode (runs single trial).
     """
 
     description="Perform model architecture search with Optuna and MLflow integration."
@@ -64,10 +76,44 @@ def cli():
     if len(args.config) > 1:    copick_configs = parsers.parse_copick_configs(args.config)
     else:                       copick_configs = args.config[0]
 
+    # Worker mode: load existing study and run a single trial
+    if args.worker_mode:
+        if not args.study_name or not args.study_db_path:
+            raise ValueError("Worker mode requires --study-name and --study-db-path arguments.")
+
+        print(f"Running in worker mode for study: {args.study_name}")
+        print(f"Database path: {args.study_db_path}")
+
+        search = ModelSearchSubmit(
+            copick_config=copick_configs,
+            target_name=args.target_info[0],
+            target_user_id=args.target_info[1],
+            target_session_id=args.target_info[2],
+            tomo_algorithm=args.tomo_alg,
+            voxel_size=args.voxel_size,
+            Nclass=args.Nclass,
+            model_type=args.model_type,
+            mlflow_experiment_name=args.mlflow_experiment_name,
+            random_seed=args.random_seed,
+            num_epochs=args.num_epochs,
+            num_trials=args.num_trials,
+            trainRunIDs=args.trainRunIDs,
+            validateRunIDs=args.validateRunIDs,
+            tomo_batch_size=args.tomo_batch_size,
+            best_metric=args.best_metric,
+            val_interval=args.val_interval,
+            data_split=args.data_split
+        )
+
+        # Run as worker: execute a single trial
+        search.run_as_worker(study_name=args.study_name, db_path=args.study_db_path)
+        return
+
+    # Coordinator mode: create study and optionally submit workers
     # Create the model exploration directory
     os.makedirs(f'explore_results_{args.model_type}', exist_ok=True)
 
-    # Save JSON with Parameters
+    # Save parameters
     save_parameters(args, f'explore_results_{args.model_type}/octopi.yaml')
 
     # Call the function with parsed arguments
@@ -85,15 +131,20 @@ def cli():
         num_epochs=args.num_epochs,
         num_trials=args.num_trials,
         trainRunIDs=args.trainRunIDs,
-        validateRunIDs=args.validateRunIDs, 
+        validateRunIDs=args.validateRunIDs,
         tomo_batch_size=args.tomo_batch_size,
         best_metric=args.best_metric,
         val_interval=args.val_interval,
         data_split=args.data_split
     )
 
-    # Run the model search
-    search.run_model_search()
+    # If num_workers is specified, submit distributed workers
+    if args.num_workers:
+        print(f"\nCoordinator mode: Submitting {args.num_workers} worker jobs...")
+        search.submit_workers(args=args, num_workers=args.num_workers)
+    else:
+        # Run the model search locally (original behavior)
+        search.run_model_search()
 
 def save_parameters(args: argparse.Namespace, 
                     output_path: str):

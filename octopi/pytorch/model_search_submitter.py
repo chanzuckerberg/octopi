@@ -141,14 +141,21 @@ class ModelSearchSubmit:
             pass
 
         mlflow.set_experiment(self.mlflow_experiment_name)
-    
-        # Create a storage object with heartbeat configuration
+
+        # Create a storage object with heartbeat configuration and improved SQLite concurrency
         storage_url = f"sqlite:///explore_results_{self.model_type}/trials.db"
         self.storage = optuna.storages.RDBStorage(
             url=storage_url,
             heartbeat_interval=60,  # Record heartbeat every minute
             grace_period=600,       # 10 minutes grace period
-            failed_trial_callback=optuna.storages.RetryFailedTrialCallback(max_retry=1)
+            failed_trial_callback=optuna.storages.RetryFailedTrialCallback(max_retry=1),
+            engine_kwargs={
+                "connect_args": {
+                    "timeout": 300,  # 5 minutes timeout for lock acquisition
+                    "check_same_thread": False  # Allow multi-threaded access
+                },
+                "pool_pre_ping": True  # Verify connections before using
+            }
         )
 
         # Detect GPU availability
@@ -162,9 +169,244 @@ class ModelSearchSubmit:
             model_search = hyper_search.BayesianModelSearch(self.data_generator, self.model_type)
             self._single_gpu_optuna(model_search)
 
+    def run_as_worker(self, study_name: str, db_path: str):
+        """
+        Run as a worker that executes a single trial from an existing Optuna study.
+        This method is designed for distributed execution where multiple workers
+        pull trials from a shared database.
+
+        Args:
+            study_name (str): Name of the Optuna study to load.
+            db_path (str): Path to the SQLite database containing the study.
+        """
+        # Set up MLflow tracking
+        try:
+            tracking_uri = config.mlflow_setup()
+            mlflow.set_tracking_uri(tracking_uri)
+        except Exception as e:
+            print(f'Failed to set up MLflow tracking: {e}')
+            pass
+
+        mlflow.set_experiment(self.mlflow_experiment_name)
+
+        # Create storage with improved concurrency settings for distributed workers
+        self.storage = optuna.storages.RDBStorage(
+            url=f"sqlite:///{db_path}",
+            heartbeat_interval=60,
+            grace_period=600,
+            failed_trial_callback=optuna.storages.RetryFailedTrialCallback(max_retry=1),
+            engine_kwargs={
+                "connect_args": {
+                    "timeout": 300,  # 5 minutes timeout for lock acquisition
+                    "check_same_thread": False  # Allow multi-threaded access
+                },
+                "pool_pre_ping": True  # Verify connections before using
+            }
+        )
+
+        # Load the existing study
+        print(f"Loading study '{study_name}' from {db_path}")
+        study = optuna.load_study(
+            study_name=study_name,
+            storage=self.storage,
+            sampler=self._get_optuna_sampler(),
+            pruner=self._get_optuna_pruner()
+        )
+
+        # Initialize model search object
+        model_search = hyper_search.BayesianModelSearch(self.data_generator, self.model_type)
+
+        # Determine device (should use single GPU per worker)
+        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        print(f"Worker using device: {device}")
+
+        # Create a child MLflow run for this worker's trial
+        with mlflow.start_run(nested=False) as worker_run:
+            model_search.parent_run_id = worker_run.info.run_id
+            model_search.parent_run_name = worker_run.info.run_name
+
+            # Log worker parameters
+            mlflow.log_params({
+                "random_seed": self.random_seed,
+                "worker_mode": True,
+                "study_name": study_name
+            })
+            mlflow.log_params(self.data_generator.get_dataloader_parameters())
+
+            # Run a single trial
+            print(f"Worker requesting trial from study...")
+            study.optimize(
+                lambda trial: model_search.objective(
+                    trial, self.num_epochs, device,
+                    val_interval=self.val_interval,
+                    best_metric=self.best_metric,
+                ),
+                n_trials=1  # Only run ONE trial per worker
+            )
+
+        print(f"Worker completed trial successfully")
+
+    def submit_workers(self, args, num_workers: int):
+        """
+        Create the Optuna study and submit SLURM worker jobs.
+        Each worker will pull trials from the shared database.
+
+        Note: Each worker executes exactly ONE trial and then exits. For maximum parallelism,
+        set num_workers equal to num_trials. For controlled parallelism (e.g., limited by
+        available GPUs), set num_workers to the desired parallel job count and submit
+        additional workers as needed.
+
+        Args:
+            args: Parsed command line arguments (needed for worker script generation).
+            num_workers (int): Number of worker jobs to submit. Each worker will run one trial.
+        """
+        import subprocess
+        import os
+
+        # Set up MLflow tracking
+        try:
+            tracking_uri = config.mlflow_setup()
+            mlflow.set_tracking_uri(tracking_uri)
+        except Exception as e:
+            print(f'Failed to set up MLflow tracking: {e}')
+            pass
+
+        mlflow.set_experiment(self.mlflow_experiment_name)
+
+        # Create storage with improved concurrency settings
+        storage_url = f"sqlite:///explore_results_{self.model_type}/trials.db"
+        self.storage = optuna.storages.RDBStorage(
+            url=storage_url,
+            heartbeat_interval=60,
+            grace_period=600,
+            failed_trial_callback=optuna.storages.RetryFailedTrialCallback(max_retry=1),
+            engine_kwargs={
+                "connect_args": {
+                    "timeout": 300,  # 5 minutes timeout for lock acquisition
+                    "check_same_thread": False  # Allow multi-threaded access
+                },
+                "pool_pre_ping": True  # Verify connections before using
+            }
+        )
+
+        # Create the study (will be loaded by workers)
+        study_name = f"model-search-{self.model_type}"
+        print(f"\nCreating Optuna study: {study_name}")
+        study = optuna.create_study(
+            study_name=study_name,
+            storage=self.storage,
+            direction="maximize",
+            sampler=self._get_optuna_sampler(),
+            load_if_exists=True,
+            pruner=self._get_optuna_pruner()
+        )
+        print(f"Study created in: {storage_url}\n")
+
+        # Generate and submit worker scripts
+        db_path = os.path.abspath(f"explore_results_{self.model_type}/trials.db")
+        worker_script_dir = f"explore_results_{self.model_type}/worker_scripts"
+        os.makedirs(worker_script_dir, exist_ok=True)
+
+        # Import here to avoid circular dependency
+        from octopi.utils import submit_slurm
+
+        submitted_jobs = []
+        for i in range(num_workers):
+            worker_script_path = f"{worker_script_dir}/worker_{i}.sh"
+
+            # Build the worker command
+            worker_cmd = self._build_worker_command(args, study_name, db_path)
+
+            # Create SLURM script for this worker
+            gpu_constraint = getattr(args, 'gpu_constraint', 'h100')
+            conda_env = getattr(args, 'conda_env', '/hpc/projects/group.czii/conda_environments/pyUNET/')
+            job_name = f"optuna-worker-{i}"
+
+            submit_slurm.create_shellsubmit(
+                conda_env=conda_env,
+                command=worker_cmd,
+                num_gpus=1,  # One GPU per worker
+                gpu_constraint=gpu_constraint,
+                job_name=job_name,
+                output_file=worker_script_path
+            )
+
+            # Submit the job
+            result = subprocess.run(
+                ['sbatch', worker_script_path],
+                capture_output=True,
+                text=True
+            )
+
+            if result.returncode == 0:
+                job_id = result.stdout.strip().split()[-1]
+                submitted_jobs.append(job_id)
+                print(f"✓ Submitted worker {i}: Job ID {job_id}")
+            else:
+                print(f"✗ Failed to submit worker {i}: {result.stderr}")
+
+        print(f"\nSuccessfully submitted {len(submitted_jobs)} worker jobs")
+        print(f"Study: {study_name}")
+        print(f"Database: {db_path}")
+        print(f"Job IDs: {', '.join(submitted_jobs)}")
+        print(f"\nMonitor jobs with: squeue -u $USER")
+        print(f"Monitor study progress: sqlite3 {db_path} 'SELECT COUNT(*) FROM trials WHERE state=\"COMPLETE\";'")
+
+    def _build_worker_command(self, args, study_name: str, db_path: str) -> str:
+        """
+        Build the command line for a worker to execute.
+
+        Args:
+            args: Parsed command line arguments.
+            study_name (str): Name of the Optuna study.
+            db_path (str): Absolute path to the study database.
+
+        Returns:
+            str: Complete command to run the worker.
+        """
+        # Start with base command
+        cmd_parts = ['octopi', 'model-explore']
+
+        # Add worker mode flags
+        cmd_parts.extend(['--worker-mode'])
+        cmd_parts.extend(['--study-name', study_name])
+        cmd_parts.extend(['--study-db-path', db_path])
+
+        # Add configuration arguments
+        if isinstance(args.config, list):
+            for cfg in args.config:
+                cmd_parts.extend(['--config', cfg])
+        else:
+            cmd_parts.extend(['--config', args.config])
+
+        # Add target info
+        cmd_parts.extend(['--target-info', f"{args.target_info[0]},{args.target_info[1]},{args.target_info[2]}"])
+
+        # Add other required arguments
+        cmd_parts.extend(['--tomo-alg', args.tomo_alg])
+        cmd_parts.extend(['--voxel-size', str(args.voxel_size)])
+        cmd_parts.extend(['--model-type', args.model_type])
+        cmd_parts.extend(['--Nclass', str(args.Nclass)])
+        cmd_parts.extend(['--mlflow-experiment-name', args.mlflow_experiment_name])
+        cmd_parts.extend(['--random-seed', str(args.random_seed)])
+        cmd_parts.extend(['--num-epochs', str(args.num_epochs)])
+        cmd_parts.extend(['--num-trials', str(args.num_trials)])
+        cmd_parts.extend(['--tomo-batch-size', str(args.tomo_batch_size)])
+        cmd_parts.extend(['--best-metric', args.best_metric])
+        cmd_parts.extend(['--val-interval', str(args.val_interval)])
+        cmd_parts.extend(['--data-split', args.data_split])
+
+        # Add optional run IDs if provided
+        if args.trainRunIDs:
+            cmd_parts.extend(['--trainRunIDs', ','.join(args.trainRunIDs)])
+        if args.validateRunIDs:
+            cmd_parts.extend(['--validateRunIDs', ','.join(args.validateRunIDs)])
+
+        return ' '.join(cmd_parts)
+
     def _single_gpu_optuna(self, model_search):
         """Runs Optuna optimization on a single GPU."""
-        
+
         with mlflow.start_run(nested=False) as parent_run:
 
             model_search.parent_run_id = parent_run.info.run_id

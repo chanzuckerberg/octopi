@@ -94,7 +94,84 @@ def model_explore_slurm():
     """
     parser_description = "Create a SLURM script for running bayesian optimization on 3D CNN models"
     args = run_optuna.optuna_parser(parser_description, add_slurm=True)
-    create_model_explore_script(args)   
+    create_model_explore_script(args)
+
+def create_master_optuna_script(args):
+    """
+    Create a SLURM script for the master monitoring job.
+
+    The master job runs on CPU and monitors Optuna progress while dynamically
+    submitting GPU worker jobs.
+    """
+    # Build the command to run the master loop
+    cmd_parts = ['octopi', '_run-master-loop']
+
+    # Add all configuration arguments
+    for config in args.config:
+        cmd_parts.extend(['--config', config])
+
+    cmd_parts.extend(['--target-info', f"{args.target_info[0]},{args.target_info[1]},{args.target_info[2]}"])
+    cmd_parts.extend(['--tomo-alg', args.tomo_alg])
+    cmd_parts.extend(['--model-type', args.model_type])
+    cmd_parts.extend(['--Nclass', str(args.Nclass)])
+    cmd_parts.extend(['--voxel-size', str(args.voxel_size)])
+    cmd_parts.extend(['--num-epochs', str(args.num_epochs)])
+    cmd_parts.extend(['--num-trials', str(args.num_trials)])
+    cmd_parts.extend(['--tomo-batch-size', str(args.tomo_batch_size)])
+    cmd_parts.extend(['--best-metric', args.best_metric])
+    cmd_parts.extend(['--val-interval', str(args.val_interval)])
+    cmd_parts.extend(['--mlflow-experiment-name', args.mlflow_experiment_name])
+    cmd_parts.extend(['--random-seed', str(args.random_seed)])
+    cmd_parts.extend(['--data-split', args.data_split])
+
+    # Add master-specific arguments
+    cmd_parts.extend(['--max-parallel-workers', str(args.max_parallel_workers)])
+    cmd_parts.extend(['--worker-time-limit', args.worker_time_limit])
+    cmd_parts.extend(['--master-time-limit', args.master_time_limit])
+    cmd_parts.extend(['--monitor-interval', str(args.monitor_interval)])
+    cmd_parts.extend(['--max-worker-retries', str(args.max_worker_retries)])
+    cmd_parts.extend(['--error-threshold', str(args.error_threshold)])
+
+    # Add optional run IDs if provided
+    if args.trainRunIDs:
+        cmd_parts.extend(['--trainRunIDs', ','.join(args.trainRunIDs)])
+    if args.validateRunIDs:
+        cmd_parts.extend(['--validateRunIDs', ','.join(args.validateRunIDs)])
+
+    command = ' '.join(cmd_parts)
+
+    # Create the SLURM script for master job (CPU-only, long-running)
+    create_shellsubmit(
+        job_name=args.job_name,
+        output_file=f'explore_results_{args.model_type}/master_slurm.log',
+        shell_name='model_explore_master.sh',
+        conda_path=args.conda_env,
+        command=command,
+        num_gpus=0,  # Master runs on CPU
+        time_limit=args.master_time_limit,
+        cpus_per_task=4,
+        mem_per_cpu='16G',
+        partition='cpu'
+    )
+
+    print(f"\nMaster job configuration:")
+    print(f"  Max parallel workers: {args.max_parallel_workers}")
+    print(f"  Worker time limit: {args.worker_time_limit}")
+    print(f"  Master time limit: {args.master_time_limit}")
+    print(f"  Monitor interval: {args.monitor_interval}s")
+    print(f"  Max worker retries: {args.max_worker_retries}")
+
+def model_explore_master_slurm():
+    """
+    Create a SLURM script for master-managed bayesian optimization.
+
+    The master job monitors progress and dynamically submits worker jobs.
+    """
+    from octopi.entry_points import run_optuna_master
+
+    parser_description = "Create a SLURM script for master-managed bayesian optimization on 3D CNN models"
+    args = run_optuna_master.optuna_master_parser(parser_description, add_slurm=True)
+    create_master_optuna_script(args)   
 
 def create_inference_script(args):
     """
