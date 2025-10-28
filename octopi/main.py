@@ -3,6 +3,8 @@ from octopi.processing.importers import cli_mrcs as import_mrc_volumes
 from octopi.entry_points.run_create_targets import cli as create_targets
 from octopi.entry_points.run_train import cli as train_model
 from octopi.entry_points.run_optuna import cli as model_explore
+from octopi.entry_points.run_optuna_master import cli as model_explore_master
+from octopi.entry_points._master_loop import cli as run_master_loop
 from octopi.entry_points.run_segment_predict import cli as inference
 from octopi.entry_points.run_localize import cli as localize
 from octopi.entry_points.run_evaluate import cli as evaluate
@@ -33,6 +35,8 @@ def cli_main():
         "create-targets": (create_targets, "Generate segmentation targets from coordinates."),
         "train": (train_model, "Train a single U-Net model."),
         "model-explore": (model_explore, "Explore model architectures with Optuna / Bayesian Optimization."),
+        "model-explore-master": (model_explore_master, "Create master job for distributed Optuna model architecture search."),
+        "_run-master-loop": (run_master_loop, "Internal: Run master monitoring loop for distributed Optuna search."),
         "segment": (inference, "Perform segmentation inference on tomograms."),
         "localize": (localize, "Perform localization of particles in tomograms."),
         "extract-mb-picks": (extract_mb_picks, "Extract MB Picks from tomograms."),
@@ -77,6 +81,7 @@ def cli_slurm_main():
         # "create-targets": (create_targets, "Generate segmentation targets from coordinates."),
         "train": (slurm_submitter.train_model_slurm, "Train a single U-Net model."),
         "model-explore": (slurm_submitter.model_explore_slurm, "Explore model architectures with Optuna / Bayesian Optimization."),
+        "model-explore-master": (slurm_submitter.model_explore_master_slurm, "Create master SLURM job script for distributed Optuna search."),
         "inference": (slurm_submitter.inference_slurm, "Perform segmentation inference on tomograms."),
         "localize": (slurm_submitter.localize_slurm, "Perform localization of particles in tomograms."),
         # "extract-mb-picks": (extract_mb_picks, "Extract MB Picks from tomograms.")
