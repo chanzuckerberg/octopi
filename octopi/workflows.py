@@ -82,8 +82,8 @@ def train(data_generator, loss_function,
     io.save_parameters_to_yaml(model_builder, model_trainer, data_generator, parameters_save_name)
 
     # TODO: Write Results to CSV...
-    results_save_name = os.path.join(model_save_path, "results.json")
-    io.save_results_to_json(results, results_save_name)
+    results_save_name = os.path.join(model_save_path, "results.csv")
+    io.save_results_to_csv(results, results_save_name)
 
 def segment(config, tomo_algorithm, voxel_size, model_weights, model_config, 
             seg_info = ['predict', 'octopi', '1'], use_tta = False, run_ids = None):

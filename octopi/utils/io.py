@@ -3,6 +3,7 @@ File I/O utilities for YAML and JSON operations.
 """
 
 import os, json, yaml, copick, glob
+import pandas as pd
 
 
 # Create a custom dumper that uses flow style for lists only.
@@ -31,17 +32,31 @@ def load_yaml(path: str) -> dict:
             return yaml.safe_load(f)
     else:
         raise FileNotFoundError(f"File not found: {path}")
+
+def save_results_to_csv(results, filename: str):
+    """Save training results to a CSV file (aligned to validation steps)."""
+    data = {}
     
-
-def save_results_to_json(results, filename: str):
-    """
-    Save training results to a JSON file.
-    """
-    results = prepare_inline_results_json(results)
-    with open(os.path.join(filename), "w") as json_file:
-        json.dump( results, json_file, indent=4 )
+    # Get validation steps (these are the steps we want to keep)
+    val_steps = set()
+    for key, value in results.items():
+        if isinstance(value, list) and value and isinstance(value[0], tuple):
+            if key.startswith(('val_', 'avg_', 'f1_', 'recall_', 'precision_', 'fbeta_')):
+                val_steps.update([item[0] for item in value])
+                break
+    
+    val_steps = sorted(val_steps)
+    data['step'] = val_steps
+    
+    # Extract all metrics, filtering to validation steps only
+    for key, value in results.items():
+        if isinstance(value, list) and value and isinstance(value[0], tuple):
+            step_to_value = {item[0]: item[1] for item in value}
+            data[key] = [step_to_value.get(step, None) for step in val_steps]
+    
+    df = pd.DataFrame(data)
+    df.to_csv(filename, index=False)
     print(f"📊 Training Results saved to {filename}")
-
 
 def prepare_inline_results_json(results):
     """
