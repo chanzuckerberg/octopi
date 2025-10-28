@@ -11,7 +11,7 @@ import subprocess
 import argparse
 from octopi.utils import slurm_monitor, parsers, config
 from octopi.pytorch.model_search_submitter import ModelSearchSubmit
-from octopi.entry_points import run_optuna_master
+from octopi.entry_points import run_optuna_master, run_optuna
 import optuna
 
 
