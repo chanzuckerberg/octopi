@@ -174,6 +174,7 @@ def query_optuna_progress(db_path: str, study_name: str) -> Dict[str, int]:
         cursor.execute("SELECT study_id FROM studies WHERE study_name = ?", (study_name,))
         result = cursor.fetchone()
         if not result:
+            print(f"Warning: Study '{study_name}' not found in database")
             conn.close()
             return {'COMPLETE': 0, 'RUNNING': 0, 'FAIL': 0, 'PRUNED': 0, 'WAITING': 0}
 
@@ -196,11 +197,19 @@ def query_optuna_progress(db_path: str, study_name: str) -> Dict[str, int]:
         }
 
         for state_code, count in cursor.fetchall():
-            # Optuna uses numeric state codes, map them to string names
-            # 0=RUNNING, 1=COMPLETE, 2=PRUNED, 3=FAIL, 4=WAITING
-            state_names = {0: 'RUNNING', 1: 'COMPLETE', 2: 'PRUNED', 3: 'FAIL', 4: 'WAITING'}
-            state_name = state_names.get(state_code, f'UNKNOWN_{state_code}')
-            results[state_name] = count
+            # Optuna stores states as strings, not integers
+            # Handle both string and integer state codes for compatibility
+            if isinstance(state_code, str):
+                # State is already a string like "FAIL", "PRUNED", "COMPLETE"
+                state_name = state_code
+            else:
+                # Fallback for integer state codes (if older Optuna versions use them)
+                state_names = {0: 'RUNNING', 1: 'COMPLETE', 2: 'PRUNED', 3: 'FAIL', 4: 'WAITING'}
+                state_name = state_names.get(state_code, f'UNKNOWN_{state_code}')
+
+            # Only store if it's a recognized state
+            if state_name in results:
+                results[state_name] = count
 
         conn.close()
         return results
