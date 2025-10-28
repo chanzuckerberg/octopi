@@ -90,7 +90,6 @@ def cli():
             target_session_id=args.target_info[2],
             tomo_algorithm=args.tomo_alg,
             voxel_size=args.voxel_size,
-            Nclass=args.Nclass,
             model_type=args.model_type,
             mlflow_experiment_name=args.mlflow_experiment_name,
             random_seed=args.random_seed,

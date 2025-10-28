@@ -72,7 +72,6 @@ def master_monitoring_loop(args):
         target_session_id=args.target_info[2],
         tomo_algorithm=args.tomo_alg,
         voxel_size=args.voxel_size,
-        Nclass=args.Nclass,
         model_type=args.model_type,
         mlflow_experiment_name=args.mlflow_experiment_name,
         random_seed=args.random_seed,
@@ -251,7 +250,6 @@ def submit_worker(args, db_path: str, study_name: str, results_dir: str) -> str:
     cmd_parts.extend(['--tomo-alg', args.tomo_alg])
     cmd_parts.extend(['--voxel-size', str(args.voxel_size)])
     cmd_parts.extend(['--model-type', args.model_type])
-    cmd_parts.extend(['--Nclass', str(args.Nclass)])
     cmd_parts.extend(['--mlflow-experiment-name', args.mlflow_experiment_name])
     cmd_parts.extend(['--random-seed', str(args.random_seed)])
     cmd_parts.extend(['--num-epochs', str(args.num_epochs)])

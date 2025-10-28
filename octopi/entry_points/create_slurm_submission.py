@@ -123,7 +123,6 @@ def create_master_optuna_script(args):
     cmd_parts.extend(['--target-info', f"{args.target_info[0]},{args.target_info[1]},{args.target_info[2]}"])
     cmd_parts.extend(['--tomo-alg', args.tomo_alg])
     cmd_parts.extend(['--model-type', args.model_type])
-    cmd_parts.extend(['--Nclass', str(args.Nclass)])
     cmd_parts.extend(['--voxel-size', str(args.voxel_size)])
     cmd_parts.extend(['--num-epochs', str(args.num_epochs)])
     cmd_parts.extend(['--num-trials', str(args.num_trials)])

@@ -48,8 +48,6 @@ def optuna_master_parser(parser_description: str, add_slurm: bool = False):
     model_group.add_argument("--model-type", type=str, default='Unet', required=False,
                              choices=['Unet', 'AttentionUnet', 'MedNeXt', 'SegResNet'],
                              help="Model type to use for training")
-    model_group.add_argument("--Nclass", type=int, default=3, required=False,
-                             help="Number of prediction classes in the model")
 
     # Training Arguments
     train_group = parser.add_argument_group("Training Arguments")

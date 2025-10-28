@@ -383,7 +383,6 @@ class ModelSearchSubmit:
         cmd_parts.extend(['--tomo-alg', args.tomo_alg])
         cmd_parts.extend(['--voxel-size', str(args.voxel_size)])
         cmd_parts.extend(['--model-type', args.model_type])
-        cmd_parts.extend(['--Nclass', str(args.Nclass)])
         cmd_parts.extend(['--mlflow-experiment-name', args.mlflow_experiment_name])
         cmd_parts.extend(['--random-seed', str(args.random_seed)])
         cmd_parts.extend(['--num-epochs', str(args.num_epochs)])
