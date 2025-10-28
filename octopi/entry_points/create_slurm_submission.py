@@ -42,12 +42,17 @@ octopi train \\
     if args.model_weights is not None and args.model_config is not None:
         command += f" --model-weights {args.model_weights}"
 
+    # Load SLURM configuration
+    from octopi.utils.slurm_config import SLURMConfig
+    slurm_config = SLURMConfig.load()
+    slurm_config.apply_cli_overrides(args)
+
     create_shellsubmit(
         job_name = args.job_name,
         output_file = 'trainer.log',
         shell_name = 'train_octopi.sh',
-        conda_path = args.conda_env,
         command = command,
+        slurm_config = slurm_config,
         num_gpus = 1,
         gpu_constraint = args.gpu_constraint
     )
@@ -78,12 +83,17 @@ octopi model-explore \\
     {strconfigs}
 """
 
+    # Load SLURM configuration
+    from octopi.utils.slurm_config import SLURMConfig
+    slurm_config = SLURMConfig.load()
+    slurm_config.apply_cli_overrides(args)
+
     create_shellsubmit(
         job_name = args.job_name,
         output_file = 'optuna.log',
         shell_name = 'model_explore.sh',
-        conda_path = args.conda_env,
         command = command,
+        slurm_config = slurm_config,
         num_gpus = 1,
         gpu_constraint = args.gpu_constraint
     )
@@ -140,13 +150,18 @@ def create_master_optuna_script(args):
 
     command = ' '.join(cmd_parts)
 
+    # Load SLURM configuration
+    from octopi.utils.slurm_config import SLURMConfig
+    slurm_config = SLURMConfig.load()
+    slurm_config.apply_cli_overrides(args)
+
     # Create the SLURM script for master job (CPU-only, long-running)
     create_shellsubmit(
         job_name=args.job_name,
         output_file=f'explore_results_{args.model_type}/master_slurm.log',
         shell_name='model_explore_master.sh',
-        conda_path=args.conda_env,
         command=command,
+        slurm_config=slurm_config,
         num_gpus=0,  # Master runs on CPU
         time_limit=args.master_time_limit,
         cpus_per_task=4,
@@ -177,6 +192,10 @@ def create_inference_script(args):
     """
     Create a SLURM script for running inference on 3D CNN models
     """
+    # Load SLURM configuration
+    from octopi.utils.slurm_config import SLURMConfig
+    slurm_config = SLURMConfig.load()
+    slurm_config.apply_cli_overrides(args)
 
     if len(args.config.split(',')) > 1:
 
@@ -184,12 +203,10 @@ def create_inference_script(args):
             job_name = args.job_name,
             output_file = 'predict.log',
             shell_name = 'segment.sh',
-            conda_path = args.conda_env,
             base_inputs = args.base_inputs,
             config_inputs = args.config_inputs,
             command = args.command,
-            num_gpus = args.num_gpus,
-            gpu_constraint = args.gpu_constraint
+            slurm_config = slurm_config
         )
     else:
 
@@ -207,8 +224,8 @@ octopi inference \\
             job_name = args.job_name,
             output_file = 'predict.log',
             shell_name = 'segment.sh',
-            conda_path = args.conda_env,
             command = command,
+            slurm_config = slurm_config,
             num_gpus = 1,
             gpu_constraint = args.gpu_constraint
         )
@@ -225,16 +242,21 @@ def create_localize_script(args):
     """"
     Create a SLURM script for running localization on predicted segmentation masks
     """
+    # Load SLURM configuration
+    from octopi.utils.slurm_config import SLURMConfig
+    slurm_config = SLURMConfig.load()
+    slurm_config.apply_cli_overrides(args)
+
     if len(args.config.split(',')) > 1:
-    
+
         create_multiconfig_shellsubmit(
             job_name = args.job_name,
             output_file = args.output,
             shell_name = args.output_script,
-            conda_path = args.conda_env,
             base_inputs = args.base_inputs,
             config_inputs = args.config_inputs,
-            command = args.command
+            command = args.command,
+            slurm_config = slurm_config
         )
     else:
 
@@ -251,8 +273,8 @@ octopi localize \\
             job_name = args.job_name,
             output_file = 'localize.log',
             shell_name = 'localize.sh',
-            conda_path = args.conda_env,
             command = command,
+            slurm_config = slurm_config,
             num_gpus = 0
         )
 
@@ -282,12 +304,17 @@ octopi import-mrc-volumes \\
     --input-voxel-size {args.input_voxel_size} --output-voxel-size {args.output_voxel_size}
 """
 
+    # Load SLURM configuration
+    from octopi.utils.slurm_config import SLURMConfig
+    slurm_config = SLURMConfig.load()
+    slurm_config.apply_cli_overrides(args)
+
     create_shellsubmit(
         job_name = args.job_name,
         output_file = 'importer.log',
         shell_name = 'mrc_importer.sh',
-        conda_path = args.conda_env,
-        command = command
+        command = command,
+        slurm_config = slurm_config
     )
 
 def import_mrc_slurm():
@@ -306,17 +333,22 @@ def create_download_dataportal_script(args):
     command = f"""
 octopi download-dataportal \\
     --config {args.config} --datasetID {args.datasetID} \\
-    --overlay-path {args.overlay_path} 
+    --overlay-path {args.overlay_path}
     --dataportal-name {args.dataportal_name} --target-tomo-type {args.target_tomo_type} \\
     --input-voxel-size {args.input_voxel_size} --output-voxel-size {args.output_voxel_size}
 """
+
+    # Load SLURM configuration
+    from octopi.utils.slurm_config import SLURMConfig
+    slurm_config = SLURMConfig.load()
+    slurm_config.apply_cli_overrides(args)
 
     create_shellsubmit(
         job_name = args.job_name,
         output_file = 'importer.log',
         shell_name = 'dataportal_importer.sh',
-        conda_path = args.conda_env,
-        command = command
+        command = command,
+        slurm_config = slurm_config
     )
 
 def download_dataportal_slurm():

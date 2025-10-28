@@ -273,16 +273,20 @@ def submit_worker(args, db_path: str, study_name: str, results_dir: str) -> str:
     worker_script_path = worker_script.name
     worker_script.close()
 
+    # Load SLURM configuration
+    from octopi.utils.slurm_config import SLURMConfig
+    slurm_config = SLURMConfig.load()
+    slurm_config.apply_cli_overrides(args)
+
     # Generate SLURM script
-    conda_env = getattr(args, 'conda_env', '/hpc/projects/group.czii/conda_environments/pyUNET/')
     gpu_constraint = getattr(args, 'gpu_constraint', 'h100')
 
     submit_slurm.create_shellsubmit(
         job_name=f"optuna-worker-{args.model_type}",
         output_file=f"{results_dir}/worker-%j.log",
         shell_name=worker_script_path,
-        conda_path=conda_env,
         command=command,
+        slurm_config=slurm_config,
         num_gpus=1,
         gpu_constraint=gpu_constraint,
         time_limit=args.worker_time_limit
