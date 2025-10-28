@@ -57,7 +57,7 @@ def optuna_parser(parser_description, add_slurm: bool = False):
 
     if add_slurm:
         slurm_group = parser.add_argument_group("SLURM Arguments")
-    common.add_slurm_parameters(slurm_group, 'optuna')
+        common.add_slurm_parameters(slurm_group, 'optuna')
 
     args = parser.parse_args()
     return args
