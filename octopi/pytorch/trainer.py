@@ -14,12 +14,12 @@ warnings.filterwarnings("ignore", category=UserWarning)
 
 class ModelTrainer:
 
-    def __init__(self, 
-                 model, 
+    def __init__(self,
+                 model,
                  device,
-                 loss_function, 
-                 metrics_function, 
-                 optimizer, 
+                 loss_function,
+                 metrics_function,
+                 optimizer,
                  use_ema: bool = True):
 
         self.model = model
@@ -30,7 +30,7 @@ class ModelTrainer:
 
         self.parallel_mlflow = False
         self.client = None
-        self.trial_run_id = None  
+        self.trial_run_id = None
 
         # Default F-Beta Value
         self.beta = 2
@@ -38,7 +38,7 @@ class ModelTrainer:
         # Initialize EMAHandler for the model
         self.ema_experiment = use_ema
         if self.ema_experiment:
-            self.ema_handler = ema.ExponentialMovingAverage(self.model.parameters(), decay=0.99)
+            self.ema_handler = ema.ExponentialMovingAverage(self.model.parameters(), decay=0.999)
 
         # Initialize Figure and Axes for Plotting
         self.fig = None; self.axs = None
@@ -88,18 +88,18 @@ class ModelTrainer:
         with torch.no_grad():
             for val_data in self.val_loader:
                 val_inputs = val_data["image"].to(self.device)
-                val_labels = val_data["label"].to(self.device)
+                val_labels = val_data["label"]# .to(self.device) # Keep labels on CPU for metric computation
                 
                 # Apply sliding window inference
-                # roi_size=self.input_dim, # try setting a set size of 128, 144 or 160? 
-                roi = (max(128, self.crop_size)) * 3
+                roi = max(160, self.crop_size)  # try setting a set size of 128, 144 or 160?
                 val_outputs = sliding_window_inference(
                     inputs=val_inputs, 
-                    roi_size=roi,
-                    sw_batch_size=2,
+                    roi_size=(roi, roi, roi),
+                    sw_batch_size=4,
                     predictor=self.model, 
-                    overlap=0.25,
-                    device=self.device
+                    overlap=0.5,
+                    sw_device=self.device,
+                    device=torch.device('cpu')
                 )
 
                 del val_inputs

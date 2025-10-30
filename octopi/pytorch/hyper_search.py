@@ -57,6 +57,7 @@ class BayesianModelSearch:
     def _define_optimizer(self, trial):
         # Define optimizer
         # lr0 = trial.suggest_float("lr", 1e-4, 1e-3, log=True)
+        # wd = trial.suggest_float("weight_decay", 1e-5, 1e-3, log=True)
         self.optimizer = torch.optim.AdamW(self.model.parameters(), lr=1e-3, weight_decay=1e-4)
 
     def _train_model(self, trial, model_trainer, epochs, val_interval, crop_size, num_samples, best_metric):
@@ -126,7 +127,7 @@ class BayesianModelSearch:
             self._save_best_model(trial, model_trainer, score)
 
             # Cleanup
-            self.cleanup(model_trainer, self.optimizer)
+            self.cleanup(model_trainer)
 
         return score        
 
@@ -191,7 +192,8 @@ class BayesianModelSearch:
             trial.set_user_attr("error", str(e))
             raise optuna.TrialPruned()
         finally:
-            self.cleanup(model_trainer, parent_run)
+            self.cleanup(model_trainer)
+            model_trainer.my_log_params({"parent_run_name": parent_run.info.run_name})
             try:
                 if self.client is not None and self.target_run_id is not None:
                     self.client.set_terminated(self.target_run_id, status=run_status)
@@ -213,7 +215,7 @@ class BayesianModelSearch:
         except ValueError:
             return -float('inf')
 
-    def cleanup(self, model_trainer, parent_run):
+    def cleanup(self, model_trainer):
         """Handles cleanup of resources."""
 
         # Log training parameters
@@ -222,8 +224,7 @@ class BayesianModelSearch:
             'optimizer': io.get_optimizer_parameters(model_trainer)
         }    
         model_trainer.my_log_params(io.flatten_params(params))
-        model_trainer.my_log_params({"parent_run_name": parent_run.info.run_name})
-
+    
         # Delete the trainer and optimizer objects
         del model_trainer, self.optimizer
 

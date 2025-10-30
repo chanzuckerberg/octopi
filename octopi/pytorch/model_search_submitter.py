@@ -248,7 +248,7 @@ class ModelSearchSubmit:
         return optuna.pruners.MedianPruner(
             n_startup_trials=10,    # let at least 10 full trials run before pruning
             n_warmup_steps=300,     # dont prune before 300 epochs/steps
-            interval_steps=5       # check every 10 validation intervals
+            interval_steps=self.val_interval       # check each interval
         )
 
     def save_contour_plot_as_png(self, study):
