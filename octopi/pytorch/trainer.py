@@ -38,7 +38,7 @@ class ModelTrainer:
         # Initialize EMAHandler for the model
         self.ema_experiment = use_ema
         if self.ema_experiment:
-            self.ema_handler = ema.ExponentialMovingAverage(self.model.parameters(), decay=0.999)
+            self.ema_handler = ema.ExponentialMovingAverage(self.model.parameters(), decay=0.995)
 
         # Initialize Figure and Axes for Plotting
         self.fig = None; self.axs = None
