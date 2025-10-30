@@ -61,7 +61,9 @@ def train(data_generator, loss_function,
     model.to(device) 
 
     # Optimizer
-    optimizer = torch.optim.AdamW(model.parameters(), lr=lr0, weight_decay=1e-4)
+    optimizer = torch.optim.AdamW(
+        model.parameters(), lr=lr0, weight_decay=1e-4
+    )
 
     # Create UNet-Trainer
     model_trainer = trainer.ModelTrainer(

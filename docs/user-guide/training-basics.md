@@ -90,7 +90,7 @@ Monitor optimization progress in real-time:
 
 #### Local MLflow Dashboard
 
-To inspect results locally: `mlflow ui` and open http://localhost:5000 in your browser.
+To inspect results locally: with either `mlflow ui` and open `http://localhost:5000` in your browser.
 
 #### 🖥️ HPC Cluster MLflow Access (Remote via SSH tunnel)
 
@@ -101,7 +101,7 @@ If running octopi on a remote cluster (e.g., Biohub Bruno), forward the MLflow p
 ssh -L 5000:localhost:5000 username@remote_host
 
 # On the remote terminal (login node)
-mlflow ui --host 0.0.0.0 --port 5000
+python -m mlflow ui --host 0.0.0.0 --port 5000
 ```
 
 In the case of Bruno the remote would be `login01.czbiohub.org`
