@@ -5,7 +5,7 @@ from octopi.models import common as builder
 from octopi.pytorch import segmentation
 from octopi.datasets import generators
 from octopi.pytorch import trainer 
-import copick, torch, os, yaml
+import copick, torch, os
 import multiprocess as mp
 from octopi.utils import io
 from tqdm import tqdm
