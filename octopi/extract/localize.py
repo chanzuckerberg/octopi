@@ -1,6 +1,9 @@
 from skimage.morphology import binary_erosion, binary_dilation, ball
-from scipy.cluster.hierarchy import fcluster, linkage
+from scipy.sparse.csgraph import connected_components
 from skimage.segmentation import watershed
+from scipy.sparse import coo_matrix
+from scipy.spatial import cKDTree
+
 from typing import List, Optional, Tuple
 from skimage.measure import regionprops
 from copick_utils.io import readers
@@ -44,7 +47,7 @@ def process_localization(run,
             return
 
     except Exception as e:
-        print(f"Error occurred while reading segmentation from {run.name}: {e}")
+        print(f"[ERROR] - Occurred while reading segmentation from {run.name}: {e}")
         return
     
     # Iterate through all user pickable objects
@@ -64,7 +67,7 @@ def process_localization(run,
         if points.size > 2:
 
             # Remove Picks that are too close to each other
-            # points = remove_repeated_picks(points, min_radius, pixelSize = voxel_size)
+            points = remove_repeated_picks(points, min_radius)
 
             # Swap the coordinates to match the expected format
             points = points[:,[2,1,0]] 
@@ -188,23 +191,24 @@ def extract_particle_centroids_via_com(
    
     return octopiCoords
 
-def remove_repeated_picks(coordinates, distanceThreshold, pixelSize = 1):
+def remove_repeated_picks(coordinates: np.ndarray,
+                               distance_threshold: float) -> np.ndarray:
+    if coordinates is None or len(coordinates) == 0:
+        return coordinates
+    if len(coordinates) == 1:
+        return coordinates.copy()
 
-    # Calculate the distance matrix for the 3D coordinates
-    dist_matrix = distance.cdist(coordinates[:, :3]/pixelSize, coordinates[:, :3]/pixelSize)
+    pts = coordinates[:, :3]
+    tree = cKDTree(pts)
+    # Sparse neighbor graph: edges between points within threshold
+    pairs = tree.sparse_distance_matrix(tree, distance_threshold, output_type='coo_matrix')
+    n = len(coordinates)
+    # Make it symmetric and include self-loops
+    A = coo_matrix((np.ones_like(pairs.data), (pairs.row, pairs.col)), shape=(n, n))
+    A = A.maximum(A.T)  # undirected
+    A.setdiag(1)
 
-    # Create a linkage matrix using single linkage method
-    Z = linkage(dist_matrix, method='complete')
-
-    # Form flat clusters with a distance threshold to determine groups
-    clusters = fcluster(Z, t=distanceThreshold, criterion='distance')
-
-    # Initialize an array to store the average of each group
-    unique_coordinates = np.zeros((max(clusters), coordinates.shape[1]))
-
-    # Calculate the mean for each cluster
-    for i in range(1, max(clusters) + 1):
-        unique_coordinates[i-1] = np.mean(coordinates[clusters == i], axis=0)
-
-    return unique_coordinates
+    n_comp, labels = connected_components(A, directed=False)
+    out = np.vstack([coordinates[labels == k].mean(axis=0) for k in range(n_comp)])
+    return out
 

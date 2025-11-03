@@ -160,6 +160,14 @@ def check_target_config_path(data_generator):
     else:
         config_path = data_generator.config
 
+    # Get the Target Config File
+    return get_config(
+        config_path, data_generator.targetname, 'create-targets',
+        data_generator.target_user_id, data_generator.target_session_id
+    )
+
+def get_config(config_path, name, process, user_id=None, session_id=None):
+
     # Get the Overlay and Static Roots
     root = copick.from_file(config_path)
 
@@ -171,13 +179,13 @@ def check_target_config_path(data_generator):
         static_root = None
     
     # Two Search Patterns, Either only a name provided or name, user_id, session_id
-    if data_generator.target_session_id is None:
-        pattern = glob.glob(os.path.join(overlay_root, 'logs', f"create-targets_*{data_generator.target_name}.yaml"))
+    if session_id is None:
+        pattern = glob.glob(os.path.join(overlay_root, 'logs', f"{process}_*{name}.yaml"))
         if len(pattern) == 0 and static_root is not None:
-            pattern = glob.glob(os.path.join(static_root, 'logs', f"create-targets_*{data_generator.target_name}.yaml"))
+            pattern = glob.glob(os.path.join(static_root, 'logs', f"{process}_*{name}.yaml"))
         fname = pattern[-1]
     else:
-        fname = f"create-targets_{data_generator.target_user_id}_{data_generator.target_session_id}_{data_generator.target_name}.yaml"
+        fname = f"{process}-{user_id}_{session_id}_{name}.yaml"
 
     # The Target Config File Should Either in be the Overlay or Static Root
     if os.path.exists(os.path.join(overlay_root, 'logs', fname)):
