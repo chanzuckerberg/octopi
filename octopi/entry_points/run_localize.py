@@ -20,63 +20,11 @@ def pick_particles(
     runIDs: List[str],
     n_procs: int,
     ):
+    from octopi.workflows import localize
 
-    # Load the Copick Project
-    root = copick.from_file(copick_config_path)    
-
-    # Get objects that can be Picked
-    objects = [(obj.name, obj.label, obj.radius) for obj in root.pickable_objects if obj.is_particle]
-
-     # Verify each object has the required attributes
-    for obj in objects:
-        if len(obj) < 3 or not isinstance(obj[2], (float, int)):
-            raise ValueError(f"Invalid object format: {obj}. Expected a tuple with (name, label, radius).")
-
-    # Filter elements
-    if pick_objects is not None:
-        objects = [obj for obj in objects if obj[0] in pick_objects]
-
-    print(f'Running Localization on the Following Objects: ')
-    print(', '.join([f'{obj[0]} (Label: {obj[1]})' for obj in objects]) + '\n')
-
-    # Either Specify Input RunIDs or Run on All RunIDs
-    if runIDs:
-        print('Running Localization on the Following RunIDs: ' + ', '.join(runIDs) + '\n')
-        run_ids = runIDs
-    else:
-        run_ids = [run.name for run in root.runs if run.get_voxel_spacing(voxel_size) is not None]
-        skipped_run_ids = [run.name for run in root.runs if run.get_voxel_spacing(voxel_size) is None]
-
-        if skipped_run_ids:
-            print(f"Warning: skipping runs with no voxel spacing {voxel_size}: {skipped_run_ids}")
-
-    # Nprocesses shouldnt exceed computation resource or number of available runs
-    n_run_ids = len(run_ids)
-    n_procs = min(mp.cpu_count(), n_procs, n_run_ids)
-
-    # Run Localization - Main Parallelization Loop
-    print(f"Using {n_procs} processes to parallelize across {n_run_ids} run IDs.")
-    with mp.Pool(processes=n_procs) as pool:
-        with tqdm(total=n_run_ids, desc="Localization", unit="run") as pbar:
-            worker_func = lambda run_id: localize.process_localization(
-                root.get_run(run_id),
-                objects, 
-                seg_info,
-                method, 
-                voxel_size,
-                filter_size,
-                radius_min_scale, 
-                radius_max_scale,
-                pick_session_id,
-                pick_user_id
-            )
-
-            for _ in pool.imap_unordered(worker_func, run_ids, chunksize=1):
-                pbar.update(1)
-
-    
-
-    print('Localization Complete!')
+    # Run 3D Localization
+    localize(copick_config_path, voxel_size, seg_info, pick_user_id, pick_session_id, n_procs,
+            method, filter_size, radius_min_scale, radius_max_scale, run_ids = runIDs)
 
 def localize_parser(parser_description, add_slurm: bool = False):
     parser = argparse.ArgumentParser(

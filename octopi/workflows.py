@@ -5,8 +5,8 @@ from octopi.models import common as builder
 from octopi.pytorch import segmentation
 from octopi.datasets import generators
 from octopi.pytorch import trainer 
+import copick, torch, os, yaml
 import multiprocess as mp
-import copick, torch, os
 from octopi.utils import io
 from tqdm import tqdm
     
@@ -72,14 +72,16 @@ def train(data_generator, loss_function,
     )
 
     # Train the Model
-    print(f'Starting Training...\nSaving Training Results to: {model_save_path}/\n')
+    print(f'🔃 Starting Training...\nSaving Training Results to: {model_save_path}/\n')
     results = model_trainer.train(
         data_generator, model_save_path, max_epochs=num_epochs,
         crop_size=model_config['dim_in'], my_num_samples=16,
         val_interval=10, best_metric=best_metric, verbose=True
     )
-    
+    print('✅ Training Complete!')
+
     # Save parameters and results
+    print(f'💾 Saving Training Parameters and Results to: {model_save_path}/\n')
     parameters_save_name = os.path.join(model_save_path, "model_config.yaml")
     io.save_parameters_to_yaml(model_builder, model_trainer, data_generator, parameters_save_name)
 
@@ -122,6 +124,8 @@ def segment(config, tomo_algorithm, voxel_size, model_weights, model_config,
         segmentation_session_id=seg_info[2]
     )
 
+    print('✅ Segmentation Complete!')
+
 def localize(config, voxel_size, seg_info, pick_user_id, pick_session_id, n_procs = 16,
             method = 'watershed', filter_size = 10, radius_min_scale = 0.4, radius_max_scale = 1.0,
             run_ids = None):
@@ -141,17 +145,41 @@ def localize(config, voxel_size, seg_info, pick_user_id, pick_session_id, n_proc
         radius_max_scale (float): The maximum radius scale to use for localization
         run_ids (list): The list of run IDs to use for localization
     """
-
+    
     # Load the Copick Config
     root = copick.from_file(config) 
 
-    # Get objects that can be Picked
-    objects = [(obj.name, obj.label, obj.radius) for obj in root.pickable_objects if obj.is_particle]    
+    # Get objects that can be Picked build into mutable rows
+    objects = [[obj.name, int(obj.label), float(obj.radius)]
+            for obj in root.pickable_objects if obj.is_particle]
+
+    # Verify each object has the required attributes
+    for obj in objects:
+        if len(obj) < 3 or not isinstance(obj[2], (float, int)):
+            raise ValueError(f"Invalid object format: {obj}. Expected a tuple with (name, label, radius).")
+  
+    # Load the Model Output Configuration
+    seg_config = io.get_config(config, seg_info[0], 'segment', seg_info[1], seg_info[2])
+
+    # sync labels from the model config
+    label_map = seg_config.get('labels', {})
+    for row in objects:
+        name, label, radius = row
+        if name in label_map and label != label_map[name]:
+            print(f"[Warning] Label mismatch for {name}: data={label} vs model={label_map[name]} -> using model config")
+            row[1] = int(label_map[name])  # mutate in place
+        elif name not in label_map:
+            print(f"[Warning] {name} not found in model labels; keeping data label {label}")
 
     # Get all RunIDs
     if run_ids is None:
         run_ids = [run.name for run in root.runs]
     n_run_ids = len(run_ids)
+
+    # Exit if No Runs are Available
+    if n_run_ids == 0:
+        print(f"No runs available for localization with the specified voxel size - {voxel_size}.\nExiting...")
+        return
 
      # Run Localization - Main Parallelization Loop
     print(f"Using {n_procs} processes to parallelize across {n_run_ids} run IDs.")
@@ -173,7 +201,7 @@ def localize(config, voxel_size, seg_info, pick_user_id, pick_session_id, n_proc
             for _ in pool.imap_unordered(worker_func, run_ids, chunksize=1):
                 pbar.update(1)
 
-    print('Localization Complete!')
+    print('✅ Localization Complete!')
     
 
 def evaluate(config, 

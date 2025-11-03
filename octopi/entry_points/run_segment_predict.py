@@ -34,6 +34,19 @@ def inference(
     gpu_count = torch.cuda.device_count()
     print(f"Number of GPUs available: {gpu_count}")
 
+    if ',' in model_weights:
+        model_weights = model_weights.split(',')
+    if ',' in model_config:
+        model_config = model_config.split(',')
+    if isinstance(model_weights, list) and isinstance(model_config, list):
+        if len(model_weights) != len(model_config):
+            raise ValueError("Number of model weights and model configs must match for ensemble prediction.")
+        print("\nUsing Model Ensemble (Soup) Segmentation.")
+        print('Model Weights:', model_weights)
+        print('Model Configs:', model_config)
+    else:
+        print("Using Single Model Segmentation.")
+
     if gpu_count > 1:
         print("Using Multi-GPU Predictor.")
         predict = segmentation.MultiGPUPredictor(
