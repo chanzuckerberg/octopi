@@ -8,6 +8,12 @@ from octopi.utils import io
 from tqdm import tqdm
 import numpy as np
 
+from monai.transforms import (
+    Compose, 
+    NormalizeIntensity,
+    EnsureChannelFirst,  
+)
+
 class Predictor:
 
     def __init__(self, 
@@ -98,24 +104,32 @@ class Predictor:
     def predict(self, input_data):
         """Run Prediction from an Input Tomogram.
         Args:
-            input_data (torch.Tensor): Input tomogram of shape [Z, Y, X]
+            input_data (torch.Tensor or np.ndarray): Input tomogram of shape [Z, Y, X]
         Returns:
-            torch.Tensor: Predicted segmentation mask of shape [Z, Y, X]
+            Predicted segmentation mask of shape [Z, Y, X]
         """
-
+        
         is_numpy = False
         if isinstance(input_data, np.ndarray):
             is_numpy = True
             input_data = torch.from_numpy(input_data)
         
-        # Add a batch dimension
-        input_data = input_data.unsqueeze(0)
-        # Run inference and remove batch dimension
+        # Apply transforms directly to tensor (no dictionary needed)
+        pre_transforms = Compose([
+            EnsureChannelFirst(channel_dim="no_channel"),
+            NormalizeIntensity(),                         
+        ])
+        
+        input_data = pre_transforms(input_data)
+        
+        # Add batch dimension and move to device
+        input_data = input_data.unsqueeze(0).to(self.device)
+        
+        # Run inference
         pred = self._run_inference(input_data)[0]
         
-        # Convert to numpy if input was numpy
         if is_numpy:
-            pred = pred.numpy()
+            pred = pred.cpu().numpy()
         return pred
 
     def _run_single_model_inference(self, model, input_data):
