@@ -95,8 +95,16 @@ class Predictor:
             print(f'Model Soup is Enabled : {len(self.models)} models loaded for ensemble inference')
     
     def predict(self, input_data):
-        """Run Prediction from an Input Tomogram."""
-        return self._run_inference(input_data)
+        """Run Prediction from an Input Tomogram.
+        Args:
+            input_data (torch.Tensor): Input tomogram of shape [Z, Y, X]
+        Returns:
+            torch.Tensor: Predicted segmentation mask of shape [Z, Y, X]
+        """
+        # Add a batch dimension
+        input_data = input_data.unsqueeze(0)
+        # Run inference and remove batch dimension
+        return self._run_inference(input_data)[0]
 
     def _run_single_model_inference(self, model, input_data):
         """Run sliding window inference on a single model."""
