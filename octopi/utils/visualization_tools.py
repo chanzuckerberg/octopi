@@ -1,8 +1,23 @@
+from ipywidgets import interact, IntSlider, fixed
 from copick_utils.io import readers
 import matplotlib.colors as mcolors
 from typing import Optional, List
 import matplotlib.pyplot as plt
 import numpy as np
+
+# Define the interactive function
+def interact_3d_seg(vol, seg):
+
+    # Get the number of slices for the slider range
+    max_slices = vol.shape[0] - 1
+    middle_slice = int(max_slices // 2)
+
+    # Launch the Interactive Widget
+    interact(
+        show_tomo_segmentation,
+        tomo=fixed(vol), seg=fixed(seg),
+        vol_slice=IntSlider(min=0, max=max_slices, step=1, value=middle_slice)
+    )
 
 # Define the plotting function
 def show_tomo_segmentation(tomo, seg, vol_slice):

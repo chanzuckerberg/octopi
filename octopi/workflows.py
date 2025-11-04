@@ -107,9 +107,7 @@ def segment(config, tomo_algorithm, voxel_size, model_weights, model_config,
 
     # Initialize the Predictor
     predict = segmentation.Predictor(
-        config,
-        model_config,
-        model_weights,
+        config, model_config, model_weights,
         apply_tta = use_tta
     )
 
