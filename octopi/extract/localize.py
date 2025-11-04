@@ -1,18 +1,17 @@
-from skimage.morphology import binary_erosion, binary_dilation, ball
+from skimage.morphology import binary_opening, ball
 from scipy.sparse.csgraph import connected_components
 from skimage.segmentation import watershed
 from scipy.sparse import coo_matrix
 from scipy.spatial import cKDTree
 
 from typing import List, Optional, Tuple
-from skimage.measure import regionprops
+from skimage.measure import regionprops_table
 from copick_utils.io import readers
-from scipy.spatial import distance
-from dataclasses import dataclass
 import scipy.ndimage as ndi
 from tqdm import tqdm
 import numpy as np
-import gc
+
+FOUR_THIRDS_PI = 4.0/3.0 * np.pi  # reuse
 
 def process_localization(run,  
                           objects, 
@@ -91,66 +90,70 @@ def process_localization(run,
 
 
 def extract_particle_centroids_via_watershed(
-        segmentation, 
-        segmentation_idx, 
-        maxima_filter_size, 
-        min_particle_radius, 
-        max_particle_radius):
-    """
-    Process a specific label in the segmentation, extract centroids, and save them as picks.
+    segmentation,
+    segmentation_idx,
+    maxima_filter_size,
+    min_particle_radius,
+    max_particle_radius
+):
+    if not maxima_filter_size or maxima_filter_size <= 0:
+        raise ValueError("Enter a Non-Zero Filter Size!")
 
-    Args:
-        segmentation (np.ndarray): Multilabel segmentation array.
-        segmentation_idx (int): The specific label from the segmentation to process.
-        maxima_filter_size (int): Size of the maximum detection filter.
-        min_particle_size (int): Minimum size threshold for particles.
-        max_particle_size (int): Maximum size threshold for particles.
-    """
+    # volumes from radii
+    min_sz = FOUR_THIRDS_PI * (min_particle_radius ** 3)
+    max_sz = FOUR_THIRDS_PI * (max_particle_radius ** 3)
 
-    if maxima_filter_size is None or maxima_filter_size <= 0:
-        raise ValueError('Enter a Non-Zero Filter Size!')
-
-    # Calculate minimum and maximum particle volumes based on the given radii
-    min_particle_size = (4 / 3) * np.pi * (min_particle_radius ** 3) 
-    max_particle_size = (4 / 3) * np.pi * (max_particle_radius ** 3)
-
-    # Create a binary mask for the specific segmentation label
-    binary_mask = (segmentation == segmentation_idx).astype(np.uint8)
-
-    # Skip if the segmentation label is not present
-    if np.sum(binary_mask) == 0:
+    # boolean mask; early exit
+    mask = (segmentation == segmentation_idx)
+    if not mask.any():
         print(f"No segmentation with label {segmentation_idx} found.")
-        return
+        return []
 
-    # Structuring element for erosion and dilation
-    struct_elem = ball(1)
-    eroded = binary_erosion(binary_mask, struct_elem)
+    # --- crop to bbox to shrink problem size ---
+    z, y, x = np.where(mask)
+    z0, z1 = z.min(), z.max() + 1
+    y0, y1 = y.min(), y.max() + 1
+    x0, x1 = x.min(), x.max() + 1
+    mask_c = mask[z0:z1, y0:y1, x0:x1]
 
-    dilated = binary_dilation(eroded, struct_elem)
+    # --- single-pass morphology (speeds + denoise speckles) ---
+    opened = binary_opening(mask_c, ball(1))  # bool in, bool out
+    if not opened.any():
+        return []
 
-    # Distance transform and local maxima detection
-    distance = ndi.distance_transform_edt(dilated)
-    local_max = (distance == ndi.maximum_filter(distance, footprint=np.ones((maxima_filter_size, maxima_filter_size, maxima_filter_size))))
+    # --- EDT on bool, result as float32 ---
+    dist = ndi.distance_transform_edt(opened).astype(np.float32, copy=False)
 
-    # Watershed segmentation
+    # --- fast local maxima via maximum_filter ---
+    fp = np.ones((maxima_filter_size,)*3, dtype=bool)
+    local_max = (dist == ndi.maximum_filter(dist, footprint=fp))
+    local_max &= opened  # restrict to mask; avoids borders/zeros
+
+    # markers
     markers, _ = ndi.label(local_max)
-    del local_max
-    gc.collect()
+    if markers.max() == 0:
+        return []
 
-    watershed_labels = watershed(-distance, markers, mask=dilated)
-    distance, markers, dilated = None, None, None
-    del distance, markers, dilated
-    gc.collect()
+    # --- watershed on cropped ROI ---
+    # connectivity=1 (6-neigh) is a bit faster; adjust if you relied on 26-neigh
+    labels_ws = watershed(-dist, markers=markers, mask=opened)
 
-    # Extract region properties and filter based on particle size
-    all_centroids = []
-    for region in regionprops(watershed_labels):
-        if min_particle_size <= region.area <= max_particle_size:
+    # --- vectorized properties & size filter ---
+    props = regionprops_table(labels_ws, properties=("area", "centroid"))
+    area = np.asarray(props["area"])
+    cz = np.asarray(props["centroid-0"])
+    cy = np.asarray(props["centroid-1"])
+    cx = np.asarray(props["centroid-2"])
 
-            # Option 1: Use all centroids
-            all_centroids.append(region.centroid)
+    keep = (area >= min_sz) & (area <= max_sz)
+    if not np.any(keep):
+        return []
 
-    return all_centroids
+    # add back the crop offset; output as (z,y,x) to match your downstream swap
+    cz += z0
+    cy += y0
+    cx += x0
+    return list(zip(cz[keep], cy[keep], cx[keep]))
 
 def extract_particle_centroids_via_com(
         segmentation, 
