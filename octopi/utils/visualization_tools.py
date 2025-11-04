@@ -7,6 +7,13 @@ import numpy as np
 
 # Define the interactive function
 def interact_3d_seg(vol, seg):
+    """
+    Interactively show the segmentation on a tomogram.
+    
+    Args:
+        vol (numpy.ndarray): The tomogram to show the segmentation on.
+        seg (numpy.ndarray): The segmentation to show on the tomogram.
+    """
 
     # Get the number of slices for the slider range
     max_slices = vol.shape[0] - 1
@@ -82,6 +89,37 @@ def show_labeled_tomo_segmentation(tomo, seg, seg_labels, unique_values, vol_sli
     plt.tight_layout()
     plt.show()    
 
+def interact_points(tomo, root, run_id, user_id, session_id = None, slice_proximity_threshold = 3):
+    """
+    Interactively show the points on a tomogram.
+
+    Args:
+        tomo (numpy.ndarray): The tomogram to show the points on.
+        root (copick.Root): The root object of the Copick project.
+        run_id (str): The ID of the run to show the points on.
+        user_id (str): The ID of the user to show the points on.
+        session_id (str): The ID of the session to show the points on.
+        slice_proximity_threshold (int): The threshold for the proximity of the points to the slice.
+    """
+
+    # Get objects that can be Picked
+    objects = [(obj.name, obj.label, obj.radius) for obj in root.pickable_objects if obj.is_particle]
+
+    # Get Run
+    run = root.get_run(run_id)
+
+    # Get the number of slices for the slider range
+    max_slices = tomo.shape[0] - 1
+    middle_slice = int(max_slices // 2)
+
+    # Launch the Interactive Widget
+    interact(
+        show_tomo_points,
+        tomo=fixed(tomo), run=fixed(run), objects=fixed(objects), 
+        user_id=fixed(user_id), session_id=fixed(session_id), 
+        slice_proximity_threshold=fixed(slice_proximity_threshold),
+        vol_slice=IntSlider(min=0, max=max_slices, step=1, value=middle_slice)
+    )
 
 def show_tomo_points(tomo, run, objects, user_id, vol_slice, session_id = None, slice_proximity_threshold = 3):
     plt.figure(figsize=(20, 10))
