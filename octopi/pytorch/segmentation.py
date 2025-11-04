@@ -134,13 +134,14 @@ class Predictor:
 
     def _run_single_model_inference(self, model, input_data):
         """Run sliding window inference on a single model."""
-        return sliding_window_inference(
-            inputs=input_data,
-            roi_size=(self.dim_in, self.dim_in, self.dim_in),
-            sw_batch_size=self.sw,
-            predictor=model,
-            overlap=self.overlap,
-        )
+        with torch.cuda.amp.autocast():
+            return sliding_window_inference(
+                inputs=input_data,
+                roi_size=(self.dim_in, self.dim_in, self.dim_in),
+                sw_batch_size=self.sw,
+                predictor=model,
+                overlap=self.overlap,
+            )
 
     def _apply_tta_single_model(self, model, single_sample):
         """Apply TTA to a single model and single sample."""
@@ -151,7 +152,7 @@ class Predictor:
         )
         
         # Process each augmentation
-        with torch.no_grad():
+        with torch.inference_mode():
             for tta_transform, inverse_transform in zip(self.tta_transforms, self.inverse_tta_transforms):
                 # Apply transform
                 aug_sample = tta_transform(single_sample)
@@ -195,7 +196,7 @@ class Predictor:
             )
             
             # Process each model
-            with torch.no_grad():
+            with torch.inference_mode():
                 for model in self.models:
                     # Apply TTA with this model
                     if self.apply_tta:
@@ -240,7 +241,7 @@ class Predictor:
             self.input_dim = dataio.get_input_dimensions(test_dataset, self.dim_in)
         
         predictions = []
-        with torch.no_grad():
+        with torch.inference_mode():
             for data in tqdm(test_loader):
                 tomogram = data['image'].to(self.device)
                 data['pred'] = self._run_inference(tomogram)
