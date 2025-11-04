@@ -6,6 +6,7 @@ from copick_utils.io import writers
 from octopi.models import common
 from octopi.utils import io
 from tqdm import tqdm
+import numpy as np
 
 class Predictor:
 
@@ -101,10 +102,21 @@ class Predictor:
         Returns:
             torch.Tensor: Predicted segmentation mask of shape [Z, Y, X]
         """
+
+        is_numpy = False
+        if isinstance(input_data, np.ndarray):
+            is_numpy = True
+            input_data = torch.from_numpy(input_data)
+        
         # Add a batch dimension
         input_data = input_data.unsqueeze(0)
         # Run inference and remove batch dimension
-        return self._run_inference(input_data)[0]
+        pred = self._run_inference(input_data)[0]
+        
+        # Convert to numpy if input was numpy
+        if is_numpy:
+            pred = pred.numpy()
+        return pred
 
     def _run_single_model_inference(self, model, input_data):
         """Run sliding window inference on a single model."""
