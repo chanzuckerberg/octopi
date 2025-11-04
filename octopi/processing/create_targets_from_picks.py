@@ -168,7 +168,7 @@ def generate_targets(
         "labels": labels,
     }
     target_query = f'{target_user_name}_{target_session_id}_{target_segmentation_name}'
-    print(f'💾 Saving parameters to {basepath}/create-targets_{target_query}.yaml')
+    print(f'💾 Saving parameters to {basepath}/targets-{target_query}.yaml')
     save_parameters(args, basepath, target_query)
 
     # Print Target Summary
@@ -205,7 +205,7 @@ def save_parameters(args, basepath: str, target_query: str):
     # Check if the YAML file already exists
     output_path = os.path.join(
         basepath, 
-        f'create-targets_{args["target_user_name"]}_{args["target_session_id"]}_{args["target_name"]}.yaml')
+        f'targets-{args["target_user_name"]}_{args["target_session_id"]}_{args["target_name"]}.yaml')
     if os.path.exists(output_path):
         # Load the existing content
         with open(output_path, 'r') as f:

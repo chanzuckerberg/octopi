@@ -162,11 +162,14 @@ def check_target_config_path(data_generator):
 
     # Get the Target Config File
     return get_config(
-        config_path, data_generator.targetname, 'create-targets',
+        config_path, data_generator.target_name, 'targets',
         data_generator.target_user_id, data_generator.target_session_id
     )
 
 def get_config(config_path, name, process, user_id=None, session_id=None):
+    """
+    Get the configuration for a specific process and target name.
+    """
 
     # Get the Overlay and Static Roots
     root = copick.from_file(config_path)
