@@ -1,10 +1,4 @@
 from monai.inferers import sliding_window_inference
-from monai.data import decollate_batch
-from torch.multiprocessing import Pool
-from monai.data import MetaTensor
-from monai.transforms import (
-    Compose, AsDiscrete, Activations
-)
 from typing import List, Optional, Union
 from octopi.datasets import io as dataio
 import torch, copick, gc, os, pprint
@@ -12,7 +6,6 @@ from copick_utils.io import writers
 from octopi.models import common
 from octopi.utils import io
 from tqdm import tqdm
-import numpy as np
 
 class Predictor:
 
@@ -48,6 +41,10 @@ class Predictor:
             model_weights = [model_weights]
         self.apply_modelsoup = len(model_weights) > 1
         self.model_weights = model_weights
+
+        # Sliding Window Inference Parameters
+        self.sw = 4 # sliding window batch size
+        self.overlap = 0.5 # overlap between windows
 
         # Handle Single Model Config or Multiple Model Configs
         if isinstance(model_config, str):
@@ -96,15 +93,19 @@ class Predictor:
         # Print a message if Model Soup is Enabled
         if self.apply_modelsoup:
             print(f'Model Soup is Enabled : {len(self.models)} models loaded for ensemble inference')
+    
+    def predict(self, input_data):
+        """Run Prediction from an Input Tomogram."""
+        return self._run_inference(input_data)
 
     def _run_single_model_inference(self, model, input_data):
         """Run sliding window inference on a single model."""
         return sliding_window_inference(
             inputs=input_data,
             roi_size=(self.dim_in, self.dim_in, self.dim_in),
-            sw_batch_size=4,
+            sw_batch_size=self.sw,
             predictor=model,
-            overlap=0.5,
+            overlap=self.overlap,
         )
 
     def _apply_tta_single_model(self, model, single_sample):
