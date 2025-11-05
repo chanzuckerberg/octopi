@@ -4,6 +4,7 @@ import matplotlib.colors as mcolors
 from typing import Optional, List
 import matplotlib.pyplot as plt
 import numpy as np
+import copick
 
 # Define the interactive function
 def interact_3d_seg(vol, seg):
@@ -89,24 +90,28 @@ def show_labeled_tomo_segmentation(tomo, seg, seg_labels, unique_values, vol_sli
     plt.tight_layout()
     plt.show()    
 
-def interact_points(tomo, root, run_id, user_id, session_id = None, slice_proximity_threshold = 3):
+def interact_points(
+    tomo, config, run_id, user_id='octopi', 
+    session_id = None, 
+    slice_proximity_threshold = 3
+    ):
     """
     Interactively show the points on a tomogram.
 
     Args:
         tomo (numpy.ndarray): The tomogram to show the points on.
-        root (copick.Root): The root object of the Copick project.
         run_id (str): The ID of the run to show the points on.
         user_id (str): The ID of the user to show the points on.
         session_id (str): The ID of the session to show the points on.
         slice_proximity_threshold (int): The threshold for the proximity of the points to the slice.
     """
 
+    # Load Copick Project and Run
+    root = copick.from_file(config)
+    run = root.get_run(run_id)
+
     # Get objects that can be Picked
     objects = [(obj.name, obj.label, obj.radius) for obj in root.pickable_objects if obj.is_particle]
-
-    # Get Run
-    run = root.get_run(run_id)
 
     # Get the number of slices for the slider range
     max_slices = tomo.shape[0] - 1

@@ -10,7 +10,7 @@ import multiprocess as mp
 from octopi.utils import io
 from tqdm import tqdm
     
-def train(data_generator, loss_function,
+def train(data_generator, loss_function, num_crops = 16,
           model_config = None, model_weights = None, lr0 = 1e-3,
           model_save_path = 'results', best_metric = 'fBeta2', 
           num_epochs = 1000, use_ema = True):
@@ -34,7 +34,6 @@ def train(data_generator, loss_function,
 
     # If No Model Configuration is Provided, Use the Default Configuration
     if model_config is None:
-        root = copick.from_file(config)
         model_config = {
             'architecture': 'Unet',
             'num_classes': data_generator.Nclasses,
@@ -75,7 +74,7 @@ def train(data_generator, loss_function,
     print(f'🔃 Starting Training...\nSaving Training Results to: {model_save_path}/\n')
     results = model_trainer.train(
         data_generator, model_save_path, max_epochs=num_epochs,
-        crop_size=model_config['dim_in'], my_num_samples=16,
+        crop_size=model_config['dim_in'], my_num_samples=num_crops,
         val_interval=10, best_metric=best_metric, verbose=True
     )
     print('✅ Training Complete!')
