@@ -34,6 +34,8 @@ class ModelTrainer:
 
         # Default F-Beta Value
         self.beta = 2
+        self.overlap = 0.5
+        self.sw_bs = 4
 
         # Initialize EMAHandler for the model
         self.ema_experiment = use_ema
@@ -95,9 +97,9 @@ class ModelTrainer:
                 val_outputs = sliding_window_inference(
                     inputs=val_inputs, 
                     roi_size=(roi, roi, roi),
-                    sw_batch_size=4,
+                    sw_batch_size=self.sw_bs,
                     predictor=self.model, 
-                    overlap=0.5,
+                    overlap=self.overlap,
                     sw_device=self.device,
                     device=torch.device('cpu')
                 )
