@@ -72,7 +72,8 @@ def train_model(
     
     # Train the Model
     train(
-        data_generator, loss_function, model_config, model_weights,
+        data_generator, loss_function, 
+        model_config = model_config, model_weights = model_weights,
         best_metric = best_metric, num_epochs = num_epochs,
         model_save_path = model_save_path, lr0 = lr
     )

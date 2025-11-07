@@ -1,8 +1,14 @@
+import os
+import matplotlib
+
+# Force a headless-safe backend everywhere (must be BEFORE pyplot import)
+matplotlib.use("Agg", force=True)
+
+import matplotlib.pyplot as plt
 from ipywidgets import interact, IntSlider, fixed
 from copick_utils.io import readers
 import matplotlib.colors as mcolors
 from typing import Optional, List
-import matplotlib.pyplot as plt
 import numpy as np
 import copick
 
