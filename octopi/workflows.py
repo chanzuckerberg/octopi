@@ -3,11 +3,10 @@ import octopi.processing.evaluate as octopi_evaluate
 from monai.metrics import ConfusionMatrixMetric
 from octopi.models import common as builder
 from octopi.pytorch import segmentation
-from octopi.datasets import generators
 from octopi.pytorch import trainer 
-import copick, torch, os
-import multiprocess as mp
 from octopi.utils import io
+import multiprocess as mp
+import copick, torch, os
 from tqdm import tqdm
     
 def train(data_generator, loss_function, num_crops = 16,
