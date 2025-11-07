@@ -1,10 +1,4 @@
 from monai.inferers import sliding_window_inference
-from monai.data import decollate_batch
-from torch.multiprocessing import Pool
-from monai.data import MetaTensor
-from monai.transforms import (
-    Compose, AsDiscrete, Activations
-)
 from typing import List, Optional, Union
 from octopi.datasets import io as dataio
 import torch, copick, gc, os, pprint
@@ -13,6 +7,12 @@ from octopi.models import common
 from octopi.utils import io
 from tqdm import tqdm
 import numpy as np
+
+from monai.transforms import (
+    Compose, 
+    NormalizeIntensity,
+    EnsureChannelFirst,  
+)
 
 class Predictor:
 
@@ -48,6 +48,10 @@ class Predictor:
             model_weights = [model_weights]
         self.apply_modelsoup = len(model_weights) > 1
         self.model_weights = model_weights
+
+        # Sliding Window Inference Parameters
+        self.sw_bs = 4 # sliding window batch size
+        self.overlap = 0.5 # overlap between windows
 
         # Handle Single Model Config or Multiple Model Configs
         if isinstance(model_config, str):
@@ -96,16 +100,48 @@ class Predictor:
         # Print a message if Model Soup is Enabled
         if self.apply_modelsoup:
             print(f'Model Soup is Enabled : {len(self.models)} models loaded for ensemble inference')
+    
+    def predict(self, input_data):
+        """Run Prediction from an Input Tomogram.
+        Args:
+            input_data (torch.Tensor or np.ndarray): Input tomogram of shape [Z, Y, X]
+        Returns:
+            Predicted segmentation mask of shape [Z, Y, X]
+        """
+        
+        is_numpy = False
+        if isinstance(input_data, np.ndarray):
+            is_numpy = True
+            input_data = torch.from_numpy(input_data)
+        
+        # Apply transforms directly to tensor (no dictionary needed)
+        pre_transforms = Compose([
+            EnsureChannelFirst(channel_dim="no_channel"),
+            NormalizeIntensity(),                         
+        ])
+        
+        input_data = pre_transforms(input_data)
+        
+        # Add batch dimension and move to device
+        input_data = input_data.unsqueeze(0).to(self.device)
+        
+        # Run inference
+        pred = self._run_inference(input_data)[0]
+        
+        if is_numpy:
+            pred = pred.cpu().numpy()
+        return pred
 
     def _run_single_model_inference(self, model, input_data):
         """Run sliding window inference on a single model."""
-        return sliding_window_inference(
-            inputs=input_data,
-            roi_size=(self.dim_in, self.dim_in, self.dim_in),
-            sw_batch_size=4,
-            predictor=model,
-            overlap=0.5,
-        )
+        with torch.cuda.amp.autocast():
+            return sliding_window_inference(
+                inputs=input_data,
+                roi_size=(self.dim_in, self.dim_in, self.dim_in),
+                sw_batch_size=self.sw,
+                predictor=model,
+                overlap=self.overlap,
+            )
 
     def _apply_tta_single_model(self, model, single_sample):
         """Apply TTA to a single model and single sample."""
@@ -116,7 +152,7 @@ class Predictor:
         )
         
         # Process each augmentation
-        with torch.no_grad():
+        with torch.inference_mode():
             for tta_transform, inverse_transform in zip(self.tta_transforms, self.inverse_tta_transforms):
                 # Apply transform
                 aug_sample = tta_transform(single_sample)
@@ -160,7 +196,7 @@ class Predictor:
             )
             
             # Process each model
-            with torch.no_grad():
+            with torch.inference_mode():
                 for model in self.models:
                     # Apply TTA with this model
                     if self.apply_tta:
@@ -205,7 +241,7 @@ class Predictor:
             self.input_dim = dataio.get_input_dimensions(test_dataset, self.dim_in)
         
         predictions = []
-        with torch.no_grad():
+        with torch.inference_mode():
             for data in tqdm(test_loader):
                 tomogram = data['image'].to(self.device)
                 data['pred'] = self._run_inference(tomogram)

@@ -3,17 +3,17 @@ import octopi.processing.evaluate as octopi_evaluate
 from monai.metrics import ConfusionMatrixMetric
 from octopi.models import common as builder
 from octopi.pytorch import segmentation
-from octopi.datasets import generators
 from octopi.pytorch import trainer 
-import copick, torch, os
-import multiprocess as mp
 from octopi.utils import io
+import multiprocess as mp
+import copick, torch, os
 from tqdm import tqdm
     
-def train(data_generator, loss_function,
+def train(data_generator, loss_function, num_crops = 16,
           model_config = None, model_weights = None, lr0 = 1e-3,
           model_save_path = 'results', best_metric = 'fBeta2', 
-          num_epochs = 1000, use_ema = True):
+          num_epochs = 1000, use_ema = True, val_interval = 10,
+          sw_bs = 4, overlap = 0.5, ):
     """
     Train a UNet Model for Segmentation
 
@@ -30,11 +30,13 @@ def train(data_generator, loss_function,
         model_save_path (str): The path to save the model
         best_metric (str): The metric to use for early stopping
         num_epochs (int): The number of epochs to train for
+        val_interval (int): The number of epoch intervals for validation during training
+        sw_bs (int): The sliding window batch size for validation
+        overlap (float): The overlap for sliding window inference during validation
     """
 
     # If No Model Configuration is Provided, Use the Default Configuration
     if model_config is None:
-        root = copick.from_file(config)
         model_config = {
             'architecture': 'Unet',
             'num_classes': data_generator.Nclasses,
@@ -70,13 +72,15 @@ def train(data_generator, loss_function,
         model, device, loss_function, metrics_function, 
         optimizer, use_ema = use_ema
     )
+    model_trainer.sw_bs = sw_bs
+    model_trainer.overlap = overlap
 
     # Train the Model
     print(f'🔃 Starting Training...\nSaving Training Results to: {model_save_path}/\n')
     results = model_trainer.train(
         data_generator, model_save_path, max_epochs=num_epochs,
-        crop_size=model_config['dim_in'], my_num_samples=16,
-        val_interval=10, best_metric=best_metric, verbose=True
+        crop_size=model_config['dim_in'], my_num_samples=num_crops,
+        val_interval=val_interval, best_metric=best_metric, verbose=True
     )
     print('✅ Training Complete!')
 
@@ -107,9 +111,7 @@ def segment(config, tomo_algorithm, voxel_size, model_weights, model_config,
 
     # Initialize the Predictor
     predict = segmentation.Predictor(
-        config,
-        model_config,
-        model_weights,
+        config, model_config, model_weights,
         apply_tta = use_tta
     )
 

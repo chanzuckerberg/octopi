@@ -2,7 +2,7 @@
 Data loading, processing, and dataset operations for the datasets module.
 """
 
-from monai.data import DataLoader, CacheDataset, Dataset
+from monai.data import DataLoader, CacheDataset
 from monai.transforms import (
     Compose, 
     NormalizeIntensityd,
@@ -79,12 +79,12 @@ def create_predict_dataloader(
         runIDs = [run.name for run in root.runs]
     test_files = load_predict_data(root, runIDs, voxel_spacing, tomo_algorithm) 
 
-    bs = min( len(test_files), 4)
+    bs = min(len(test_files), os.cpu_count() or 4)
     test_ds = CacheDataset(data=test_files, transform=pre_transforms)
     test_loader = DataLoader(test_ds, 
                             batch_size=bs, 
                             shuffle=False, 
-                            num_workers=4, 
+                            num_workers=bs, 
                             pin_memory=torch.cuda.is_available())
     return test_loader, test_ds
 

@@ -80,9 +80,9 @@ class TrainLoaderManager:
                         trainRunIDs: str = None,
                         validateRunIDs: str = None,
                         train_ratio: float = 0.8,
-                        val_ratio: float = 0.1,
-                        test_ratio: float = 0.1,
-                        create_test_dataset: bool = True):
+                        val_ratio: float = 0.2,
+                        test_ratio: float = 0.0,
+                        create_test_dataset: bool = False):
         """
         Split the available data into training, validation, and testing sets based on input parameters.
 
