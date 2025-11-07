@@ -50,7 +50,7 @@ class Predictor:
         self.model_weights = model_weights
 
         # Sliding Window Inference Parameters
-        self.sw = 4 # sliding window batch size
+        self.sw_bs = 4 # sliding window batch size
         self.overlap = 0.5 # overlap between windows
 
         # Handle Single Model Config or Multiple Model Configs
