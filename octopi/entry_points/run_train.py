@@ -1,3 +1,7 @@
+import matplotlib
+# Force a headless-safe backend everywhere (must be BEFORE pyplot import)
+matplotlib.use("Agg", force=True)
+
 from octopi.datasets import generators, multi_config_generator
 from monai.losses import DiceLoss, FocalLoss, TverskyLoss
 from octopi.models import common as builder
