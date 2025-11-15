@@ -52,6 +52,7 @@ class Predictor:
         # Sliding Window Inference Parameters
         self.sw_bs = 4 # sliding window batch size
         self.overlap = 0.5 # overlap between windows
+        self.sw = None
 
         # Handle Single Model Config or Multiple Model Configs
         if isinstance(model_config, str):
@@ -182,6 +183,11 @@ class Predictor:
         """
         Main inference function that handles all combinations - Model Soup and/or TTA
         """
+        # Overwrite sw_bs with sw if provided
+        if self.sw is not None:
+            self.sw_bs = self.sw
+        
+        # Get the batch size (# of tomograms)
         batch_size = input_data.shape[0]
         results = []
         
