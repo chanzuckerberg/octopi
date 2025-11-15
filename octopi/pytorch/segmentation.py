@@ -138,7 +138,7 @@ class Predictor:
             return sliding_window_inference(
                 inputs=input_data,
                 roi_size=(self.dim_in, self.dim_in, self.dim_in),
-                sw_batch_size=self.sw,
+                sw_batch_size=self.sw_bs,
                 predictor=model,
                 overlap=self.overlap,
             )
