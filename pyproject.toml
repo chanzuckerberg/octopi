@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "octopi"
-version = "1.3.0"  
+version = "1.3.1"  
 description = "Model architecture exploration for cryoET particle picking"
 authors = [
     {name = "Jonathan Schwartz"},

@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.3.1](https://github.com/chanzuckerberg/octopi/compare/octopi-v1.3.0...octopi-v1.3.1) (2025-11-15)
+
+
+### 🐞 Bug Fixes
+
+* keep sw parameter for vcp ([#42](https://github.com/chanzuckerberg/octopi/issues/42)) ([41f5080](https://github.com/chanzuckerberg/octopi/commit/41f50800b32d96abaf1ff64bcaad99c7cb179f15))
+
 ## [1.3.0](https://github.com/chanzuckerberg/octopi/compare/octopi-v1.2.0...octopi-v1.3.0) (2025-11-13)
 
 
