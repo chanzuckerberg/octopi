@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.3.2](https://github.com/chanzuckerberg/octopi/compare/octopi-v1.3.1...octopi-v1.3.2) (2025-11-16)
+
+
+### 🐞 Bug Fixes
+
+* ensure filtering of picks is correct ([#44](https://github.com/chanzuckerberg/octopi/issues/44)) ([8a70056](https://github.com/chanzuckerberg/octopi/commit/8a700566fba5104b4d16acd98cabced6f07db624))
+
 ## [1.3.1](https://github.com/chanzuckerberg/octopi/compare/octopi-v1.3.0...octopi-v1.3.1) (2025-11-15)
 
 
