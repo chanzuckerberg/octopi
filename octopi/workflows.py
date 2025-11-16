@@ -163,7 +163,7 @@ def localize(config, voxel_size, seg_info, pick_user_id, pick_session_id, n_proc
     # Load the Model Output Configuration
     seg_config = io.get_config(config, seg_info[0], 'segment', seg_info[1], seg_info[2])
 
-    # sync labels from the model config - print if pick_objects aren't specified
+    # sync labels from the model config and remove objects not in model labels
     label_map = seg_config.get('labels', {})
     for row in objects:
         name, label, radius = row
