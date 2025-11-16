@@ -172,7 +172,7 @@ def localize(config, voxel_size, seg_info, pick_user_id, pick_session_id, n_proc
         elif name not in label_map: # remove this entry from objects 
             objects.remove(row)
 
-    # # Filter objects based on the provided list
+    # Filter objects based on the provided list
     if pick_objects is not None:
         objects0 = objects.copy()  # avoid modifying the list while iterating for error tracking
         objects = [obj for obj in objects if obj[0] in pick_objects]
