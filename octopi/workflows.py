@@ -130,7 +130,7 @@ def segment(config, tomo_algorithm, voxel_size, model_weights, model_config,
 
 def localize(config, voxel_size, seg_info, pick_user_id, pick_session_id, n_procs = 16,
             method = 'watershed', filter_size = 10, radius_min_scale = 0.4, radius_max_scale = 1.0,
-            run_ids = None):
+            run_ids = None, pick_objects = None):
     """
     Extract 3D Coordinates from the Segmentation Maps
 
@@ -163,15 +163,21 @@ def localize(config, voxel_size, seg_info, pick_user_id, pick_session_id, n_proc
     # Load the Model Output Configuration
     seg_config = io.get_config(config, seg_info[0], 'segment', seg_info[1], seg_info[2])
 
-    # sync labels from the model config
+    # sync labels from the model config - print if pick_objects aren't specified
     label_map = seg_config.get('labels', {})
     for row in objects:
         name, label, radius = row
         if name in label_map and label != label_map[name]:
-            print(f"[Warning] Label mismatch for {name}: data={label} vs model={label_map[name]} -> using model config")
             row[1] = int(label_map[name])  # mutate in place
-        elif name not in label_map:
-            print(f"[Warning] {name} not found in model labels; keeping data label {label}")
+        elif name not in label_map: # remove this entry from objects 
+            objects.remove(row)
+
+    # # Filter objects based on the provided list
+    if pick_objects is not None:
+        objects0 = objects.copy()  # avoid modifying the list while iterating for error tracking
+        objects = [obj for obj in objects if obj[0] in pick_objects]
+        if len(objects) == 0:
+            raise ValueError(f"No valid objects found for localization after filtering. Mismatched names: {pick_objects} and {[obj[0] for obj in objects0]}")
 
     # Get all RunIDs
     if run_ids is None:

@@ -1,10 +1,8 @@
 from octopi.entry_points import common
 from octopi.utils import parsers, io
-from octopi.extract import localize
 import copick, argparse, pprint, os
 from typing import List, Tuple
 import multiprocess as mp
-from tqdm import tqdm
 
 def pick_particles(
     copick_config_path: str,
@@ -23,8 +21,11 @@ def pick_particles(
     from octopi.workflows import localize
 
     # Run 3D Localization
-    localize(copick_config_path, voxel_size, seg_info, pick_user_id, pick_session_id, n_procs,
-            method, filter_size, radius_min_scale, radius_max_scale, run_ids = runIDs)
+    localize(
+        copick_config_path, voxel_size, seg_info, pick_user_id, pick_session_id, n_procs,
+        method, filter_size, radius_min_scale, radius_max_scale, 
+        run_ids = runIDs, pick_objects = pick_objects
+    )
 
 def localize_parser(parser_description, add_slurm: bool = False):
     parser = argparse.ArgumentParser(
