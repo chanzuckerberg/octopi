@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.3.3](https://github.com/chanzuckerberg/octopi/compare/octopi-v1.3.2...octopi-v1.3.3) (2025-11-18)
+
+
+### 🐞 Bug Fixes
+
+* avoid modifying original objects while iterating ([#46](https://github.com/chanzuckerberg/octopi/issues/46)) ([c1586de](https://github.com/chanzuckerberg/octopi/commit/c1586de2c7f833aea57c74952980ca77686b8bab))
+
 ## [1.3.2](https://github.com/chanzuckerberg/octopi/compare/octopi-v1.3.1...octopi-v1.3.2) (2025-11-16)
 
 
