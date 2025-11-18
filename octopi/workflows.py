@@ -165,7 +165,7 @@ def localize(config, voxel_size, seg_info, pick_user_id, pick_session_id, n_proc
 
     # sync labels from the model config and remove objects not in model labels
     label_map = seg_config.get('labels', {})
-    for row in objects:
+    for row in objects.copy():  # avoid modifying the list while iterating
         name, label, radius = row
         if name in label_map and label != label_map[name]:
             row[1] = int(label_map[name])  # mutate in place
