@@ -1,8 +1,6 @@
-import torch, argparse, json, pprint, yaml, os
-from octopi.pytorch import segmentation
 from octopi.entry_points import common
 from typing import List, Tuple
-from octopi.utils import io
+import rich_click as click
 
 def inference(
     copick_config_path: str,
@@ -30,6 +28,8 @@ def inference(
         segmentation_user_id (str): User ID associated with the segmentation.
         segmentation_session_id (str): Session ID for this segmentation run.
     """
+    from octopi.pytorch import segmentation
+    import torch
     
     gpu_count = torch.cuda.device_count()
     print(f"Number of GPUs available: {gpu_count}")
@@ -87,56 +87,40 @@ def inference(
 
     print("Inference completed successfully.")
 
-def inference_parser(parser_description, add_slurm: bool = False):
-    """
-    Parse the arguments for the inference
-    """
-    parser = argparse.ArgumentParser(
-        description=parser_description,
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter
-    )
-    input_group = parser.add_argument_group("Input Arguments")
-    common.add_config(input_group, single_config=True)
 
-    model_group = parser.add_argument_group("Model Arguments")
-    common.inference_model_parameters(model_group)
-
-    inference_group = parser.add_argument_group("Inference Arguments")
-    common.add_inference_parameters(inference_group)
-
-    if add_slurm:
-        slurm_group = parser.add_argument_group("SLURM Arguments")
-        common.add_slurm_parameters(slurm_group, 'segment_predict', gpus = 2)
-
-    args = parser.parse_args()
-    return args
-
-# Entry point with argparse
-def cli():
+@click.command('inference', help="Run segmentation predictions with a specified model and configuration on CryoET Tomograms")
+# Inference Arguments
+@common.inference_parameters()
+# Model Arguments
+@common.inference_model_parameters()
+# Input Arguments
+@common.config_parameters(single_config=True)
+def cli(config, voxel_size,
+        model_config, model_weights,
+        tomo_alg, seg_info, tomo_batch_size, run_ids):
     """
     CLI entry point for running inference.
     """
     
-    # Parse the arguments
-    parser_description = "Run segmentation predictions with a specified model and configuration on CryoET Tomograms."
-    args = inference_parser(parser_description)
-
     # Set default values if not provided
-    args.seg_info = list(args.seg_info)  # Convert tuple to list
-    if args.seg_info[1] is None:
-        args.seg_info[1] = "octopi"
-
-    if args.seg_info[2] is None:
-        args.seg_info[2] = "1"
+    seg_info = list(seg_info)  # Convert tuple to list
+    if seg_info[1] is None:
+        seg_info[1] = "octopi"
+    if seg_info[2] is None:
+        seg_info[2] = "1"
 
     # Call the inference function with parsed arguments
     inference(
-        copick_config_path=args.config,
-        model_weights=args.model_weights,
-        model_config=args.model_config,
-        seg_info=args.seg_info,
-        voxel_size=args.voxel_size,
-        tomo_algorithm=args.tomo_alg,
-        tomo_batch_size=args.tomo_batch_size,
-        run_ids=args.run_ids,
+        copick_config_path=config,
+        model_weights=model_weights,
+        model_config=model_config,
+        seg_info=seg_info,
+        voxel_size=voxel_size,
+        tomo_algorithm=tomo_alg,
+        tomo_batch_size=tomo_batch_size,
+        run_ids=run_ids,
     )
+
+
+if __name__ == "__main__":
+    cli()

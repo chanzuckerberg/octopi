@@ -1,15 +1,13 @@
-import matplotlib
-# Force a headless-safe backend everywhere (must be BEFORE pyplot import)
-matplotlib.use("Agg", force=True)
-
-from octopi.datasets import generators, multi_config_generator
-from monai.losses import DiceLoss, FocalLoss, TverskyLoss
-from octopi.models import common as builder
 from typing import List, Optional, Tuple
-from octopi.entry_points import common 
-from octopi.utils import parsers, io
-from octopi.workflows import train
-import torch, os, argparse
+from octopi.entry_points import common
+from octopi.utils import parsers
+from octopi import cli_context
+import rich_click as click
+
+# Configure rich-click
+click.rich_click.USE_RICH_MARKUP = True
+click.rich_click.SHOW_ARGUMENTS = True
+click.rich_click.GROUP_ARGUMENTS_OPTIONS = True
 
 def train_model(
     copick_config_path: str,
@@ -33,6 +31,15 @@ def train_model(
     """
     Train a 3D U-Net model using the specified CoPick configuration and target information.
     """
+
+    import matplotlib
+    # Force a headless-safe backend everywhere (must be BEFORE pyplot import)
+    matplotlib.use("Agg", force=True)
+
+    from octopi.datasets import generators, multi_config_generator
+    from monai.losses import TverskyLoss
+    from octopi.utils import parsers, io
+    from octopi.workflows import train
 
     # Initialize the data generator to manage training and validation datasets
     print(f'Training with {copick_config_path}\n')
@@ -82,88 +89,9 @@ def train_model(
         model_save_path = model_save_path, lr0 = lr
     )
 
-def train_model_parser(parser_description, add_slurm: bool = False):
-    """
-    Parse the arguments for the training model
-    """
-    parser = argparse.ArgumentParser(
-        description=parser_description,
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter
-    )
-    # Input Arguments
-    input_group = parser.add_argument_group("Input Arguments")
-    common.add_config(input_group, single_config=False)
-    input_group.add_argument("--target-info", type=parsers.parse_target, default="targets,octopi,1", 
-                             help="Target information, e.g., 'name' or 'name,user_id,session_id'. Default is 'targets,octopi,1'.")
-    input_group.add_argument("--tomo-alg", default='wbp', help="Tomogram algorithm used for training")
-    input_group.add_argument("--trainRunIDs", type=parsers.parse_list, help="List of training run IDs, e.g., run1,run2,run3")
-    input_group.add_argument("--validateRunIDs", type=parsers.parse_list, help="List of validation run IDs, e.g., run4,run5,run6")
-    input_group.add_argument('--data-split', type=str, default='0.8', help="Data split ratios. Either a single value (e.g., '0.8' for 80/20/0 split) "
-                                "or two comma-separated values (e.g., '0.7,0.1' for 70/10/20 split)")
-    
-    fine_tune_group = parser.add_argument_group("Fine-Tuning Arguments")
-    fine_tune_group.add_argument('--model-config', type=str, help="Path to the model configuration file (typically used for fine-tuning)")
-    fine_tune_group.add_argument('--model-weights', type=str, help="Path to the model weights file (typically used for fine-tuning)") 
-
-    # Model Arguments
-    model_group = parser.add_argument_group("UNet-Model Arguments")
-    common.add_model_parameters(model_group)   
-    
-    # Training Arguments
-    train_group = parser.add_argument_group("Training Arguments")
-    common.add_train_parameters(train_group)
-    
-    # SLURM Arguments
-    if add_slurm:
-        slurm_group = parser.add_argument_group("SLURM Arguments")
-        common.add_slurm_parameters(slurm_group, 'train', gpus = 1)
-
-    args = parser.parse_args()
-    return args
-
-# Entry point with argparse
-def cli():
-    """
-    CLI entry point for training models where results can either be saved to a local directory or a server with MLFlow.
-    """
-
-    # Parse the arguments
-    parser_description = "Train 3D CNN U-Net models"
-    args = train_model_parser(parser_description)
-
-    # Parse the CoPick configuration paths
-    if len(args.config) > 1:    copick_configs = parsers.parse_copick_configs(args.config)
-    else:                       copick_configs = args.config[0]
-
-    if args.model_config:
-        model_config = io.load_yaml(args.model_config)
-    else:
-        model_config = get_model_config(args.channels, args.strides, args.res_units, args.dim_in)
-
-    # Call the training function
-    train_model(
-        copick_config_path=copick_configs, 
-        target_info=args.target_info,
-        tomo_algorithm=args.tomo_alg,
-        voxel_size=args.voxel_size,
-        model_config=model_config,
-        model_weights=args.model_weights,
-        model_save_path=args.model_save_path,
-        num_tomo_crops=args.num_tomo_crops,
-        tomo_batch_size=args.tomo_batch_size,
-        lr=args.lr,
-        tversky_alpha=args.tversky_alpha,
-        num_epochs=args.num_epochs,
-        val_interval=args.val_interval,
-        best_metric=args.best_metric,
-        trainRunIDs=args.trainRunIDs,
-        validateRunIDs=args.validateRunIDs,
-        data_split=args.data_split
-    )
-
 def get_model_config(channels, strides, res_units, dim_in):
     """
-        Create a model configuration dictionary if no model configuration file is provided.
+    Create a model configuration dictionary if no model configuration file is provided.
     """
     model_config = {
         'architecture': 'Unet',
@@ -174,4 +102,94 @@ def get_model_config(channels, strides, res_units, dim_in):
         'dim_in': dim_in
     }
     return model_config
+
+@click.command('train', help="Train 3D CNN U-Net models")
+# Training Arguments (applied in reverse order)
+@common.train_parameters(octopi=False)
+# UNet-Model Arguments
+@common.model_parameters(octopi=False)
+# Fine-Tuning Arguments
+@click.option('-mw', '--model-weights', type=click.Path(exists=True), default=None,
+              help="Path to the model weights file (typically used for fine-tuning)")
+@click.option('-mc', '--model-config', type=click.Path(exists=True), default=None,
+              help="Path to the model configuration file (typically used for fine-tuning)")
+# Input Arguments
+@click.option('-split', '--data-split', type=str, default='0.8',
+              help="Data split ratios. Either a single value (e.g., '0.8' for 80/20/0 split) or two comma-separated values (e.g., '0.7,0.1' for 70/10/20 split)")
+@click.option('-vruns', "--validateRunIDs", type=str, default=None,
+              callback=lambda ctx, param, value: parsers.parse_list(value) if value else None,
+              help="List of validation run IDs, e.g., run4,run5,run6")
+@click.option('-truns', "--trainRunIDs", type=str, default=None,
+              callback=lambda ctx, param, value: parsers.parse_list(value) if value else None,
+              help="List of training run IDs, e.g., run1,run2,run3")
+@click.option('-alg',"--tomo-alg", type=str, default='wbp',
+              help="Tomogram algorithm used for training")
+@click.option('-tinfo', "--target-info", type=str, default="targets,octopi,1",
+              callback=lambda ctx, param, value: parsers.parse_target(value),
+              help="Target information, e.g., 'name' or 'name,user_id,session_id'. Default is 'targets,octopi,1'.")
+@common.config_parameters(single_config=False)
+def cli(config, voxel_size, target_info, tomo_alg, trainRunIDs, validateRunIDs, data_split,
+        model_config, model_weights,
+        Nclass, channels, strides, res_units, dim_in,
+        num_epochs, val_interval, tomo_batch_size, best_metric, 
+        num_tomo_crops, lr, tversky_alpha, model_save_path):
+    """
+    CLI entry point for training models where results can either be saved to a local directory or a server with MLFlow.
+    """
+
+    run_train(config, voxel_size, target_info, tomo_alg, trainRunIDs, validateRunIDs, data_split,
+        model_config, model_weights,
+        Nclass, channels, strides, res_units, dim_in,
+        num_epochs, val_interval, tomo_batch_size, best_metric, 
+        num_tomo_crops, lr, tversky_alpha, model_save_path)
+
+def run_train(config, voxel_size, target_info, tomo_alg, trainRunIDs, validateRunIDs, data_split,
+        model_config, model_weights,
+        Nclass, channels, strides, res_units, dim_in,
+        num_epochs, val_interval, tomo_batch_size, best_metric, 
+        num_tomo_crops, lr, tversky_alpha, model_save_path):
+    """
+    Run the training model.
+    """
+    import octopi.utils.io as io
+
+    # Parse the CoPick configuration paths
+    if len(config) > 1:
+        copick_configs = parsers.parse_copick_configs(config)
+    else:
+        copick_configs = config[0]
     
+    # Parse the CoPick configuration paths
+    if len(config) > 1:
+        copick_configs = parsers.parse_copick_configs(config)
+    else:
+        copick_configs = config[0]
+
+    if model_config:
+        model_config_dict = io.load_yaml(model_config)
+    else:
+        model_config_dict = get_model_config(channels, strides, res_units, dim_in)
+
+    # Call the training function
+    train_model(
+        copick_config_path=copick_configs, 
+        target_info=target_info,
+        tomo_algorithm=tomo_alg,
+        voxel_size=voxel_size,
+        model_config=model_config_dict,
+        model_weights=model_weights,
+        model_save_path=model_save_path,
+        num_tomo_crops=num_tomo_crops,
+        tomo_batch_size=tomo_batch_size,
+        lr=lr,
+        tversky_alpha=tversky_alpha,
+        num_epochs=num_epochs,
+        val_interval=val_interval,
+        best_metric=best_metric,
+        trainRunIDs=trainRunIDs,
+        validateRunIDs=validateRunIDs,
+        data_split=data_split
+    )
+
+if __name__ == '__main__':
+    cli()

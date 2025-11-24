@@ -66,8 +66,8 @@ docs = [
 ]
 
 [project.scripts]
-octopi = "octopi.main:cli_main"
-octopi-slurm = "octopi.main:cli_slurm_main"
+octopi = "octopi.main:routines"
+octopi-slurm = "octopi.main:slurm_routines"
 
 # Keep the hatch.version config so release-please can update both files
 [tool.hatch.version]
