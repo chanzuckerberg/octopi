@@ -130,7 +130,7 @@ def get_model_config(channels, strides, res_units, dim_in):
 @common.config_parameters(single_config=False)
 def cli(config, voxel_size, target_info, tomo_alg, trainRunIDs, validateRunIDs, data_split,
         model_config, model_weights,
-        Nclass, channels, strides, res_units, dim_in,
+        channels, strides, res_units, dim_in,
         num_epochs, val_interval, tomo_batch_size, best_metric, 
         num_tomo_crops, lr, tversky_alpha, model_save_path):
     """
@@ -139,13 +139,13 @@ def cli(config, voxel_size, target_info, tomo_alg, trainRunIDs, validateRunIDs, 
 
     run_train(config, voxel_size, target_info, tomo_alg, trainRunIDs, validateRunIDs, data_split,
         model_config, model_weights,
-        Nclass, channels, strides, res_units, dim_in,
+        channels, strides, res_units, dim_in,
         num_epochs, val_interval, tomo_batch_size, best_metric, 
         num_tomo_crops, lr, tversky_alpha, model_save_path)
 
 def run_train(config, voxel_size, target_info, tomo_alg, trainRunIDs, validateRunIDs, data_split,
         model_config, model_weights,
-        Nclass, channels, strides, res_units, dim_in,
+        channels, strides, res_units, dim_in,
         num_epochs, val_interval, tomo_batch_size, best_metric, 
         num_tomo_crops, lr, tversky_alpha, model_save_path):
     """

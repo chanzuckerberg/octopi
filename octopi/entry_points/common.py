@@ -15,8 +15,6 @@ def model_parameters(octopi: bool = False):
         f = click.option("-ch", "--channels", type=str, default='32,64,96,96',
                         callback=lambda ctx, param, value: parsers.parse_int_list(value) if value else value,
                         help="List of channel sizes")(f)
-        f = click.option("-nc", "--Nclass", type=int, default=3,
-                        help="Number of prediction classes in the model")(f)
         return f
     return decorator
 
