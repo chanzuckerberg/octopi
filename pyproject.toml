@@ -41,6 +41,7 @@ dependencies = [
     "requests",
     "torch-ema",
     "ipywidgets",
+    "rich-click",
     "copick-utils",
     "multiprocess",
     "python-dotenv",
