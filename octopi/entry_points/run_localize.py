@@ -68,21 +68,21 @@ def save_parameters(seg_info: Tuple[str, str, str],
 
 @click.command('localize', help="Localize particles in tomograms using multiprocessing")
 # Output Arguments
-@click.option('--pick-user-id', type=str, default='octopi',
+@click.option('-pui', '--pick-user-id', type=str, default='octopi',
               help="User ID for the particle picks")
-@click.option('--pick-session-id', type=str, default='1',
+@click.option('-psid', '--pick-session-id', type=str, default='1',
               help="Session ID for the particle picks")
 # Localize Arguments
-@click.option('--n-procs', type=int, default=8,
+@click.option('-np', '--n-procs', type=int, default=8,
               help="Number of CPU processes to parallelize runs across. Defaults to the max number of cores available or available runs")
-@click.option('--pick-objects', type=str, default=None,
+@click.option('-obj', '--pick-objects', type=str, default=None,
               callback=lambda ctx, param, value: parsers.parse_list(value) if value else None,
               help="Specific Objects to Find Picks for")
-@click.option('--filter-size', type=int, default=10,
+@click.option('-fs', '--filter-size', type=int, default=10,
               help="Filter size for localization")
-@click.option('--radius-max-scale', type=float, default=1.0,
+@click.option('-rmax','--radius-max-scale', type=float, default=1.0,
               help="Maximum radius scale for particles")
-@click.option('--radius-min-scale', type=float, default=0.5,
+@click.option('-rmin', '--radius-min-scale', type=float, default=0.5,
               help="Minimum radius scale for particles")
 # Input Arguments
 @click.option('--runIDs', type=str, default=None,
@@ -90,7 +90,7 @@ def save_parameters(seg_info: Tuple[str, str, str],
               help="List of runIDs to run inference on, e.g., run1,run2,run3 or [run1,run2,run3]")
 @click.option('-vs', '--voxel-size', type=float, default=10,
               help="Voxel size for localization")
-@click.option('--seg-info', type=str, default='predict,octopi,1',
+@click.option('-sinfo', '--seg-info', type=str, default='predict,octopi,1',
               callback=lambda ctx, param, value: parsers.parse_target(value),
               help='Query for the organelles segmentations (e.g., "name" or "name,user_id,session_id")')
 @click.option('-m', '--method', type=click.Choice(['watershed', 'com'], case_sensitive=False), 
