@@ -1,9 +1,6 @@
-from octopi.extract import membranebound_extract as extract
-from octopi.utils import parsers
-import argparse, json, pprint, copick, json
 from typing import List, Tuple, Optional
-import multiprocess as mp
-from tqdm import tqdm
+from octopi.utils import parsers
+import rich_click as click
 
 def extract_membrane_bound_picks(
     config: str,
@@ -17,9 +14,13 @@ def extract_membrane_bound_picks(
     runIDs: List[str],
     n_procs: int = None
     ):  
+    from octopi.extract import membranebound_extract as extract
+    import multiprocess as mp
+    from tqdm import tqdm
+    import copick
 
     # Load Copick Project for Writing 
-    root = copick.from_file( config ) 
+    root = copick.from_file(config) 
     
     # Either Specify Input RunIDs or Run on All RunIDs
     if runIDs:  print('Extracting Membrane Bound Proteins on the Following RunIDs: ', runIDs)
@@ -50,60 +51,35 @@ def extract_membrane_bound_picks(
 
     print('Extraction of Membrane-Bound Proteins Complete!')
 
-def cli():
-    parser = argparse.ArgumentParser(
-        description='Extract membrane-bound picks based on proximity to segmentation.',
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter
-    )
-    parser.add_argument('--config', type=str, required=True, help='Path to the configuration file.')
-    parser.add_argument('--voxel-size', type=float, required=False, default=10, help='Voxel size.')
-    parser.add_argument('--distance-threshold', type=float, required=False, default=10, help='Distance threshold.')
-    parser.add_argument('--picks-info', type=parsers.parse_target, required=True, help='Query for the picks (e.g., "name" or "name,user_id,session_id".).')
-    parser.add_argument('--membrane-info', type=parsers.parse_target, required=False, help='Query for the membrane segmentation (e.g., "name" or "name,user_id,session_id".).')
-    parser.add_argument('--organelle-info', type=parsers.parse_target, required=False, help='Query for the organelles segmentations (e.g., "name" or "name,user_id,session_id".).')
-    parser.add_argument('--save-user-id', type=str, required=False, default=None, help='User ID to save the new picks.')
-    parser.add_argument('--save-session-id', type=str, required=True, help='Session ID to save the new picks.')
-    parser.add_argument('--runIDs', type=parsers.parse_list, required=False, help='List of run IDs to process.')
-    parser.add_argument('--n-procs', type=int, required=False, default=None, help='Number of processes to use.')
 
-    args = parser.parse_args()
-
-    # Increment session ID for the second class
-    if args.save_user_id is None: 
-        args.save_user_id = args.picks_user_id
-
-    # Save JSON with Parameters
-    output_yaml = f'membrane-extract_{args.save_user_id}_{args.save_session_id}.yaml'        
-    save_parameters(args, output_yaml)
-
-    extract_membrane_bound_picks(
-        config=args.config,
-        voxel_size=args.voxel_size,
-        distance_threshold=args.distance_threshold,
-        picks_info=args.picks_info,
-        membrane_info=args.membrane_info,
-        organelle_info=args.organelle_info,
-        save_user_id=args.save_user_id,
-        save_session_id=args.save_session_id,
-        runIDs=args.runIDs,
-        n_procs=args.n_procs,
-    )
-
-def save_parameters(args: argparse.Namespace, 
+def save_parameters(config: str,
+                    voxel_size: float,
+                    picks_info: tuple,
+                    membrane_info: tuple,
+                    organelle_info: tuple,
+                    save_user_id: str,
+                    save_session_id: str,
+                    distance_threshold: float,
+                    runIDs: list,
                     output_path: str):
+    import octopi.utils.io as io
+    import pprint
 
     params_dict = {
         "input": {
-            k: getattr(args, k) for k in [
-                "config", "voxel_size", "picks_info", 
-                "membrane_info", "organelle_info"
-            ]
+            "config": config,
+            "voxel_size": voxel_size,
+            "picks_info": picks_info,
+            "membrane_info": membrane_info,
+            "organelle_info": organelle_info
         },
         "output": {
-            k: getattr(args, k) for k in ["save_user_id", "save_session_id"]
+            "save_user_id": save_user_id,
+            "save_session_id": save_session_id
         },
         "parameters": {
-            k: getattr(args, k) for k in ["distance_threshold", "runIDs"]
+            "distance_threshold": distance_threshold,
+            "runIDs": runIDs
         }
     }
 
@@ -112,7 +88,89 @@ def save_parameters(args: argparse.Namespace,
     pprint.pprint(params_dict); print()
 
     # Save parameters to YAML file
-    utils.save_parameters_yaml(params_dict, output_path) 
+    io.save_parameters_yaml(params_dict, output_path)
+
+
+@click.command('membrane-extract', help="Extract membrane-bound picks based on proximity to segmentation")
+# Output Arguments
+@click.option('--save-session-id', type=str, required=True,
+              help="Session ID to save the new picks")
+@click.option('--save-user-id', type=str, default=None,
+              help="User ID to save the new picks (defaults to picks user ID)")
+# Parameters
+@click.option('--n-procs', type=int, default=None,
+              help="Number of processes to use (defaults to CPU count)")
+@click.option('--distance-threshold', type=float, default=10,
+              help="Distance threshold for membrane proximity")
+# Input Arguments
+@click.option('--runIDs', type=str, default=None,
+              callback=lambda ctx, param, value: parsers.parse_list(value) if value else None,
+              help="List of run IDs to process")
+@click.option('--organelle-info', type=str, default=None,
+              callback=lambda ctx, param, value: parsers.parse_target(value) if value else None,
+              help='Query for the organelles segmentations (e.g., "name" or "name,user_id,session_id")')
+@click.option('--membrane-info', type=str, default=None,
+              callback=lambda ctx, param, value: parsers.parse_target(value) if value else None,
+              help='Query for the membrane segmentation (e.g., "name" or "name,user_id,session_id")')
+@click.option('--picks-info', type=str, required=True,
+              callback=lambda ctx, param, value: parsers.parse_target(value),
+              help='Query for the picks (e.g., "name" or "name,user_id,session_id")')
+@click.option('-vs', '--voxel-size', type=float, default=10,
+              help="Voxel size")
+@click.option('-c', '--config', type=click.Path(exists=True), required=True,
+              help="Path to the configuration file")
+def cli(config, voxel_size, picks_info, membrane_info, organelle_info, runIDs,
+        distance_threshold, n_procs,
+        save_user_id, save_session_id):
+    """
+    CLI entry point for extracting membrane-bound picks.
+    """
+
+    run_mb_extract(
+        config, voxel_size,
+        picks_info, membrane_info, organelle_info,
+        runIDs, distance_threshold, n_procs,
+        save_user_id, save_session_id
+    )
+
+
+def run_mb_extract(
+    config, voxel_size, picks_info, membrane_info, 
+    organelle_info, runIDs, distance_threshold, n_procs,
+    save_user_id, save_session_id):
+    
+    # Default save_user_id to picks_info user_id if not specified
+    if save_user_id is None: 
+        save_user_id = picks_info[1]
+
+    # Save parameters
+    output_yaml = f'membrane-extract_{save_user_id}_{save_session_id}.yaml'
+    save_parameters(
+        config=config,
+        voxel_size=voxel_size,
+        picks_info=picks_info,
+        membrane_info=membrane_info,
+        organelle_info=organelle_info,
+        save_user_id=save_user_id,
+        save_session_id=save_session_id,
+        distance_threshold=distance_threshold,
+        runIDs=runIDs,
+        output_path=output_yaml
+    )
+
+    extract_membrane_bound_picks(
+        config=config,
+        voxel_size=voxel_size,
+        distance_threshold=distance_threshold,
+        picks_info=picks_info,
+        membrane_info=membrane_info,
+        organelle_info=organelle_info,
+        save_user_id=save_user_id,
+        save_session_id=save_session_id,
+        runIDs=runIDs,
+        n_procs=n_procs,
+    )
+
 
 if __name__ == "__main__":
     cli()

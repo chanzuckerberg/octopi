@@ -88,4 +88,34 @@ click.rich_click.OPTION_GROUPS = {
                        "--num-trials", "--random-seed"]
         }
     ],
+    "routines evaluate": [
+        {
+            "name": "Input Arguments",
+            "options": ["--config", "--ground-truth-user-id", "--ground-truth-session-id",
+                       "--predict-user-id", "--predict-session-id", "--run-ids"]
+        },
+        {
+            "name": "Evaluation Parameters",
+            "options": ["--distance-threshold-scale", "--object-names"]
+        },
+        {
+            "name": "Output Arguments",
+            "options": ["--save-path"]
+        }
+    ],
+    "routines membrane-extract": [
+        {
+            "name": "Input Arguments",
+            "options": ["--config", "--voxel-size", "--picks-info", "--membrane-info",
+                       "--organelle-info", "--runIDs"]
+        },
+        {
+            "name": "Parameters",
+            "options": ["--distance-threshold", "--n-procs"]
+        },
+        {
+            "name": "Output Arguments",
+            "options": ["--save-user-id", "--save-session-id"]
+        }
+    ],
 }
