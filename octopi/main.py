@@ -1,6 +1,7 @@
 from octopi import cli_context
 import rich_click as click
 from octopi.entry_points.run_train import cli as train_model
+from octopi.entry_points.run_optuna import cli as model_explore_cmd
 from octopi.entry_points.run_create_targets import cli as create_targets_cmd
 from octopi.entry_points.run_segment_predict import cli as inference_cmd
 from octopi.entry_points.run_localize import cli as localize_cmd
@@ -15,6 +16,7 @@ routines.add_command(train_model)
 routines.add_command(create_targets_cmd)
 routines.add_command(inference_cmd)
 routines.add_command(localize_cmd)
+routines.add_command(model_explore_cmd)
 
 @click.group(context_settings=cli_context)
 def slurm_routines():

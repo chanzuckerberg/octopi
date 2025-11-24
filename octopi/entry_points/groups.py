@@ -72,4 +72,20 @@ click.rich_click.OPTION_GROUPS = {
             "options": ["--pick-session-id", "--pick-user-id"]
         }
     ],
+    "routines model-explore": [
+        {
+            "name": "Input Arguments",
+            "options": ["--config", "--voxel-size", "--target-info", "--tomo-alg", 
+                       "--mlflow-experiment-name", "--trainRunIDs", "--validateRunIDs", "--data-split"]
+        },
+        {
+            "name": "Model Arguments",
+            "options": ["--model-type"]
+        },
+        {
+            "name": "Training Arguments",
+            "options": ["--num-epochs", "--val-interval", "--tomo-batch-size", "--best-metric", 
+                       "--num-trials", "--random-seed"]
+        }
+    ],
 }
