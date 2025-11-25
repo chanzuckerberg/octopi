@@ -99,7 +99,35 @@ def cli(config, voxel_size,
         model_config, model_weights,
         tomo_alg, seg_info, tomo_batch_size, run_ids):
     """
-    CLI entry point for running inference.
+    Segment volumes using trained neural network models.
+    
+    It supports both single model inference and model ensembles 
+    (model soups) for improved accuracy. Multi-GPU inference is automatically enabled when 
+    multiple GPUs are available.
+    
+    The segmentation masks are saved as zarr arrays in your copick project, organized by 
+    segmentation name, user ID, and session ID for easy tracking and comparison.
+    
+    \b
+    Examples:
+      # Segment with a single model
+      octopi segment -c config.json \\
+        --model-config model.yaml --model-weights model.pth \\
+        --seg-info predictions,octopi,1
+    
+    \b
+      # Segment with model ensemble (comma-separated)
+      octopi segment -c config.json \\
+        --model-config model1.yaml,model2.yaml \\
+        --model-weights model1.pth,model2.pth \\
+        --seg-info ensemble,octopi,1
+    
+    \b
+      # Segment specific runs only
+      octopi segment -c config.json \\
+        --model-config model.yaml --model-weights model.pth \\
+        --run-ids TS_001,TS_002,TS_003 \\
+        --tomo-batch-size 10
     """
     
     # Set default values if not provided

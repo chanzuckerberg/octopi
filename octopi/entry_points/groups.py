@@ -118,4 +118,18 @@ click.rich_click.OPTION_GROUPS = {
             "options": ["--save-user-id", "--save-session-id"]
         }
     ],
+    "routines download": [
+        {
+            "name": "Input Arguments",
+            "options": ["--config", "--datasetID", "--overlay-path"]
+        },
+        {
+            "name": "Tomogram Settings",
+            "options": ["--dataportal-name", "--target-tomo-type"]
+        },
+        {
+            "name": "Voxel Settings",
+            "options": ["--input-voxel-size", "--output-voxel-size"]
+        }
+    ],    
 }

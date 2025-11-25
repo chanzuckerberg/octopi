@@ -91,7 +91,7 @@ def save_parameters(config: str,
     io.save_parameters_yaml(params_dict, output_path)
 
 
-@click.command('membrane-extract', help="Extract membrane-bound picks based on proximity to segmentation")
+@click.command('membrane-extract')
 # Output Arguments
 @click.option('--save-session-id', type=str, required=True,
               help="Session ID to save the new picks")
@@ -123,7 +123,22 @@ def cli(config, voxel_size, picks_info, membrane_info, organelle_info, runIDs,
         distance_threshold, n_procs,
         save_user_id, save_session_id):
     """
-    CLI entry point for extracting membrane-bound picks.
+    Extract membrane-bound picks based on proximity to organelle or membrane segmentation.
+    
+    This command isolates membrane-bound proteins from segmented volumes by finding 
+    particles that are within a specified distance threshold of the membrane segmentation. 
+    The resulting picks are saved as zarr arrays in your copick project, organized by 
+    segmentation name, user ID, and session ID for easy tracking and comparison.
+    
+    \b
+    Examples:
+      # Extract membrane-bound picks with default distance threshold
+      octopi membrane-extract -c config.json \\
+        --picks-info predictions,octopi,1 \\
+        --membrane-info membrane,octopi,1 \\
+        --organelle-info organelle,octopi,1 \\
+        --save-user-id octopi \\
+        --save-session-id 1
     """
 
     run_mb_extract(
