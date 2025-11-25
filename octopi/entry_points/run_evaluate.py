@@ -57,7 +57,28 @@ def cli(config, ground_truth_user_id, ground_truth_session_id,
         distance_threshold_scale, object_names,
         save_path):
     """
-    CLI entry point for running evaluation.
+    Evaluate particle localization performance against ground truth annotations.
+    
+    This command compares predicted particle picks against expert annotations using distance-based 
+    matching. A prediction is considered correct (true positive) if it falls within a specified 
+    distance threshold of a ground truth annotation. The threshold is defined as a fraction of 
+    the particle's radius (default: 0.8 = 80% of radius).
+    
+    Computed metrics include:
+      • Precision: Fraction of predictions that match ground truth
+      • Recall: Fraction of ground truth particles that were detected
+      • F-beta scores: Harmonic mean of precision and recall (with configurable beta)
+    
+    Results are saved as a YAML file containing per-object and aggregate statistics, making it 
+    easy to track model performance across experiments and compare different localization methods.
+    
+    \b
+    Examples:
+      # Evaluate predictions against Data Portal annotations
+      octopi evaluate -c config.json \\
+        -gtuid data-portal -gtsid 0 \\
+        -puid octopi -psid 1 \\
+        -o evaluation_results.yaml
     """
 
     # Call the evaluate function with parsed arguments

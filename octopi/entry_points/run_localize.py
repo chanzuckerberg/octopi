@@ -69,7 +69,7 @@ def save_parameters(seg_info: Tuple[str, str, str],
     io.save_parameters_yaml(params, output_path)
 
 
-@click.command('localize', help="Localize particles in tomograms using multiprocessing")
+@click.command('localize')
 # Output Arguments
 @click.option('-pui', '--pick-user-id', type=str, default='octopi',
               help="User ID for the particle picks")
@@ -105,7 +105,16 @@ def cli(config, method, seg_info, voxel_size, runids,
         radius_min_scale, radius_max_scale, filter_size, pick_objects, n_procs,
         pick_session_id, pick_user_id):
     """
-    CLI entry point for localizing particles in tomograms.
+    Convert Segmentation Masks to 3D Particle Coordinates. 
+
+    This command converts segmentation masks into 3D particle coordinates using size-based filtering. 
+    It supports two localization methods: watershed and center of mass. The resulting particle coordinates 
+    in your copick project, organized by segmentation name, user ID, and session ID for easy tracking and comparison.
+    
+    \b
+    Examples:
+      # Localize particles with default settings
+      octopi localize -c config.json --seg-info predict,octopi,1
     """
 
     run_localize(config, method, seg_info, voxel_size, runids,
