@@ -88,7 +88,7 @@ def inference(
     print("Inference completed successfully.")
 
 
-@click.command('inference', help="Run segmentation predictions with a specified model and configuration on CryoET Tomograms")
+@click.command('segment')
 # Inference Arguments
 @common.inference_parameters()
 # Model Arguments

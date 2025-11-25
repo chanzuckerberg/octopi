@@ -43,10 +43,10 @@ click.rich_click.OPTION_GROUPS = {
             "options": ["--target-segmentation-name", "--target-user-id", "--target-session-id"]
         }
     ],
-    "routines inference": [
+    "routines segment": [
         {
             "name": "Input Arguments",
-            "options": ["--config", "--voxel-size"]
+            "options": ["--config", "--voxel-size", "--tomo-alg"]
         },
         {
             "name": "Model Arguments",
@@ -54,7 +54,7 @@ click.rich_click.OPTION_GROUPS = {
         },
         {
             "name": "Inference Arguments",
-            "options": ["--tomo-alg", "--seg-info", "--tomo-batch-size", "--run-ids"]
+            "options": ["--seg-info", "--tomo-batch-size", "--run-ids"]
         }
     ],
     "routines localize": [

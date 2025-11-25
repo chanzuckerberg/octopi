@@ -35,6 +35,10 @@ def create_sub_train_targets(
         if obj is None:
             print(f'Warning - Skipping Particle Target: "{obj_name}", as it is not a valid name in the config file.')
             continue
+
+        if obj_name in train_targets:
+            print(f'Warning - Skipping Particle Target: "{obj_name}, {user_id}, {session_id}", as it has already been added to the target list.')
+            continue
         
         # Get the label and radius of the object
         label = value # Assign labels sequentially
@@ -50,6 +54,8 @@ def create_sub_train_targets(
 
     # Create dictionary for segmentation targets
     train_targets = add_segmentation_targets(root, seg_targets, train_targets, value)   
+
+    import pdb; pdb.set_trace()
 
     create_targets.generate_targets(
         config, train_targets, voxel_size, tomogram_algorithm, radius_scale,

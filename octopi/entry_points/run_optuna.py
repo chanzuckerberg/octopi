@@ -82,7 +82,7 @@ def save_parameters(config: tuple,
               help="Target information, e.g., 'name' or 'name,user_id,session_id'")
 @common.config_parameters(single_config=False)
 def cli(config, voxel_size, target_info, tomo_alg, mlflow_experiment_name, 
-        trainRunIDs, validateRunIDs, data_split,
+        trainrunids, validaterunids, data_split,
         model_type,
         num_epochs, val_interval, tomo_batch_size, best_metric, num_trials, random_seed):
     """
@@ -90,7 +90,7 @@ def cli(config, voxel_size, target_info, tomo_alg, mlflow_experiment_name,
     """
 
 def run_model_explore(config, voxel_size, target_info, tomo_alg, mlflow_experiment_name, 
-        trainRunIDs, validateRunIDs, data_split,
+        trainrunids, validaterunids, data_split,
         model_type,
         num_epochs, val_interval, tomo_batch_size, best_metric, num_trials, random_seed):
     """
@@ -121,8 +121,8 @@ def run_model_explore(config, voxel_size, target_info, tomo_alg, mlflow_experime
         best_metric=best_metric,
         num_epochs=num_epochs,
         tomo_batch_size=tomo_batch_size,
-        trainRunIDs=trainRunIDs,
-        validateRunIDs=validateRunIDs,
+        trainRunIDs=trainrunids,
+        validateRunIDs=validaterunids,
         data_split=data_split,
         output_path=f'explore_results_{model_type}/octopi.yaml'
     )
@@ -140,8 +140,8 @@ def run_model_explore(config, voxel_size, target_info, tomo_alg, mlflow_experime
         random_seed=random_seed,
         num_epochs=num_epochs,
         num_trials=num_trials,
-        trainRunIDs=trainRunIDs,
-        validateRunIDs=validateRunIDs, 
+        trainRunIDs=trainrunids,
+        validateRunIDs=validaterunids, 
         tomo_batch_size=tomo_batch_size,
         best_metric=best_metric,
         val_interval=val_interval,

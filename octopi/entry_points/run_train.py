@@ -128,7 +128,7 @@ def get_model_config(channels, strides, res_units, dim_in):
               callback=lambda ctx, param, value: parsers.parse_target(value),
               help="Target information, e.g., 'name' or 'name,user_id,session_id'. Default is 'targets,octopi,1'.")
 @common.config_parameters(single_config=False)
-def cli(config, voxel_size, target_info, tomo_alg, trainRunIDs, validateRunIDs, data_split,
+def cli(config, voxel_size, target_info, tomo_alg, trainrunids, validaterunids, data_split,
         model_config, model_weights,
         channels, strides, res_units, dim_in,
         num_epochs, val_interval, tomo_batch_size, best_metric, 
@@ -137,13 +137,13 @@ def cli(config, voxel_size, target_info, tomo_alg, trainRunIDs, validateRunIDs, 
     CLI entry point for training models where results can either be saved to a local directory or a server with MLFlow.
     """
 
-    run_train(config, voxel_size, target_info, tomo_alg, trainRunIDs, validateRunIDs, data_split,
+    run_train(config, voxel_size, target_info, tomo_alg, trainrunids, validaterunids, data_split,
         model_config, model_weights,
         channels, strides, res_units, dim_in,
         num_epochs, val_interval, tomo_batch_size, best_metric, 
         num_tomo_crops, lr, tversky_alpha, model_save_path)
 
-def run_train(config, voxel_size, target_info, tomo_alg, trainRunIDs, validateRunIDs, data_split,
+def run_train(config, voxel_size, target_info, tomo_alg, trainrunids, validaterunids, data_split,
         model_config, model_weights,
         channels, strides, res_units, dim_in,
         num_epochs, val_interval, tomo_batch_size, best_metric, 
@@ -186,8 +186,8 @@ def run_train(config, voxel_size, target_info, tomo_alg, trainRunIDs, validateRu
         num_epochs=num_epochs,
         val_interval=val_interval,
         best_metric=best_metric,
-        trainRunIDs=trainRunIDs,
-        validateRunIDs=validateRunIDs,
+        trainRunIDs=trainrunids,
+        validateRunIDs=validaterunids,
         data_split=data_split
     )
 

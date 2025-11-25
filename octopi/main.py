@@ -4,7 +4,7 @@ from octopi.entry_points import groups  # Import groups to set OPTION_GROUPS
 from octopi.entry_points.run_train import cli as train_model
 from octopi.entry_points.run_optuna import cli as model_explore
 from octopi.entry_points.run_create_targets import cli as create_targets
-from octopi.entry_points.run_segment_predict import cli as inference
+from octopi.entry_points.run_segment import cli as inference
 from octopi.entry_points.run_localize import cli as localize
 from octopi.entry_points.run_evaluate import cli as evaluate
 from octopi.entry_points.run_extract_mb_picks import cli as mb_extract

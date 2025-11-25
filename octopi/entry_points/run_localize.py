@@ -98,19 +98,19 @@ def save_parameters(seg_info: Tuple[str, str, str],
               help="Localization method to use")
 @click.option('-c', '--config', type=click.Path(exists=True), required=True,
               help="Path to the CoPick configuration file")
-def cli(config, method, seg_info, voxel_size, runIDs,
+def cli(config, method, seg_info, voxel_size, runids,
         radius_min_scale, radius_max_scale, filter_size, pick_objects, n_procs,
         pick_session_id, pick_user_id):
     """
     CLI entry point for localizing particles in tomograms.
     """
 
-    run_localize(config, method, seg_info, voxel_size, runIDs,
+    run_localize(config, method, seg_info, voxel_size, runids,
         radius_min_scale, radius_max_scale, filter_size, pick_objects, n_procs,
         pick_session_id, pick_user_id)
     
 
-def run_localize(config, method, seg_info, voxel_size, runIDs,
+def run_localize(config, method, seg_info, voxel_size, runids,
         radius_min_scale, radius_max_scale, filter_size, pick_objects, n_procs,
         pick_session_id, pick_user_id):
     """
@@ -153,7 +153,7 @@ def run_localize(config, method, seg_info, voxel_size, runIDs,
         radius_min_scale=radius_min_scale,
         radius_max_scale=radius_max_scale,
         filter_size=filter_size,
-        runIDs=runIDs,
+        runIDs=runids,
         pick_objects=pick_objects,
         n_procs=n_procs,
     )
