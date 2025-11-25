@@ -55,7 +55,7 @@ def my_evaluator(
 def cli(config, ground_truth_user_id, ground_truth_session_id,
         predict_user_id, predict_session_id, run_ids,
         distance_threshold_scale, object_names,
-        save_path):
+        output):
     """
     Evaluate particle localization performance against ground truth annotations.
     
@@ -88,7 +88,7 @@ def cli(config, ground_truth_user_id, ground_truth_session_id,
         ground_truth_session_id=ground_truth_session_id,
         predict_user_id=predict_user_id,
         predict_session_id=predict_session_id,
-        save_path=save_path,
+        save_path=output,
         distance_threshold_scale=distance_threshold_scale,
         object_names=object_names,
         runIDs=run_ids

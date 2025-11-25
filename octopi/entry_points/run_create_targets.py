@@ -55,8 +55,6 @@ def create_sub_train_targets(
     # Create dictionary for segmentation targets
     train_targets = add_segmentation_targets(root, seg_targets, train_targets, value)   
 
-    import pdb; pdb.set_trace()
-
     create_targets.generate_targets(
         config, train_targets, voxel_size, tomogram_algorithm, radius_scale,
         target_segmentation_name, target_user_id, 
@@ -143,20 +141,7 @@ def add_segmentation_targets(
     return train_targets    
 
 
-@click.command('create-targets', help="""Generate segmentation targets from CoPick configurations.
-
-This tool allows users to specify target labels for training in two ways:
-
-1. Manual Specification: Define a subset of pickable objects using --target name or --target name,user_id,session_id
-
-2. Automated Query: Provide --picks-session-id and/or --picks-user-id to automatically retrieve all pickable objects
-
-Example Usage:
-
-    Manual: octopi create-targets --config config.json --target ribosome --target apoferritin,123,456
-
-    Automated: octopi create-targets --config config.json --picks-session-id 123 --picks-user-id 456
-""")
+@click.command('create-targets')
 # Output Arguments
 @click.option('-sid', '--target-session-id', type=str, default="1",
               help="Session ID for the target segmentation")
@@ -191,9 +176,19 @@ def cli(config, target, picks_session_id, picks_user_id, seg_target, run_ids,
         tomo_alg, radius_scale, voxel_size,
         target_segmentation_name, target_user_id, target_session_id):
     """
-    Generate segmentation targets from CoPick configurations with either --target flag 
-    (specify subset of pickable objects) or --picks-session-id and --picks-user-id flags 
-    (automatically retrieve all pickable objects associated with the query).
+    Generate segmentation targets from CoPick configurations.
+
+    This tool allows users to specify target labels for training in two ways:
+
+    1. Manual Specification: Define a subset of pickable objects using --target name or --target name,user_id,session_id
+
+    2. Automated Query: Provide --picks-session-id and/or --picks-user-id to automatically retrieve all pickable objects
+
+    Example Usage:
+
+        Manual: octopi create-targets --config config.json --target ribosome --target apoferritin,123,456
+
+        Automated: octopi create-targets --config config.json --picks-session-id 123 --picks-user-id 456
     """
 
     # Print Summary To User
