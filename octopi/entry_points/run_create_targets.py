@@ -1,14 +1,11 @@
-import octopi.processing.create_targets_from_picks as create_targets
 from typing import List, Tuple, Union
-from octopi.utils import io, parsers
 from collections import defaultdict
-import argparse, copick, yaml, os
-from tqdm import tqdm
-import numpy as np
+from octopi.utils import parsers
+import rich_click as click
 
 def create_sub_train_targets(
     config: str,
-    pick_targets: List[Tuple[str, Union[str, None], Union[str, None]]],  # Updated type without radius
+    pick_targets: List[Tuple[str, Union[str, None], Union[str, None]]],
     seg_targets: List[Tuple[str, Union[str, None], Union[str, None]]],
     voxel_size: float,
     radius_scale: float,    
@@ -18,6 +15,8 @@ def create_sub_train_targets(
     target_session_id: str,
     run_ids: List[str],    
     ):
+    import octopi.processing.create_targets_from_picks as create_targets
+    import copick
 
     # Load Copick Project 
     root = copick.from_file(config)
@@ -35,6 +34,10 @@ def create_sub_train_targets(
         # Check if the object is valid
         if obj is None:
             print(f'Warning - Skipping Particle Target: "{obj_name}", as it is not a valid name in the config file.')
+            continue
+
+        if obj_name in train_targets:
+            print(f'Warning - Skipping Particle Target: "{obj_name}, {user_id}, {session_id}", as it has already been added to the target list.')
             continue
         
         # Get the label and radius of the object
@@ -72,6 +75,8 @@ def create_all_train_targets(
     target_session_id: str,
     run_ids: List[str],    
     ):     
+    import octopi.processing.create_targets_from_picks as create_targets
+    import copick
 
     # Load Copick Project 
     root = copick.from_file(config)
@@ -135,100 +140,94 @@ def add_segmentation_targets(
 
     return train_targets    
 
-def parse_args():
+
+@click.command('create-targets')
+# Output Arguments
+@click.option('-sid', '--target-session-id', type=str, default="1",
+              help="Session ID for the target segmentation")
+@click.option('-uid','--target-user-id', type=str, default="octopi",
+              help="User ID associated with the target segmentation")
+@click.option('-name', '--target-segmentation-name', type=str, default='targets',
+              help="Name for the target segmentation")
+# Parameters
+@click.option('-vs', '--voxel-size', type=float, default=10,
+              help="Voxel size for tomogram reconstruction")
+@click.option('-rs', '--radius-scale', type=float, default=0.7,
+              help="Scale factor for object radius")
+@click.option('-alg', '--tomo-alg', type=str, default="wbp",
+              help="Tomogram reconstruction algorithm")
+# Input Arguments
+@click.option('--run-ids', type=str, default=None,
+              callback=lambda ctx, param, value: parsers.parse_list(value) if value else None,
+              help="List of run IDs")
+@click.option('--seg-target', type=str, multiple=True,
+              callback=lambda ctx, param, value: [parsers.parse_target(v) for v in value] if value else [],
+              help='Segmentation targets: "name" or "name,user_id,session_id"')
+@click.option('--picks-user-id', type=str, default=None,
+              help="User ID associated with the picks")
+@click.option('--picks-session-id', type=str, default=None,
+              help="Session ID for the picks")
+@click.option('-t', '--target', type=str, multiple=True,
+              callback=lambda ctx, param, value: [parsers.parse_target(v) for v in value] if value else None,
+              help='Target specifications: "name" or "name,user_id,session_id"')
+@click.option('-c', '--config', type=click.Path(exists=True), required=True,
+              help="Path to the CoPick configuration file")
+def cli(config, target, picks_session_id, picks_user_id, seg_target, run_ids,
+        tomo_alg, radius_scale, voxel_size,
+        target_segmentation_name, target_user_id, target_session_id):
     """
-    Parse command-line arguments for generating segmentation targets from CoPick configurations.
+    Generate segmentation targets from CoPick configurations.
 
-    This tool allows researchers to specify protein labels for training in two ways:
-    
-    1. **Manual Specification:** Users can define a subset of pickable objects from the CoPick configuration file.
-       - Specify a target protein using `--target name`, or refine selection with `--target name,user_id,session_id`.
-       - This enables flexible training target customization from multiple sources.
+    This tool allows users to specify target labels for training in two ways:
 
-    2. **Automated Query:** Instead of specifying targets explicitly, users can provide a session ID (`--picks-session-id`) and/or 
-       user ID (`--picks-user-id`). DeepFindET will automatically retrieve all pickable objects associated with the query.
-    
-    The tool also allows customization of tomogram reconstruction settings and segmentation parameters.
+    1. Manual Specification: Define a subset of pickable objects using --target name or --target name,user_id,session_id
+
+    2. Automated Query: Provide --picks-session-id and/or --picks-user-id to automatically retrieve all pickable objects
 
     Example Usage:
-        - Manual Specification:
-            ```bash
-            python create_targets.py --config config.json --target ribosome --target apoferritin,123,456
-            ```
-        - Automated Query:
-            ```bash
-            python create_targets.py --config config.json --picks-session-id 123 --picks-user-id 456
-            ```
 
-    Output segmentation data is saved in a structured YAML file.
+        Manual: octopi create-targets --config config.json --target ribosome --target apoferritin,123,456
+
+        Automated: octopi create-targets --config config.json --picks-session-id 123 --picks-user-id 456
     """
-    parser = argparse.ArgumentParser(
-        description=f"""Generate segmentation targets from CoPick configurations with either --target flag (which lets users specify a subset of pickable objects) or --picks-session-id and --picks-user-id flags (which lets users specify a sessionID and userID to automatically retrieve all pickable objects associated with the query).""",
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter
-    )
 
-    input_group = parser.add_argument_group("Input Arguments")
-    input_group.add_argument("--config", type=str, required=True, help="Path to the CoPick configuration file.")
-    input_group.add_argument("--target", type=parsers.parse_target, action="append", default=None, help='Target specifications: "name" or "name,user_id,session_id".')
-    input_group.add_argument("--picks-session-id", type=str, default=None, help="Session ID for the picks.")
-    input_group.add_argument("--picks-user-id", type=str, default=None, help="User ID associated with the picks.")
-    input_group.add_argument("--seg-target", type=parsers.parse_target, action="append", default=[], help='Segmentation targets: "name" or "name,user_id,session_id".')
-    input_group.add_argument("--run-ids", type=parsers.parse_list, default=None, help="List of run IDs.")
-
-    # Parameters
-    parameters_group = parser.add_argument_group("Parameters")
-    parameters_group.add_argument("--tomo-alg", type=str, default="wbp", help="Tomogram reconstruction algorithm.")    
-    parameters_group.add_argument("--radius-scale", type=float, default=0.7, help="Scale factor for object radius.")
-    parameters_group.add_argument("--voxel-size", type=float, default=10, help="Voxel size for tomogram reconstruction.")    
-    
-    output_group = parser.add_argument_group("Output Arguments")
-    output_group.add_argument("--target-segmentation-name", type=str, default='targets', help="Name for the target segmentation.")
-    output_group.add_argument("--target-user-id", type=str, default="octopi", help="User ID associated with the target segmentation.")
-    output_group.add_argument("--target-session-id", type=str, default="1", help="Session ID for the target segmentation.")
-
-    return parser.parse_args()
-
-def cli():
-
-    # Parse Arguments and Print Summary To User
-    args = parse_args()
+    # Print Summary To User
     print('\nGenerating Target Segmentation Masks from the Following Copick-Query:')
-    if args.target is not None:
-        print(f'    - Targets: {args.target}\n')
+    if target is not None and len(target) > 0:
+        print(f'    - Targets: {target}\n')
     else:
-        print(f'    -  UserID: {args.picks_user_id} -- SessionID: {args.picks_session_id} \n')
+        print(f'    -  UserID: {picks_user_id} -- SessionID: {picks_session_id} \n')
 
     # Check if either target or seg_target is provided
-    if args.target is not None or args.seg_target:
+    if (target is not None and len(target) > 0) or seg_target:
         # If at least one --target is provided, call create_sub_train_targets
         create_sub_train_targets(
-            config=args.config,
-            pick_targets=args.target if args.target else [],
-            seg_targets=args.seg_target,
-            voxel_size=args.voxel_size,
-            radius_scale=args.radius_scale,
-            tomogram_algorithm=args.tomo_alg,
-            target_segmentation_name=args.target_segmentation_name,
-            target_user_id=args.target_user_id,
-            target_session_id=args.target_session_id,
-            run_ids=args.run_ids,
+            config=config,
+            pick_targets=target if target else [],
+            seg_targets=seg_target,
+            voxel_size=voxel_size,
+            radius_scale=radius_scale,
+            tomogram_algorithm=tomo_alg,
+            target_segmentation_name=target_segmentation_name,
+            target_user_id=target_user_id,
+            target_session_id=target_session_id,
+            run_ids=run_ids,
         )
     else:
         # If no --target is provided, call create_all_train_targets
         create_all_train_targets(
-            config=args.config,
-            seg_targets=args.seg_target,
-            picks_session_id=args.picks_session_id,
-            picks_user_id=args.picks_user_id,
-            voxel_size=args.voxel_size,
-            radius_scale=args.radius_scale,
-            tomogram_algorithm=args.tomo_alg,
-            target_segmentation_name=args.target_segmentation_name,
-            target_user_id=args.target_user_id,
-            target_session_id=args.target_session_id,
-            run_ids=args.run_ids,
+            config=config,
+            seg_targets=seg_target,
+            picks_session_id=picks_session_id,
+            picks_user_id=picks_user_id,
+            voxel_size=voxel_size,
+            radius_scale=radius_scale,
+            tomogram_algorithm=tomo_alg,
+            target_segmentation_name=target_segmentation_name,
+            target_user_id=target_user_id,
+            target_session_id=target_session_id,
+            run_ids=run_ids,
         )
-
 
 
 if __name__ == "__main__":
