@@ -42,10 +42,7 @@ octopi provides two main command-line interfaces:
 
 ```bash
 # Main CLI for training, inference, and data processing
-octopi --help
-
-# HPC-specific CLI for submitting jobs to SLURM clusters
-octopi-slurm --help
+octopi
 ```
 
 ## 📚 Documentation
