@@ -89,9 +89,14 @@ def cli(config, voxel_size, target_info, tomo_alg, mlflow_experiment_name,
     CLI entry point for running optuna model architecture search.
     """
 
+    run_model_explore(
+        config, voxel_size, target_info, tomo_alg, mlflow_experiment_name, 
+        trainrunids, validaterunids, data_split, model_type,
+        num_epochs, val_interval, tomo_batch_size, best_metric, num_trials, random_seed
+    )
+
 def run_model_explore(config, voxel_size, target_info, tomo_alg, mlflow_experiment_name, 
-        trainrunids, validaterunids, data_split,
-        model_type,
+        trainrunids, validaterunids, data_split, model_type,
         num_epochs, val_interval, tomo_batch_size, best_metric, num_trials, random_seed):
     """
     Run the model exploration.

@@ -159,12 +159,6 @@ def run_train(config, voxel_size, target_info, tomo_alg, trainrunids, validateru
     else:
         copick_configs = config[0]
     
-    # Parse the CoPick configuration paths
-    if len(config) > 1:
-        copick_configs = parsers.parse_copick_configs(config)
-    else:
-        copick_configs = config[0]
-
     if model_config:
         model_config_dict = io.load_yaml(model_config)
     else:
