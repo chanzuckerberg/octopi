@@ -48,7 +48,7 @@ def train(data_generator, loss_function, num_crops = 16,
         print('No Model Configuration Provided, Using Default Configuration')
         print(model_config)
     # extract the model config from full config dict
-    elif 'model' in model_config: 
+    elif isinstance(model_config, dict) and 'model' in model_config: 
         model_config = model_config['model']
 
     # Monai Functions
