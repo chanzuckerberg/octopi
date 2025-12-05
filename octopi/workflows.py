@@ -47,17 +47,21 @@ def train(data_generator, loss_function, num_crops = 16,
         }
         print('No Model Configuration Provided, Using Default Configuration')
         print(model_config)
+    # extract the model config from full config dict
+    elif 'model' in model_config: 
+        model_config = model_config['model']
 
     # Monai Functions
     metrics_function = ConfusionMatrixMetric(include_background=False, metric_name=["recall",'precision','f1 score'], reduction="none")
-    
+
     # Build the Model
     model_builder = builder.get_model(model_config['architecture'])
     model = model_builder.build_model(model_config)
-    
+
     # Load the Model Weights if Provided 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     if model_weights: 
+        print(f'Loading Model Weights from: {model_weights}\n')
         state_dict = torch.load(model_weights, map_location=device, weights_only=True)
         model.load_state_dict(state_dict)     
     model.to(device) 
