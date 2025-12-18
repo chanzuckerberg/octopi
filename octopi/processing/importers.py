@@ -4,8 +4,8 @@ def from_dataportal(
     config, 
     datasetID,
     overlay_path,
-    dataportal_name,
-    target_tomo_type,
+    source_type,
+    target_type,
     input_voxel_size = 10,
     output_voxel_size = None):
     """
@@ -15,30 +15,41 @@ def from_dataportal(
         config (str): Path to the copick configuration file
         datasetID (int): ID of the dataset to download
         overlay_path (str): Path to the overlay file
-        dataportal_name (str): Name of the tomogram type in the dataportal
-        target_tomo_type (str): Name to use for the tomogram locally
+        source_type (str): Name of the tomogram type in the dataportal
+        target_type (str): Name to use for the tomogram locally
         input_voxel_size (float): Original voxel size of the tomograms
         output_voxel_size (float, optional): Desired voxel size for downsampling
     """
 
     from octopi.processing.downsample import FourierRescale
+    from octopi.utils.progress import _progress, print_summary
     from copick_utils.io import writers
-    from tqdm import tqdm
-    import copick
+    import copick   
 
+    # Either 
     if config is not None:
         root = copick.from_file(config)
     elif datasetID is not None and overlay_path is not None:
-        root = copick.from_czcdp_datasets([datasetID], overlay_root=overlay_path)
+        root = copick.from_czcdp_datasets([datasetID], overlay_root=overlay_path, output_path='config.json')
     else:
         raise ValueError('Either config or datasetID and overlay_path must be provided')
 
     # If we want to save the tomograms at a different voxel size, we need to rescale the tomograms
     if output_voxel_size is not None and output_voxel_size > input_voxel_size:
         rescale = FourierRescale(input_voxel_size, output_voxel_size)
+    else:
+        output_voxel_size = None
 
-    # Create a directory for the tomograms
-    for run in tqdm(root.runs):
+    # Print Parameter Summary
+    print_summary(
+        "Download Tomograms",
+        datasetID=datasetID, overlay_path=overlay_path,
+        config=config, source_type=source_type, target_type=target_type,
+        input_voxel_size=input_voxel_size, output_voxel_size=output_voxel_size,
+    )
+
+    # Main Loop
+    for run in _progress(root.runs):
 
         # Check if voxel spacing is available
         vs = run.get_voxel_spacing(input_voxel_size)
@@ -48,9 +59,9 @@ def from_dataportal(
             continue
         
         # Check if base reconstruction method is available
-        avail_tomos = vs.get_tomograms(dataportal_name)
+        avail_tomos = vs.get_tomograms(source_type)
         if avail_tomos is None: 
-            print(f'No Tomograms Available for RunID: {run.name}, Voxel-Size: {input_voxel_size}, Tomo-Type: {dataportal_name}')
+            print(f'No Tomograms Available for RunID: {run.name}, Voxel-Size: {input_voxel_size}, Tomo-Type: {source_type}')
             continue
 
         # Download the tomogram
@@ -59,33 +70,33 @@ def from_dataportal(
 
             # If we want to save the tomograms at a different voxel size, we need to rescale the tomograms
             if output_voxel_size is None:
-                writers.tomogram(run, vol, input_voxel_size, target_tomo_type)
+                writers.tomogram(run, vol, input_voxel_size, target_type)
             else:
                 vol = rescale.run(vol)
-                writers.tomogram(run, vol, output_voxel_size, target_tomo_type)
+                writers.tomogram(run, vol, output_voxel_size, target_type)
     
-    print(f'Downloading Complete!! Downloaded {len(root.runs)} runs')
+    print(f'✅ Download Complete!\nDownloaded {len(root.runs)} runs')
 
 
 @click.command('download')
 # Voxel Settings
-@click.option('--output-voxel-size', type=float, default=None,
+@click.option('-ovs', '--output-voxel-size', type=float, default=None,
               help="Desired output voxel size for downsampling (optional)")
-@click.option('--input-voxel-size', type=float, default=10,
+@click.option('-ivs', '--input-voxel-size', type=float, default=10,
               help="Original voxel size of the tomograms")
 # Tomogram Settings
-@click.option('--target-tomo-type', type=str, default='wbp',
-              help="Name to use for the tomogram locally")
-@click.option('--dataportal-name', type=str, default='wbp',
-              help="Name of the tomogram type in the dataportal")
+@click.option('-t', '--target-type', type=str, default='denoised',
+              help="Local tomogram type name to save in your Copick project.")
+@click.option('-s', '--source-type', type=str, default='wbp-denoised-ctfdeconv',
+              help="Name of the tomogram type as labeled on the CryoET Data Portal")
 # Input Arguments
-@click.option('--overlay-path', type=click.Path(), default=None,
+@click.option('-o', '--overlay', type=click.Path(), default=None,
               help="Path to the overlay directory (required with datasetID)")
-@click.option('--datasetID', type=int, default=None,
+@click.option('-ds', '--datasetID', type=int, default=None,
               help="Dataset ID from CZI Dataportal (alternative to config)")
 @click.option('-c', '--config', type=click.Path(exists=True), default=None,
               help="Path to the copick configuration file (alternative to datasetID)")
-def cli(config, datasetID, overlay_path, dataportal_name, target_tomo_type,
+def cli(config, datasetid, overlay, source_type, target_type,
         input_voxel_size, output_voxel_size):
     """
     Download and (optionally) downsample tomograms from the CryoET-DataPortal.
@@ -110,10 +121,10 @@ def cli(config, datasetID, overlay_path, dataportal_name, target_tomo_type,
     
     from_dataportal(
         config=config,
-        datasetID=datasetID,
-        overlay_path=overlay_path,
-        dataportal_name=dataportal_name,
-        target_tomo_type=target_tomo_type,
+        datasetID=datasetid,
+        overlay_path=overlay,
+        source_type=source_type,
+        target_type=target_type,
         input_voxel_size=input_voxel_size,
         output_voxel_size=output_voxel_size
     )
