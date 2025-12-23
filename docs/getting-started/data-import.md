@@ -53,10 +53,10 @@ The copick configuration file points to a directory that stores all the tomogram
 If you have tomograms stored locally in `*.mrc` format (e.g., from Warp, IMOD, or AreTomo), you can import them into a copick project:
 
 ```bash
-octopi import-mrc-volumes \
-    --mrcs-path /path/to/mrc/files \
+octopi import \
+    --path /path/to/mrc/files \
     --config /path/to/config.json \
-    --target-tomo-type denoised \
+    --tomo-alg denoised \
     --input-voxel-size 5 \
     --output-voxel-size 10
 ```
@@ -93,12 +93,12 @@ octopi train-model \
 For larger datasets or when running multiple experiments, it is recommended to download the data first:
 
 ```bash
-octopi download-dataportal \
+octopi download \
     --config /path/to/config.json \
     --datasetID 10445 \
     --overlay-path /path/to/saved/zarrs \
     --input-voxel-size 5 --output-voxel-size 10 \
-    --dataportal-name wbp --target-tomo-type wbp
+    --target-type wbp --source-type wbp-denoised-denoiset-ctfdeconv 
 ```
 
 Similar to local MRC import, you can downsample portal data by specifying both `--input-voxel-size` and `--output-voxel-size` parameters.  To find available tomogram names for a dataset available on the portal, use:

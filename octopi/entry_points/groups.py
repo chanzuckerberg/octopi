@@ -5,6 +5,23 @@ click.rich_click.USE_RICH_MARKUP = True
 click.rich_click.SHOW_ARGUMENTS = True
 click.rich_click.GROUP_ARGUMENTS_OPTIONS = True
 
+click.rich_click.COMMAND_GROUPS = {
+    "routines": [
+        {
+            "name": "Pre-Processing",
+            "commands": ["download", "import", "create-targets"]
+        },
+        {
+            "name": "Training",
+            "commands": ["train", "model-explore"]
+        },
+        {
+            "name": "Inference",
+            "commands": ["segment", "localize", "membrane-extract", "evaluate"]
+        }
+    ]
+}
+
 # Define option groups for all subcommands
 # Key format: "parent_command_name subcommand_name" or just "subcommand_name"
 click.rich_click.OPTION_GROUPS = {
