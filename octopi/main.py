@@ -1,6 +1,8 @@
-from octopi import cli_context
 import rich_click as click
+from octopi.entry_points import groups
+from octopi import cli_context
 from octopi.entry_points import groups  # Import groups to set OPTION_GROUPS
+from octopi.processing.downloader import cli as download
 from octopi.processing.importers import cli as import_tomograms
 from octopi.entry_points.run_train import cli as train_model
 from octopi.entry_points.run_optuna import cli as model_explore
@@ -15,6 +17,7 @@ def routines():
     """Octopi 🐙: 🛠️ Tools for Finding Proteins in 🧊 cryo-ET data"""
     pass
 
+routines.add_command(download)
 routines.add_command(import_tomograms)
 routines.add_command(train_model)
 routines.add_command(create_targets)
