@@ -78,7 +78,7 @@ def import_tomos(
             run = root.new_run(runID)
 
         # Add the tomogram to the project
-        writers.tomogram(run, vol, ovs, tomo_alg)
+        writers.tomogram(run, vol, ovs if ovs is not None else ivs, tomo_alg)
     
     print(f'✅ Download Complete!\nDownloaded {len(tomograms)} runs')
 
