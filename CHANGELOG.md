@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.4.0](https://github.com/chanzuckerberg/octopi/compare/octopi-v1.3.3...octopi-v1.4.0) (2025-12-23)
+
+
+### ✨ Features
+
+* Download and Import cli ([#51](https://github.com/chanzuckerberg/octopi/issues/51)) ([07861f2](https://github.com/chanzuckerberg/octopi/commit/07861f2ba439acfbeba26b7ef59e5b0728b97fd1))
+* lazy-loading and rich-click cli ([#48](https://github.com/chanzuckerberg/octopi/issues/48)) ([dd4d459](https://github.com/chanzuckerberg/octopi/commit/dd4d4597e5283dbfa22b719bab92e7ef9132c41e))
+
+
+### 🐞 Bug Fixes
+
+* ensure we properly load the model config when fine-tuning the model ([#50](https://github.com/chanzuckerberg/octopi/issues/50)) ([d72f411](https://github.com/chanzuckerberg/octopi/commit/d72f411e1648425aa0c444f6d8b860012236cd4f))
+
 ## [1.3.3](https://github.com/chanzuckerberg/octopi/compare/octopi-v1.3.2...octopi-v1.3.3) (2025-11-18)
 
 
