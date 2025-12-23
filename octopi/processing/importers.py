@@ -80,7 +80,7 @@ def import_tomos(
         # Add the tomogram to the project
         writers.tomogram(run, vol, ovs if ovs is not None else ivs, tomo_alg)
     
-    print(f'✅ Download Complete!\nDownloaded {len(tomograms)} runs')
+    print(f'Import Complete! Imported {len(tomograms)} tomograms')
 
 
 @click.command('import')
