@@ -30,7 +30,10 @@ def from_dataportal(
     if config is not None:
         root = copick.from_file(config)
     elif datasetID is not None and overlay_path is not None:
-        root = copick.from_czcdp_datasets([datasetID], overlay_root=overlay_path, output_path='config.json')
+        root = copick.from_czcdp_datasets(
+            [datasetID], overlay_root=overlay_path, 
+            output_path='config.json', overlay_fs_args={'auto_mkdir': True}
+        )
     else:
         raise ValueError('Either config or datasetID and overlay_path must be provided')
 
