@@ -53,8 +53,16 @@ def import_tomos(
 
         # Read the tomogram and the associated runID
         with mrcfile.open(tomogram) as mrc:
-            vol = mrc.data
-            vs = mrc.voxel_size
+            vol = mrc.data.copy()
+            vs = float(mrc.voxel_size.x) # Assuming cubic voxels
+        
+        # Check if the voxel size in the tomogram matches the provided input voxel size
+        if vs != ivs and rescale is not None:
+            print('[WARNING] Voxel size in tomogram does not match the provided input voxel size. Using voxel size from tomogram for downsampling.')
+            ivs = vs  # Override voxel size if it doesn't match the expected input voxel size
+            rescale = FourierRescale(vs, ovs)
+        elif vs != 1 and vs != ivs:
+            ivs = vs
 
         # If we want to save the tomograms at a different voxel size, 
         # we need to rescale the tomograms
@@ -72,7 +80,7 @@ def import_tomos(
         # Add the tomogram to the project
         writers.tomogram(run, vol, ovs, tomo_alg)
     
-    print(f'✅ Download Complete!\nDownloaded {len(root.runs)} runs')
+    print(f'✅ Download Complete!\nDownloaded {len(tomograms)} runs')
 
 
 @click.command('import')
@@ -102,10 +110,7 @@ def cli(config, tomo_alg,
     
     octopi import -c config.json -p /path/to/tomograms -alg denoised -ovs 10 (will read the voxel size from the tomograms)
     """
-    
+
+    print(f'🚀 Starting Tomogram Import...')
     import_tomos(config=config, path=path, tomo_alg=tomo_alg, ivs=input_voxel_size, ovs=output_voxel_size)
-
-
-if __name__ == "__main__":
-    cli()
 
