@@ -1,7 +1,6 @@
 import rich_click as click
-from octopi.entry_points import groups
 from octopi import cli_context
-from octopi.entry_points import groups  # Import groups to set OPTION_GROUPS
+from octopi.entry_points import groups 
 from octopi.processing.downloader import cli as download
 from octopi.processing.importers import cli as import_tomograms
 from octopi.entry_points.run_train import cli as train_model

@@ -26,7 +26,7 @@ def from_dataportal(
     from copick_utils.io import writers
     import copick   
 
-    # Either 
+    # Either load an existing configuration file or create one from datasetID and overlay_path
     if config is not None:
         root = copick.from_file(config)
     elif datasetID is not None and overlay_path is not None:

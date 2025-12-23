@@ -11,11 +11,10 @@ def import_tomos(
     
     Args:
         config (str): Path to the copick configuration file
-        datasetID (int): ID of the dataset to download
-        overlay_path (str): Path to the overlay file
-        tomo_alg (str): Name of the tomogram algorithm
-        input_voxel_size (float): Original voxel size of the tomograms
-        output_voxel_size (float, optional): Desired voxel size for downsampling
+        path (str): Path to the folder containing the tomograms
+        tomo_alg (str): Local tomogram type name to save in your Copick project
+        ivs (float): Original voxel size of the tomograms
+        ovs (float): Desired output voxel size for downsampling (optional)
     """
     from octopi.utils.progress import _progress, print_summary
     from octopi.processing.downsample import FourierRescale
@@ -61,7 +60,8 @@ def import_tomos(
             print('[WARNING] Voxel size in tomogram does not match the provided input voxel size. Using voxel size from tomogram for downsampling.')
             ivs = vs  # Override voxel size if it doesn't match the expected input voxel size
             rescale = FourierRescale(vs, ovs)
-        elif vs != 1 and vs != ivs:
+        # Assume that if a voxel size is 1, the MRC didnt' have a voxel size set
+        elif vs != 1 and vs != ivs: 
             ivs = vs
 
         # If we want to save the tomograms at a different voxel size, 
@@ -80,7 +80,7 @@ def import_tomos(
         # Add the tomogram to the project
         writers.tomogram(run, vol, ovs if ovs is not None else ivs, tomo_alg)
     
-    print(f'Import Complete! Imported {len(tomograms)} tomograms')
+    print(f'✅ Import Complete! Imported {len(tomograms)} tomograms')
 
 
 @click.command('import')
