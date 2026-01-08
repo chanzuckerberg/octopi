@@ -64,19 +64,16 @@ def train_model(
             voxel_size = voxel_size,
             tomo_batch_size = tomo_batch_size )
 
-    # Get the data splits
+    # Get the data splits and Nclasses
     ratios = parsers.parse_data_split(data_split)
     data_generator.get_data_splits(
         trainRunIDs = trainRunIDs,
         validateRunIDs = validateRunIDs,
         train_ratio = ratios[0], val_ratio = ratios[1], test_ratio = ratios[2],
         create_test_dataset = False)
-    
-    # Get the reload frequency
-    data_generator.get_reload_frequency(num_epochs)
     model_config['num_classes'] = data_generator.Nclasses
 
-    # Monai Functions
+    # Loss Functions
     alpha = tversky_alpha
     beta = 1 - alpha
     loss_function = TverskyLoss(include_background=True, to_onehot_y=True, softmax=True, alpha=alpha, beta=beta)  

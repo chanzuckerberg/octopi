@@ -1,3 +1,4 @@
+from octopi.datasets.loader import LoadCopickd
 from monai.transforms import (
     Compose, 
     RandFlipd, 
@@ -19,6 +20,7 @@ def get_transforms():
     Returns non-random transforms.
     """
     return Compose([
+        LoadCopickd(),
         EnsureChannelFirstd(keys=["image", "label"], channel_dim="no_channel"),
         NormalizeIntensityd(keys="image"),
         Orientationd(keys=["image", "label"], axcodes="RAS")

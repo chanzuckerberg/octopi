@@ -1,19 +1,20 @@
-from monai.data import DataLoader, SmartCacheDataset, CacheDataset
-from monai.transforms import Compose
-from octopi.datasets import augment
+from octopi.datasets import dataset, augment, cached_datset
+from monai.data import DataLoader, SmartCacheDataset, CacheDataset, Dataset
+from typing import List, Optional
 from octopi.utils import io as io2
 from octopi.datasets import io
-import torch
+import torch, os, random, gc
+import multiprocess as mp
 
-class CopickDataset:
+class TrainLoaderManager:
 
     def __init__(self, 
                  config: str, 
-                 tomo_alg: str,
-                 name: str,
-                 sessionid: str = None,
-                 userid: str = None,
+                 target_name: str,
+                 target_session_id: str = None,
+                 target_user_id: str = None,
                  voxel_size: float = 10, 
+                 tomo_algorithm: List[str] = ['wbp'], 
                  tomo_batch_size: int = 15
                  ): 
 
@@ -21,19 +22,17 @@ class CopickDataset:
         self.config = config
         self.root = io.load_copick_config(config)
 
-        # Member Variables
-        self.target_name = name
-        self.target_session_id = sessionid
-        self.target_user_id = userid
+        # Copick Query for Target
+        self.target_name = target_name 
+        self.target_session_id = target_session_id
+        self.target_user_id = target_user_id
+
+        # Copick Query For Input Tomogram
         self.voxel_size = voxel_size
-        self.tomo_algorithm = tomo_alg
+        self.tomo_algorithm = tomo_algorithm
 
-        # Copick Query for Target and Tomograms
-        self.vol_uri = f'{tomo_alg}@{voxel_size}'
-
-        # Construct the Target URI
-        self.target_uri = f'{name}:{userid}/{sessionid}@{voxel_size}'
-
+        self.reload_training_dataset = True
+        self.reload_validation_dataset = True
         self.val_loader = None
         self.train_loader = None
         self.tomo_batch_size = tomo_batch_size
@@ -148,6 +147,10 @@ class CopickDataset:
         self.train_batch_size = min( len(self.myRunIDs['train']), self.tomo_batch_size)
         self.val_batch_size   = min( len(self.myRunIDs['validate']), self.tomo_batch_size)
 
+        # Initialize data iterators for training and validation
+        self._initialize_val_iterators()
+        self._initialize_train_iterators()
+
         return self.myRunIDs
 
     def _get_class_info(self, trainRunDs):
@@ -175,72 +178,193 @@ class CopickDataset:
             self.class_names = [name for name, idx in sorted(class_names.items(), key=lambda x: x[1])]
 
             # We Only need to read One Segmentation to Get Class Info
-            break      
+            break
     
-    def create(
+    def _get_padded_list(self, data_list, batch_size):
+        # Calculate padding needed to make `data_list` a multiple of `batch_size`
+        remainder = len(data_list) % batch_size
+        if remainder > 0:
+            # Number of additional items needed to make the length a multiple of batch size
+            padding_needed = batch_size - remainder
+            # Extend `data_list` with a random subset to achieve the padding
+            data_list = data_list + random.sample(data_list, padding_needed)
+        # Shuffle the full list
+        random.shuffle(data_list)
+        return data_list        
+    
+    def _initialize_train_iterators(self):
+        # Initialize padded train and validation data lists
+        self.padded_train_list = self._get_padded_list(self.myRunIDs['train'], self.train_batch_size)
+
+        # Create iterators
+        self.train_data_iter = iter(self._get_data_batches(self.padded_train_list, self.train_batch_size))
+
+    def _initialize_val_iterators(self):     
+        # Initialize padded train and validation data lists
+        self.padded_val_list = self._get_padded_list(self.myRunIDs['validate'], self.val_batch_size)
+
+        # Create iterators
+        self.val_data_iter = iter(self._get_data_batches(self.padded_val_list, self.val_batch_size))        
+
+    def _get_data_batches(self, data_list, batch_size):
+        # Generator that yields batches of specified size
+        for i in range(0, len(data_list), batch_size):
+            yield data_list[i:i + batch_size]
+
+    def _extract_run_ids(self, data_iter_name, initialize_method):
+        # Access the instance's data iterator by name
+        data_iter = getattr(self, data_iter_name)
+        try:
+            # Attempt to get the next batch from the iterator
+            runIDs = next(data_iter)
+        except StopIteration:
+            # Reinitialize the iterator if exhausted
+            initialize_method()
+            # Update the iterator reference after reinitialization
+            data_iter = getattr(self, data_iter_name)
+            runIDs = next(data_iter)
+        # Update the instance attribute with the new iterator state
+        setattr(self, data_iter_name, data_iter)
+        return runIDs
+    
+    def create_train_dataloaders(
         self,
         crop_size: int = 96,
         num_samples: int = 64):
 
-        train_batch_size = 2
-        val_batch_size = 4
+        train_batch_size = 1
+        val_batch_size = 1
 
-        # Define the number of processes for the DataLoader
-        n_procs = min(mp.cpu_count(), 4)
+        # If reloads are disabled and loaders already exist, reuse them
+        if self.reload_frequency < 0 and (self.train_loader is not None) and (self.val_loader is not None):
+            return self.train_loader, self.val_loader         
 
-        # Define the input dimensions
-        self.input_dim = crop_size, crop_size, crop_size
+        # We Only Need to Reload the Training Dataset if the Total Number of Runs is larger than 
+        # the tomo batch size
+        if self.train_loader is None: 
 
-        # Create the list of training files
-        train_files = [
-            {'run': run_name, 'root': self.config, 'vol_uri': self.vol_uri, 'target_uri': self.target_uri}
-            for run_name in self.myRunIDs['train']
-        ]
+            # Fetch the next batch of run IDs
+            trainRunIDs = self._extract_run_ids('train_data_iter', self._initialize_train_iterators)
+            train_files = io.load_training_data(self.root, trainRunIDs, self.voxel_size, self.tomo_algorithm, 
+                                                self.target_name, self.target_session_id, self.target_user_id, 
+                                                progress_update=False)
+            self._check_max_label_value(train_files)
 
-        train_transforms = Compose([
-            augment.get_transforms(),
-            augment.get_random_transforms(self.input_dim, num_samples, self.Nclasses)
-        ])
+            # Create the cached dataset with non-random transforms
+            train_ds = CacheDataset(data=train_files, transform=augment.get_transforms(), cache_rate=1.0)
 
-        # Create the SmartCacheDataset
-        dataset = SmartCacheDataset(
-            data=train_files,                
-            transform=train_transforms,
-            cache_num=self.tomo_batch_size,  # e.g. 8–64 volumes
-            replace_rate=0.3,                # e.g. 0.2–0.3
-            num_init_workers=8,
-            num_replace_workers=8,
-            shuffle=False,
-        )
+            # Delete the training files to free memory
+            train_files = None
+            gc.collect()
 
-        # Create the DataLoader
-        train_loader = DataLoader(
-            dataset, batch_size=train_batch_size, 
-            shuffle=True, num_workers=8, pin_memory=torch.cuda.is_available()
-        )
+            # I need to read (nx,ny,nz) and scale the crop size to make sure it isnt larger than nx.
+            if self.nx is None: (self.nx,self.ny,self.nz) = train_ds[0]['image'].shape[1:]
+            self.input_dim = io.get_input_dimensions(train_ds, crop_size)
 
-        val_files = [
-            {'run': run_name, 'root': self.config, 'vol_uri': self.vol_uri, 'target_uri': self.target_uri}
-            for run_name in self.myRunIDs['validate']
-        ]
+            # Wrap the cached dataset to apply random transforms during iteration
+            self.dynamic_train_dataset = dataset.DynamicDataset(
+                data=train_ds, 
+                transform=augment.get_random_transforms(self.input_dim, num_samples, self.Nclasses)
+            )
 
-        # Create the CacheDataset
-        dataset = CacheDataset(
-            data=val_files,                
-            transform=augment.get_transforms(),
-            cache_rate=1.0,          # cache all val items
-            num_workers=8,           # threads for initial caching
-        )   
+            # Define the number of processes for the DataLoader
+            n_procs = min(mp.cpu_count(), 4)
 
-        # Create the DataLoader
-        val_loader = DataLoader(
-            dataset, batch_size=val_batch_size, 
-            shuffle=False, num_workers=0, 
-            pin_memory=torch.cuda.is_available()
-        )
+            # DataLoader remains the same
+            self.train_loader = DataLoader(
+                self.dynamic_train_dataset,
+                batch_size=train_batch_size,
+                shuffle=False,
+                num_workers=n_procs,
+                pin_memory=torch.cuda.is_available(),
+            )
 
-        return train_loader, val_loader
+        else:
+            # Fetch the next batch of run IDs
+            trainRunIDs = self._extract_run_ids('train_data_iter', self._initialize_train_iterators)
+            train_files = io.load_training_data(self.root, trainRunIDs, self.voxel_size, self.tomo_algorithm, 
+                                                self.target_name, self.target_session_id, self.target_user_id, 
+                                                progress_update=False)
+            self._check_max_label_value(train_files)
 
+            train_ds = CacheDataset(data=train_files, transform=augment.get_transforms(), cache_rate=1.0)
+            self.dynamic_train_dataset.update_data(train_ds)
+
+        # We Only Need to Reload the Validation Dataset if the Total Number of Runs is larger than 
+        # the tomo batch size
+        if self.val_loader is None: 
+
+            validateRunIDs = self._extract_run_ids('val_data_iter', self._initialize_val_iterators)             
+            val_files   = io.load_training_data(self.root, validateRunIDs, self.voxel_size, self.tomo_algorithm, 
+                                                self.target_name, self.target_session_id, self.target_user_id,
+                                                progress_update=False) 
+            self._check_max_label_value(val_files)
+
+            # Create validation dataset
+            val_ds = CacheDataset(data=val_files, transform=augment.get_transforms(), cache_rate=1.0)
+
+            # Delete the validation files to free memory
+            val_files = None
+            gc.collect()
+
+            # # I need to read (nx,ny,nz) and scale the crop size to make sure it isnt larger than nx.
+            # if self.nx is None:
+            #     (self.nx,self.ny,self.nz) = val_ds[0]['image'].shape[1:]
+
+            # if crop_size > self.nx: self.input_dim = (self.nx, crop_size, crop_size)
+            # else:                   self.input_dim = (crop_size, crop_size, crop_size)
+
+            # Wrap the cached dataset to apply random transforms during iteration
+            self.dynamic_validation_dataset = dataset.DynamicDataset( data=val_ds )
+
+            dataset_size = len(self.dynamic_validation_dataset)
+            n_procs = min(mp.cpu_count(), 8)
+
+            # Create validation DataLoader
+            self.val_loader  = DataLoader(
+                self.dynamic_validation_dataset,
+                batch_size=val_batch_size,
+                num_workers=n_procs,
+                pin_memory=torch.cuda.is_available(),
+                shuffle=False,  # Ensure the data order remains consistent,            
+            )
+        else:
+            validateRunIDs = self._extract_run_ids('val_data_iter', self._initialize_val_iterators)             
+            val_files   = io.load_training_data(self.root, validateRunIDs, self.voxel_size, self.tomo_algorithm, 
+                                                self.target_name, self.target_session_id, self.target_user_id,
+                                                progress_update=False)  
+            self._check_max_label_value(val_files)
+
+        return self.train_loader, self.val_loader
+    
+    def get_reload_frequency(self, num_epochs: int):
+        """
+        Automatically calculate the reload frequency for the dataset during training.
+
+        Returns:
+            int: Reload frequency (number of epochs between dataset reloads).
+        """
+        if not self.reload_training_dataset:
+            # No need to reload if all tomograms fit in memory
+            print("All training samples fit in memory. No reloading required.")
+            self.reload_frequency = -1
+
+        else:
+            # Calculate the number of segments based on total training runs and batch size
+            num_segments = (len(self.myRunIDs['train']) + self.tomo_batch_size - 1) // self.tomo_batch_size
+
+            # Calculate reload frequency to distribute reloading evenly over epochs
+            self.reload_frequency = max(num_epochs // num_segments, 1)
+
+            print(f"\nReloading {self.tomo_batch_size} tomograms every {self.reload_frequency} epochs\n")
+
+            # Warn if the number of epochs is insufficient for full dataset coverage
+            if num_epochs < num_segments:
+                print(
+                    f"Warning: Chosen number of epochs ({num_epochs}) may not be sufficient "
+                    f"to train over all training samples. Consider increasing the number of epochs "
+                    f"to at least {num_segments}\n."
+                )
 
     def _check_max_label_value(self, train_files):
         max_label_value = max(file['label'].max() for file in train_files)

@@ -37,8 +37,8 @@ click.rich_click.OPTION_GROUPS = {
         },
         {
             "name": "Training Arguments",
-            "options": ["--num-epochs", "--val-interval", "--tomo-batch-size", "--best-metric", 
-                       "--num-tomo-crops", "--lr", "--tversky-alpha", "--model-save-path"]
+            "options": ["--num-epochs", "--val-interval", "--ncache-tomos", "--best-metric", 
+                       "--batch-size", "--lr", "--tversky-alpha", "--model-save-path"]
         },
         {
             "name": "UNet-Model Arguments",
