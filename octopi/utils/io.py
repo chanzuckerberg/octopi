@@ -5,23 +5,40 @@ File I/O utilities for YAML and JSON operations.
 import os, json, yaml, copick, glob
 import pandas as pd
 
+class SmartDumper(yaml.SafeDumper):
+    """
+    - Inline lists like [1, 2, 3] when the list is "simple" (scalars only).
+    - Use block style for lists of dicts / lists / complex items (e.g., configs).
+    """
+    pass
 
-# Create a custom dumper that uses flow style for lists only.
-class InlineListDumper(yaml.SafeDumper):
-    def represent_list(self, data):
-        node = super().represent_list(data)
-        node.flow_style = True  # Use inline style for lists
-        return node
+def _is_simple_scalar(x) -> bool:
+    return x is None or isinstance(x, (str, int, float, bool))
 
+def _represent_list(dumper: yaml.Dumper, data: list):
+    # Inline only if every element is a simple scalar (no dicts/lists)
+    flow = all(_is_simple_scalar(item) for item in data)
+    return dumper.represent_sequence("tag:yaml.org,2002:seq", data, flow_style=flow)
 
+SmartDumper.add_representer(list, _represent_list)
 def save_parameters_yaml(params: dict, output_path: str):
     """
-    Save parameters to a YAML file.
-    """
-    InlineListDumper.add_representer(list, InlineListDumper.represent_list)
-    with open(output_path, 'w') as f:
-        yaml.dump(params, f, Dumper=InlineListDumper, default_flow_style=False, sort_keys=False)
+    Save Parameters to a YAML file.
 
+    Args:
+        params (dict): The parameters to save.
+        output_path (str): The path to save the parameters to.
+    """
+    with open(output_path, "w") as f:
+        yaml.dump(
+            params,
+            f,
+            Dumper=SmartDumper,
+            default_flow_style=False,  # block style by default
+            sort_keys=False,
+            width=100,                 # helps prevent aggressive wrapping
+            indent=2,
+        )
 
 def load_yaml(path: str) -> dict:
     """

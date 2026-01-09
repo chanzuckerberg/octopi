@@ -1,5 +1,6 @@
 from octopi.utils import visualization_tools as viz
 from monai.inferers import sliding_window_inference
+from octopi.utils.progress import _progress
 from octopi.utils import stopping_criteria
 from monai.transforms import AsDiscrete
 from monai.data import decollate_batch
@@ -90,10 +91,10 @@ class ModelTrainer:
         # Set model to evaluation mode
         self.model.eval()
         val_loss = 0
-        with torch.cuda.amp.autocast():
+        with torch.amp.autocast(device_type="cuda", dtype=torch.float16):
             for val_data in self.val_loader:
                 val_inputs = val_data["image"].to(self.device)
-                val_labels = val_data["label"].to(self.device) # Keep labels on CPU for metric computation
+                val_labels = val_data["label"].to(self.device) 
                 
                 # Apply sliding window inference
                 roi = max(128, self.crop_size)  # try setting a set size of 128, 144 or 160?
@@ -179,7 +180,7 @@ class ModelTrainer:
         self.train_loader, self.val_loader = data_load_gen.create(
             crop_size=crop_size, num_samples=my_num_samples
         )
-        self.train_dataset = getattr(data_load_gen, "train_ds", None)
+        self.train_ds = getattr(data_load_gen, "train_ds", None)
         self.input_dim = data_load_gen.input_dim
 
         # Save the original learning rate
@@ -191,6 +192,9 @@ class ModelTrainer:
         self.train_ds.start()
         try:
             for epoch in tqdm(range(max_epochs), desc=f"Training on GPU: {self.device}", unit="epoch"):
+
+                # Update the cache for the training dataset
+                self.train_ds.update_cache()
 
                 # Compute and log average epoch loss           
                 epoch_loss = self.train_update()

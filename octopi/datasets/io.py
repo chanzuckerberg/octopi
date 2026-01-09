@@ -15,34 +15,6 @@ import copick, torch, os, random
 from typing import List
 from tqdm import tqdm
 
-
-def load_training_data(root, 
-                       runIDs: List[str],
-                       voxel_spacing: float, 
-                       tomo_algorithm: str, 
-                       segmenation_name: str,
-                       segmentation_session_id: str = None,
-                       segmentation_user_id: str = None,
-                       progress_update: bool = True):
-    """
-    Load training data from CoPick runs.
-    """
-    data_dicts = []
-    # Use tqdm for progress tracking only if progress_update is True
-    iterable = tqdm(runIDs, desc="Loading Training Data") if progress_update else runIDs
-    for runID in iterable:
-        run = root.get_run(str(runID))
-        tomogram = readers.tomogram(run, voxel_spacing, tomo_algorithm)
-        segmentation = readers.segmentation(run, 
-                                              voxel_spacing,
-                                              segmenation_name,
-                                              segmentation_session_id, 
-                                              segmentation_user_id)
-        data_dicts.append({"image": tomogram, "label": segmentation})
-
-    return data_dicts 
-
-
 def load_predict_data(root, 
                       runIDs: List[str],
                       voxel_spacing: float, 

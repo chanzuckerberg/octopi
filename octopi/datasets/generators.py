@@ -1,12 +1,11 @@
 from monai.data import DataLoader, SmartCacheDataset, CacheDataset
+from octopi.datasets import helpers as utils
 from monai.transforms import Compose
 from octopi.datasets import augment
-from octopi.utils import io as io2
 from octopi.datasets import io
 import torch
 
-class CopickDataset:
-
+class CopickDataModule:
     def __init__(self, 
                  config: str, 
                  tomo_alg: str,
@@ -21,29 +20,24 @@ class CopickDataset:
         self.config = config
         self.root = io.load_copick_config(config)
 
-        # Member Variables
+        # Member Varialbles
         self.target_name = name
         self.target_session_id = sessionid
         self.target_user_id = userid
         self.voxel_size = voxel_size
-        self.tomo_algorithm = tomo_alg
-
-        # Copick Query for Target and Tomograms
-        self.vol_uri = f'{tomo_alg}@{voxel_size}'
+        self.tomo_alg = tomo_alg.split(",")
+        self.tomo_batch_size = tomo_batch_size        
 
         # Construct the Target URI
-        self.target_uri = f'{name}:{userid}/{sessionid}@{voxel_size}'
-
-        self.val_loader = None
-        self.train_loader = None
-        self.tomo_batch_size = tomo_batch_size
+        self.target_uri = utils.build_target_uri(name, sessionid, userid, voxel_size)
 
         # Initialize the input dimensions   
-        self.nx = None
-        self.ny = None
-        self.nz = None
+        self.nx, self.ny, self.nz = None, None, None
 
-    def get_available_runIDs(self):
+        # Available Run IDs
+        self.allRunIDs = self.get_available_runs()
+
+    def get_available_runs(self):
         """
         Identify and return a list of run IDs that have segmentations available for the target.
         
@@ -53,37 +47,250 @@ class CopickDataset:
 
         Returns:
             available_runIDs (list): List of run IDs with available segmentations.
-        """        
-        available_runIDs = []
-        runIDs = [run.name for run in self.root.runs]
-        for run in runIDs:
-            run = self.root.get_run(run)
-            seg = run.get_segmentations(name=self.target_name, 
-                                        session_id=self.target_session_id, 
-                                        user_id=self.target_user_id,
-                                        voxel_size=float(self.voxel_size))
-            if len(seg) > 0:
-                available_runIDs.append(run.name)
+        """
 
-        # If No Segmentations are Found, Inform the User
-        if len(available_runIDs) == 0:
-            print(
-                f"[Error] No segmentations found for the target query:\n"
-                f"TargetName: {self.target_name}, UserID: {self.target_user_id}, "
-                f"SessionID: {self.target_session_id}\n"
-                f"Please check the target name, user ID, and session ID.\n"
+        # Get the requested tomogram algorithms
+        requested_algs = set(self.tomo_alg) if self.tomo_alg else set()
+ 
+        # Scan the Runs
+        available, runs_with_seg, algs_present = utils.scan_runs(
+            root=self.root,
+            target_name=self.target_name,
+            target_session_id=self.target_session_id,
+            target_user_id=self.target_user_id,
+            voxel_size=self.voxel_size,
+            requested_algs=requested_algs,
+        )
+
+        # If There are Missing Tomogram Algorithms or Segmentations, Inform the User
+        missing = requested_algs - algs_present
+        if runs_with_seg == 0:
+            utils.missing_segmentations(self.target_name, self.target_session_id, self.target_user_id)
+        elif missing: 
+            utils.missing_tomograms(missing)
+
+        return available
+
+    def get_data_splits(
+        self, 
+        trainRunIDs: list[str] = None, validateRunIDs: list[str] = None,
+        train_ratio: float = 0.8, val_ratio: float = 0.2, test_ratio: float = 0.0,
+        create_test_dataset: bool = False
+        ):
+        """
+        Get the data splits.
+        """
+
+        # Get the Data Splits
+        self.myRunIDs = utils.get_data_splits(
+            self.allRunIDs, trainRunIDs, validateRunIDs, 
+            train_ratio, val_ratio, test_ratio, create_test_dataset
+        )
+
+        # Get Class Info from the Training Dataset
+        target_info = (self.target_name, self.target_session_id, self.target_user_id)
+        self.Nclasses, self.class_names = utils.get_class_info(
+            self.config, self.myRunIDs['train'].keys(), target_info, self.voxel_size )
+
+        return self.myRunIDs
+    
+    def create(self, 
+        crop_size: int = 96,
+        num_samples: int = 64,
+        train_transforms: Compose = None,
+        val_transforms: Compose = None,
+        val_batch_size: int = 1
+        ):
+        """
+        Create the training and validation datasets and return the DataLoaders.
+
+        Args:
+            crop_size (int): The size of the crop to use for the training and validation sets.
+            num_samples (int): The number of samples to use for the training and validation sets.
+
+        Returns:
+            train_loader (DataLoader): The training data loader.
+            val_loader (DataLoader): The validation data loader.        
+        """
+
+        # Define the Input Dimensions
+        self.input_dim = crop_size, crop_size, crop_size
+
+        # Create the list of training files
+        train_files = [
+            { 'run': run_name, 'root': self.config, 
+                'vol_uri': f'{alg}@{self.voxel_size}', 
+                'target_uri': self.target_uri }
+            for run_name, algs in self.myRunIDs['train'].items()
+            for alg in algs
+        ]
+
+        # Default Train Transforms for Particle Picking
+        if train_transforms is None:
+            train_transforms = Compose([
+                augment.get_transforms(),
+                augment.get_random_transforms(self.input_dim, num_samples, self.Nclasses)
+            ])
+
+        # Create the SmartCacheDataset
+        self.train_ds = SmartCacheDataset(
+            data=train_files,                
+            transform=train_transforms,
+            cache_num=self.tomo_batch_size,  # e.g. 8–64 volumes
+            replace_rate=0.3,                # e.g. 0.2–0.3
+            num_init_workers=8,
+            num_replace_workers=8,
+            shuffle=False,
+        )
+
+        # Create the DataLoader
+        train_loader = DataLoader(
+            self.train_ds, batch_size=1, 
+            shuffle=True, num_workers=8, 
+            pin_memory=torch.cuda.is_available()
+        )         
+
+        # Create the list of validation files
+        val_files = [
+            { 'run': run_name, 'root': self.config, 
+                'vol_uri': f'{alg}@{self.voxel_size}', 
+                'target_uri': self.target_uri }
+            for run_name, algs in self.myRunIDs['validate'].items()
+            for alg in algs
+        ]
+
+        # Default Val Transforms for Particle Picking
+        if val_transforms is None:
+            val_transforms = augment.get_transforms()
+
+        # Create the CacheDataset
+        val_ds = CacheDataset(
+            data=val_files,                
+            transform=val_transforms,
+            cache_rate=1.0,          # cache all val items
+            num_workers=8,           # threads for initial caching
+        )   
+
+        # Create the DataLoader
+        val_loader = DataLoader(
+            val_ds, batch_size=val_batch_size, 
+            shuffle=False, num_workers=0, 
+            pin_memory=torch.cuda.is_available()
+        )
+
+        # Print the data splits
+        utils.print_splits(self.myRunIDs, train_files, val_files)        
+
+        return train_loader, val_loader
+
+    def get_dataloader_parameters(self):
+        """
+        Get the datamodule parameters.
+        """
+        return utils.get_parameters(self)
+
+########################################################################################
+
+class MultiCopickDataModule:
+    def __init__(self,
+                 configs: dict[str, str],
+                 tomo_alg: str,
+                 name: str,
+                 sessionid: str = None,
+                 userid: str = None,
+                 voxel_size: float = 10,
+                 tomo_batch_size: int = 15):
+        """
+        Initialize MutliCopickDataModule with multiple configs.
+
+        Args:
+            configs (list): List of config file paths.
+            Other arguments are inherited from TrainLoaderManager.
+        """
+        # Read Copick Projects
+        self.config = configs
+        self.roots = {name: io.load_copick_config(path) for name, path in configs.items()}
+
+        # Member Varialbles
+        self.target_name = name
+        self.target_session_id = sessionid
+        self.target_user_id = userid
+        self.voxel_size = voxel_size
+        self.tomo_alg = tomo_alg.split(",")
+        self.tomo_batch_size = tomo_batch_size
+
+        # Construct the Target URI
+        self.target_uri = utils.build_target_uri(name, sessionid, userid, voxel_size)
+
+        # Initialize the input dimensions   
+        self.nx, self.ny, self.nz = None, None, None
+
+        # Available Run IDs
+        self.allRunIDs = self.get_available_runs()
+
+    def get_available_runs(self):
+        """
+        Identify and return a list of run IDs that have segmentations available for the target.
+        """
+        requested_algs = {a.strip() for a in self.tomo_alg if a.strip()}
+        all_available: dict[str, dict[str, list[str]]] = {}
+
+        total_runs_with_seg = 0
+        algs_present_global: set[str] = set()
+
+        # Track per-session diagnostics
+        session_runs_with_seg: dict[str, int] = {}
+        session_algs_present: dict[str, set[str]] = {}
+
+        for session_key, root in self.roots.items():
+            available, runs_with_seg, algs_present = utils.scan_runs(
+                root=root,
+                target_name=self.target_name,
+                target_session_id=self.target_session_id,
+                target_user_id=self.target_user_id,
+                voxel_size=self.voxel_size,
+                requested_algs=requested_algs,
             )
-            exit()
 
-        return available_runIDs
+            # `available` here is {run_id: [algs]} for that root
+            if available:
+                all_available[session_key] = available
 
-    def get_data_splits(self,
-                        trainRunIDs: str = None,
-                        validateRunIDs: str = None,
-                        train_ratio: float = 0.8,
-                        val_ratio: float = 0.2,
-                        test_ratio: float = 0.0,
-                        create_test_dataset: bool = False):
+            total_runs_with_seg += runs_with_seg
+            algs_present_global |= algs_present
+
+            session_runs_with_seg[session_key] = runs_with_seg
+            session_algs_present[session_key] = algs_present
+
+        # 1) No segmentations anywhere => hard error
+        if total_runs_with_seg == 0:
+            utils.missing_segmentations(self.target_name, self.target_session_id, self.target_user_id)
+
+        # 2) Requested tomograms missing globally => warning
+        if requested_algs:
+            missing_global = requested_algs - algs_present_global
+            if missing_global:
+                utils.missing_tomograms(missing_global)
+
+            # 3) Helpful per-session warnings
+            for session_key, runs_with_seg in session_runs_with_seg.items():
+                # Only warn if that session actually had segs (otherwise it's not a tomo-alg issue)
+                if runs_with_seg > 0:
+                    missing_here = requested_algs - session_algs_present[session_key]
+                    if missing_here == requested_algs:
+                        print(
+                            f"\n[Warning] Config '{session_key}' has matching segmentations, "
+                            f"but none of the requested tomo algs are present: {sorted(requested_algs)}\n"
+                        )
+
+        return all_available
+
+    def get_data_splits(
+        self, 
+        trainRunIDs: list[str] = None, validateRunIDs: list[str] = None,
+        train_ratio: float = 0.8, val_ratio: float = 0.2, test_ratio: float = 0.0,
+        create_test_dataset: bool = False
+        ):
         """
         Split the available data into training, validation, and testing sets based on input parameters.
 
@@ -97,113 +304,78 @@ class CopickDataset:
 
         Returns:
             myRunIDs (dict): Dictionary containing run IDs for training, validation, and testing.
-        """          
+        """
 
-        # Option 1: Only TrainRunIDs are Provided, Split into Train, Validate and Test (Optional)
-        if trainRunIDs is not None and validateRunIDs is None:
-            trainRunIDs, validateRunIDs, testRunIDs = io.split_multiclass_dataset(
-                trainRunIDs, train_ratio, val_ratio, test_ratio, 
-                return_test_dataset = create_test_dataset
-            )
-        # Option 2: TrainRunIDs and ValidateRunIDs are Provided, No Need to Split
-        elif trainRunIDs is not None and validateRunIDs is not None:
-            testRunIDs = None
-        # Option 3: Use the Entire Copick Project, Split into Train, Validate and Test
-        else:
-            runIDs = self.get_available_runIDs()          
-            trainRunIDs, validateRunIDs, testRunIDs = io.split_multiclass_dataset(
-                runIDs, train_ratio, val_ratio, test_ratio, 
-                return_test_dataset = create_test_dataset
+        # Initialize the Run IDs
+        per_session_splits: dict[str, dict[str, dict[str, list[str]]]] = {}
+
+        for session_key, runIDs in self.allRunIDs.items():
+            per_session_splits[session_key] = utils.get_data_splits(
+                runIDs, 
+                trainRunIDs=None, 
+                validateRunIDs=None, 
+                train_ratio=train_ratio, val_ratio=val_ratio, 
+                test_ratio=test_ratio, 
+                create_test_dataset=create_test_dataset
             )
 
-        # Get Class Info from the Training Dataset
-        self._get_class_info(trainRunIDs)
-
-        # Swap if Test Runs is Larger than Validation Runs
-        if create_test_dataset and len(testRunIDs) > len(validateRunIDs):
-            testRunIDs, validateRunIDs = validateRunIDs, testRunIDs
-
-        # Determine if datasets fit entirely in memory based on the batch size
-        # If the validation set is smaller than the batch size, avoid reloading
-        if len(validateRunIDs) < self.tomo_batch_size:
-            self.reload_validation_dataset  = False
-
-        # If the training set is smaller than the batch size, avoid reloading
-        if len(trainRunIDs) < self.tomo_batch_size:
-            self.reload_training_dataset = False
-
-        # Store the split run IDs into a dictionary for easy access
+        # Merge into the nested-by-session format
         self.myRunIDs = {
-            'train': trainRunIDs,
-            'validate': validateRunIDs,
-            'test': testRunIDs
+            "train": {}, "validate": {}, "test": {},
         }
 
-        print(f"Number of training samples: {len(trainRunIDs)}")
-        print(f"Number of validation samples: {len(validateRunIDs)}")
-        if testRunIDs is not None:
-            print(f'Number of test samples: {len(testRunIDs)}')    
+        for split_name in ("train", "validate", "test"):
+            self.myRunIDs[split_name] = {
+                session_key: per_session_splits[session_key][split_name]
+                for session_key in per_session_splits.keys()
+            } 
 
-        # Define separate batch sizes
-        self.train_batch_size = min( len(self.myRunIDs['train']), self.tomo_batch_size)
-        self.val_batch_size   = min( len(self.myRunIDs['validate']), self.tomo_batch_size)
+        # ---- Class info ----
+        # Pick one session/config as the "label schema source".
+        # (Assumes exp/sim share the same target YAML label map.)
+        target_info = (self.target_name, self.target_session_id, self.target_user_id)
+        first_session = next(iter(self.config.keys()))
+        config_path = self.config[first_session]
+
+        # Get Class Info from the Training Dataset
+        self.Nclasses, self.class_names = utils.get_class_info(
+            config_path, self.myRunIDs['train'][first_session].keys(), target_info, self.voxel_size )
 
         return self.myRunIDs
 
-    def _get_class_info(self, trainRunDs):
-
-        # Fetch a segmentation to determine class names and number of classes
-        for runID in trainRunDs:
-            run = self.root.get_run(runID)
-            seg = run.get_segmentations(name=self.target_name, 
-                                        session_id=self.target_session_id, 
-                                        user_id=self.target_user_id,
-                                        voxel_size=float(self.voxel_size))
-            if len(seg) == 0:
-                continue
-
-            # If Session ID or User ID are None, Set Them Based on the First Found Segmentation
-            if self.target_session_id is None:
-                self.target_session_id = seg[0].session_id
-            if self.target_user_id is None:
-                self.target_user_id = seg[0].user_id
-
-            # Read Yaml Config to Get Number of Classes and Class Names
-            target_config = io2.check_target_config_path(self)
-            class_names = target_config['input']['labels']
-            self.Nclasses = len(class_names) + 1
-            self.class_names = [name for name, idx in sorted(class_names.items(), key=lambda x: x[1])]
-
-            # We Only need to read One Segmentation to Get Class Info
-            break      
-    
-    def create(
-        self,
+    def create(self, 
         crop_size: int = 96,
-        num_samples: int = 64):
-
-        train_batch_size = 2
-        val_batch_size = 4
-
-        # Define the number of processes for the DataLoader
-        n_procs = min(mp.cpu_count(), 4)
-
-        # Define the input dimensions
+        num_samples: int = 64,
+        train_transforms: Compose = None,
+        val_transforms: Compose = None,
+        val_batch_size: int = 1
+        ):
+        """
+        Create the training and validation datasets and return the DataLoaders.
+        """
+        # Define the Input Dimensions
         self.input_dim = crop_size, crop_size, crop_size
 
         # Create the list of training files
         train_files = [
-            {'run': run_name, 'root': self.config, 'vol_uri': self.vol_uri, 'target_uri': self.target_uri}
-            for run_name in self.myRunIDs['train']
+            { 'run': run_id, 
+               "root": self.config[session_key], 
+              'vol_uri': f'{alg}@{self.voxel_size}', 
+              'target_uri': self.target_uri }
+            for session_key, runmap in self.myRunIDs["train"].items()
+            for run_id, algs in runmap.items()
+            for alg in algs
         ]
 
-        train_transforms = Compose([
-            augment.get_transforms(),
-            augment.get_random_transforms(self.input_dim, num_samples, self.Nclasses)
-        ])
+        # Default Train Transforms for Particle Picking
+        if train_transforms is None:
+            train_transforms = Compose([
+                augment.get_transforms(),
+                augment.get_random_transforms(self.input_dim, num_samples, self.Nclasses)
+            ])
 
         # Create the SmartCacheDataset
-        dataset = SmartCacheDataset(
+        self.train_ds = SmartCacheDataset(
             data=train_files,                
             transform=train_transforms,
             cache_num=self.tomo_batch_size,  # e.g. 8–64 volumes
@@ -215,120 +387,48 @@ class CopickDataset:
 
         # Create the DataLoader
         train_loader = DataLoader(
-            dataset, batch_size=train_batch_size, 
-            shuffle=True, num_workers=8, pin_memory=torch.cuda.is_available()
-        )
+            self.train_ds, batch_size=1, 
+            shuffle=True, num_workers=8, 
+            pin_memory=torch.cuda.is_available()
+        )         
 
+        # Create the list of validation files
         val_files = [
-            {'run': run_name, 'root': self.config, 'vol_uri': self.vol_uri, 'target_uri': self.target_uri}
-            for run_name in self.myRunIDs['validate']
+            { 'run': run_id, 
+              'root': self.config[session_key], 
+              'vol_uri': f'{alg}@{self.voxel_size}', 
+              'target_uri': self.target_uri }
+            for session_key, runmap in self.myRunIDs["validate"].items()
+            for run_id, algs in runmap.items()
+            for alg in algs                
         ]
 
+        # Default Val Transforms for Particle Picking
+        if val_transforms is None:
+            val_transforms = augment.get_transforms()
+
         # Create the CacheDataset
-        dataset = CacheDataset(
+        val_ds = CacheDataset(
             data=val_files,                
-            transform=augment.get_transforms(),
+            transform=val_transforms,
             cache_rate=1.0,          # cache all val items
             num_workers=8,           # threads for initial caching
         )   
 
         # Create the DataLoader
         val_loader = DataLoader(
-            dataset, batch_size=val_batch_size, 
+            val_ds, batch_size=val_batch_size, 
             shuffle=False, num_workers=0, 
             pin_memory=torch.cuda.is_available()
         )
 
+        # Print the data splits
+        utils.print_splits(self.myRunIDs, train_files, val_files)
+
         return train_loader, val_loader
 
-
-    def _check_max_label_value(self, train_files):
-        max_label_value = max(file['label'].max() for file in train_files)
-        if max_label_value > self.Nclasses:
-            print(f"Warning: Maximum class label value {max_label_value} exceeds the number of classes {self.Nclasses}.")
-            print("This may cause issues with the model's output layer.")
-            print("Consider adjusting the number of classes or the label values in your data.\n")
-
     def get_dataloader_parameters(self):
-
-        parameters = {
-            'config': self.config,
-            'target_name': self.target_name,
-            'target_session_id': self.target_session_id,
-            'target_user_id': self.target_user_id,
-            'voxel_size': self.voxel_size,
-            'tomo_algorithm': self.tomo_algorithm,
-            'tomo_batch_size': self.tomo_batch_size,
-            'reload_frequency': self.reload_frequency,
-            'testRunIDs': self.myRunIDs['test'],
-            'valRunIDs': self.myRunIDs['validate'],    
-            'trainRunIDs': self.myRunIDs['train'],
-        }
-
-        return parameters                
-
-class PredictLoaderManager:
-
-    def __init__(self, 
-                 config: str, 
-                 voxel_size: float = 10, 
-                 tomo_algorithm: str = 'wbp', 
-                 tomo_batch_size: int = 15, # Number of Tomograms to Load Per Sub-Epoch    
-                 Nclasses: int = 3):
-        
-        # Read Copick Project
-        self.copick_config = config
-        self.root = io.load_copick_config(config)
-
-        # Copick Query For Input Tomogram
-        self.voxel_size = voxel_size
-        self.tomo_algorithm = tomo_algorithm
-
-        self.Nclasses = Nclasses
-        self.tomo_batch_size = tomo_batch_size 
-
-        # Initialize the input dimensions   
-        self.nx = None
-        self.ny = None
-        self.nz = None
-
-
-    def create_predict_dataloader(
-        self, 
-        voxel_spacing: float, 
-        tomo_algorithm: str,       
-        runIDs: str = None):
-
-        # Split trainRunIDs, validateRunIDs, testRunIDs
-        if runIDs is None:
-            runIDs = [run.name for run in self.root.runs]
-            
-        # Load the test data
-        test_files = io.load_predict_data(self.root, runIDs, voxel_spacing, tomo_algorithm)  
-
-        # Create the cached dataset with non-random transforms
-        test_ds = CacheDataset(data=test_files, transform=augment.get_predict_transforms())
-
-        # Read (nx,ny,nz) for input tomograms.
-        if self.nx is None:
-            (self.nx,self.ny,self.nz) = test_ds[0]['image'].shape[1:]
-
-        # Create the DataLoader
-        test_loader = DataLoader(test_ds, 
-                                batch_size=4, 
-                                shuffle=False, 
-                                num_workers=4, 
-                                pin_memory=torch.cuda.is_available())
-        return test_loader
-    
-    def get_dataloader_parameters(self):
-
-        parameters = {
-            'config': self.copick_config,
-            'voxel_size': self.voxel_size,
-            'tomo_algorithm': self.tomo_algorithm
-        }
-
-        return parameters    
-    
-    
+        """
+        Get the datamodule parameters.
+        """
+        return utils.get_parameters(self) 
