@@ -12,6 +12,7 @@ from monai.transforms import (
     RandGaussianNoised,
     ScaleIntensityRanged,  
     RandomOrder,
+    RandSpatialCropd
 )
 
 def get_transforms():
@@ -38,12 +39,18 @@ def get_random_transforms( input_dim, num_samples, Nclasses):
     the first axis (spatial_axes=[1, 2]) and avoid flipping along the first axis.
     """
     return Compose([
-        RandCropByLabelClassesd(
+        # RandCropByLabelClassesd(
+        #     keys=["image", "label"],
+        #     label_key="label",
+        #     spatial_size=[input_dim[0], input_dim[1], input_dim[2]],
+        #     num_classes=Nclasses,
+        #     num_samples=num_samples
+        # ),
+        RandSpatialCropd(
             keys=["image", "label"],
-            label_key="label",
-            spatial_size=[input_dim[0], input_dim[1], input_dim[2]],     
-            num_classes=Nclasses,
-            num_samples=num_samples
+            roi_size=[input_dim[0], input_dim[1], input_dim[2]],
+            random_center=True,
+            random_size=False
         ),
         # Only rotate around the first axis (keeping the missing wedge orientation consistent)
         RandRotate90d(keys=["image", "label"], prob=0.5, spatial_axes=[1, 2], max_k=3),
