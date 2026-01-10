@@ -59,7 +59,8 @@ class LoadCopickPredictd(MapTransform):
             root, 
             "tomogram", 
             run_name=run_name
-        )[0].numpy()
+        )
         
         d["image"] = vol[0].numpy()
+        d['runid'] = run_name
         return d
