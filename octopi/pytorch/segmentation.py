@@ -65,7 +65,7 @@ class Predictor:
         self.sw = None
 
         # Set the device
-        self.device = torch.device('cuda') if device else device    
+        self.device = device if device else torch.device('cuda')
 
         # Handle Single Model Config or Multiple Model Configs
         if isinstance(model_config, str):
