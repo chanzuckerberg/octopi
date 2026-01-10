@@ -478,6 +478,14 @@ class MultiGpuPredictor:
         world_size = torch.cuda.device_count()
         if world_size < 1:
             raise RuntimeError("No CUDA GPUs available.")
+
+        # If runIDs are not provided, load all runs
+        if runIDs is None:
+            runIDs = [run.name for run in self.root.runs if run.get_voxel_spacing(voxel_spacing) is not None]
+            skippedRunIDs = [run.name for run in self.root.runs if run.get_voxel_spacing(voxel_spacing) is None]
+
+            if skippedRunIDs:
+                print(f"Warning: skipping runs with no voxel spacing {voxel_spacing}: {skippedRunIDs}")              
             
         # Single GPU fallback: just instantiate and run normally
         if world_size == 1:
@@ -496,15 +504,7 @@ class MultiGpuPredictor:
                 name=name,
                 userid=userid,
                 sessionid=sessionid,
-            )
-
-        # If runIDs are not provided, load all runs
-        if runIDs is None:
-            runIDs = [run.name for run in self.root.runs if run.get_voxel_spacing(voxel_spacing) is not None]
-            skippedRunIDs = [run.name for run in self.root.runs if run.get_voxel_spacing(voxel_spacing) is None]
-
-            if skippedRunIDs:
-                print(f"Warning: skipping runs with no voxel spacing {voxel_spacing}: {skippedRunIDs}")            
+            )          
                 
         # Each process gets the same job spec except runIDs shard differs.
         jobs = []
