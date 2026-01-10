@@ -1,6 +1,6 @@
-from octopi.datasets import generators, multi_config_generator
 from octopi.utils import config, parsers
 from octopi.pytorch import hyper_search
+from octopi.datasets import generators
 import torch, mlflow, optuna
 from typing import List
 import pandas as pd
@@ -83,7 +83,7 @@ class ModelSearchSubmit:
         self._print_input_configs()
 
         if isinstance(self.copick_config, dict):
-            self.data_generator = multi_config_generator.MultiConfigTrainLoaderManager(
+            self.data_generator = generators.MultiCopickDataModule(
                 self.copick_config,
                 self.target_name,
                 target_session_id=self.target_session_id,
@@ -93,7 +93,7 @@ class ModelSearchSubmit:
                 tomo_batch_size=self.tomo_batch_size
             )
         else:
-            self.data_generator = generators.TrainLoaderManager(
+            self.data_generator = generators.CopickDataModule(
                 self.copick_config,
                 self.target_name,
                 target_session_id=self.target_session_id,

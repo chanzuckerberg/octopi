@@ -16,7 +16,7 @@ import json
 def get_console():
     return Console()
 
-def _progress(iterable, description="Processing"):
+def _progress(iterable, description="Processing", unit=None):
     """
     Wrap an iterable with a Rich progress bar.
 
@@ -45,7 +45,7 @@ def _progress(iterable, description="Processing"):
         transient=False,
         console=console,
     ) as progress:
-        task = progress.add_task(description, total=len(iterable))
+        task = progress.add_task(description, total=len(iterable), unit=unit if unit is not None else "item")
         for item in iterable:
             yield item
             progress.advance(task)

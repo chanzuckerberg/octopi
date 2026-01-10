@@ -2,92 +2,94 @@
 Data loading, processing, and dataset operations for the datasets module.
 """
 
-from monai.data import DataLoader, CacheDataset
+from monai.data import DataLoader, Dataset
 from monai.transforms import (
     Compose, 
     NormalizeIntensityd,
     EnsureChannelFirstd,  
 )
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from octopi.datasets.loader import LoadCopickPredictd
 from sklearn.model_selection import train_test_split
+from copick.util.uri import resolve_copick_objects
+import copick, torch, os, random, threading
 from collections import defaultdict
-from copick_utils.io import readers
-import copick, torch, os, random
-from typing import List
+from typing import List, Optional
 from tqdm import tqdm
 
-
-def load_training_data(root, 
-                       runIDs: List[str],
-                       voxel_spacing: float, 
-                       tomo_algorithm: str, 
-                       segmenation_name: str,
-                       segmentation_session_id: str = None,
-                       segmentation_user_id: str = None,
-                       progress_update: bool = True):
-    """
-    Load training data from CoPick runs.
-    """
-    data_dicts = []
-    # Use tqdm for progress tracking only if progress_update is True
-    iterable = tqdm(runIDs, desc="Loading Training Data") if progress_update else runIDs
-    for runID in iterable:
-        run = root.get_run(str(runID))
-        tomogram = readers.tomogram(run, voxel_spacing, tomo_algorithm)
-        segmentation = readers.segmentation(run, 
-                                              voxel_spacing,
-                                              segmenation_name,
-                                              segmentation_session_id, 
-                                              segmentation_user_id)
-        data_dicts.append({"image": tomogram, "label": segmentation})
-
-    return data_dicts 
-
-
-def load_predict_data(root, 
-                      runIDs: List[str],
-                      voxel_spacing: float, 
-                      tomo_algorithm: str):
-    """
-    Load prediction data from CoPick runs.
-    """
-    data_dicts = []
-    for runID in tqdm(runIDs):
-        run = root.get_run(str(runID))
-        tomogram = readers.tomogram(run, voxel_spacing, tomo_algorithm)
-        data_dicts.append({"image": tomogram})
-
-    return data_dicts 
-
+_thread_state = threading.local()
 
 def create_predict_dataloader(
-    root,
-    voxel_spacing: float, 
-    tomo_algorithm: str,       
-    runIDs: str = None,       
+    config,
+    voxel_size: float, 
+    tomo_alg: str,       
+    runIDs: str = None,
+    batch_size: int = 1,
+    nworkers: int = None,
     ): 
     """
     Create a dataloader for prediction data.
     """
     # define pre transforms
-    pre_transforms = Compose(
-        [   EnsureChannelFirstd(keys=["image"], channel_dim="no_channel"),
-            NormalizeIntensityd(keys=["image"]),
+    xforms = Compose([   
+        LoadCopickPredictd(),
+        EnsureChannelFirstd(keys=["image"], channel_dim="no_channel"),
+        NormalizeIntensityd(keys=["image"]),
     ])
 
-    # Split trainRunIDs, validateRunIDs, testRunIDs
+    # Prepare the list of runIDs if none are provide
     if runIDs is None:
         runIDs = [run.name for run in root.runs]
-    test_files = load_predict_data(root, runIDs, voxel_spacing, tomo_algorithm) 
 
-    bs = min(len(test_files), os.cpu_count() or 4)
-    test_ds = CacheDataset(data=test_files, transform=pre_transforms)
-    test_loader = DataLoader(test_ds, 
-                            batch_size=bs, 
-                            shuffle=False, 
-                            num_workers=bs, 
-                            pin_memory=torch.cuda.is_available())
+    # Validate RunIDs before creating the dataloader
+    uri = f'{tomo_alg}@{voxel_size}'
+    runIDs = _check_valid_runs(config, uri, runIDs)
+    test_files = [{
+        'run': runid, 'root': config,
+        'vol_uri': uri
+        } for runid in runIDs
+    ]
+    test_ds = Dataset(data=test_files, transform=xforms)
+
+    if nworkers is None:
+        nworkers = min(2, torch.get_num_threads())
+    test_loader = DataLoader(
+        test_ds, 
+        batch_size=batch_size, shuffle=False, 
+        num_workers=nworkers, 
+        pin_memory=torch.cuda.is_available()
+    )
     return test_loader, test_ds
 
+def _get_root(config: str):
+    # One root per thread
+    if not hasattr(_thread_state, "root"):
+        _thread_state.root = copick.from_file(config)
+    return _thread_state.root
+
+def _check_one_run(config: str, vol_uri: str, runID: str) -> Optional[str]:
+    root = _get_root(config)
+    vol = resolve_copick_objects(vol_uri, root, "tomogram", run_name=runID)
+    return runID if len(vol) > 0 else None
+
+def _check_valid_runs(config: str, vol_uri: str, runIDs: List[str], max_workers: int = 16) -> List[str]:
+
+    valid: List[str] = []
+    with ThreadPoolExecutor(max_workers=max_workers) as ex:
+        futures = [ex.submit(_check_one_run, config, vol_uri, runID) for runID in runIDs]
+        for fut in as_completed(futures):
+            runID = fut.result()
+            if runID is not None:
+                valid.append(runID)
+
+    # Optional: keep original order
+    valid_set = set(valid)
+    valid = [rid for rid in runIDs if rid in valid_set]
+
+    if not valid:
+        raise ValueError(f"No valid runs found for given volume URI: {vol_uri}")
+
+    return valid
 
 def adjust_to_multiple(value, multiple = 16):
     """
