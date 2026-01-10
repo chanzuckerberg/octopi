@@ -177,10 +177,10 @@ def build_target_uri(name: str, sessionid: str | None, userid: str | None, voxel
         voxel_size: The voxel size of the target.
     """
     # Construct the Target URI
-    if sessionid is None:
-        uri = f'{name}:{userid}@{voxel_size}'
-    elif sessionid is None and userid is None:
+    if sessionid is None and userid is None:
         uri = f'{name}@{voxel_size}'
+    elif sessionid is None:
+        uri = f'{name}:{userid}@{voxel_size}'
     else:
         uri = f'{name}:{userid}/{sessionid}@{voxel_size}'
 

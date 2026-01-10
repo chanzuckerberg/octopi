@@ -192,7 +192,7 @@ def cli(config, target, picks_session_id, picks_user_id, seg_target, run_ids,
     """
 
     # Print Summary To User
-    print('\nGenerating Target Segmentation Masks from the Following Copick-Query:')
+    print('\n⚙️ Generating Target Segmentation Masks from the Following Copick-Query:')
     if target is not None and len(target) > 0:
         print(f'    - Targets: {target}\n')
     else:

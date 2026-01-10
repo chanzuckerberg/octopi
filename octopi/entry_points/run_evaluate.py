@@ -82,6 +82,7 @@ def cli(config, ground_truth_user_id, ground_truth_session_id,
     """
 
     # Call the evaluate function with parsed arguments
+    print('\n📝 Evaluating Measured Coordinates...\n')
     my_evaluator(
         copick_config_path=config,
         ground_truth_user_id=ground_truth_user_id,

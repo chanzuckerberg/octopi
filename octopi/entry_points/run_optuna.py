@@ -55,7 +55,7 @@ def save_parameters(config: tuple,
     io.save_parameters_yaml(params, output_path)
 
 
-@click.command('model-explore', help="Perform model architecture search with Optuna and MLflow integration")
+@click.command('model-explore')
 # Training Arguments
 @click.option('--random-seed', type=int, default=42,
               help="Random seed for reproducibility")
@@ -76,7 +76,7 @@ def save_parameters(config: tuple,
 @click.option('--mlflow-experiment-name', type=str, default="model-search",
               help="Name of the MLflow experiment")
 @click.option('-alg', '--tomo-alg', type=str, default='wbp',
-              help="Tomogram algorithm used for training")
+              help="Tomogram algorithm used for training, provide a comma-separated list of algorithms for multiple options. (e.g., 'denoised,wbp')")
 @click.option('-tinfo', '--target-info', type=str, default="targets,octopi,1",
               callback=lambda ctx, param, value: parsers.parse_target(value),
               help="Target information, e.g., 'name' or 'name,user_id,session_id'")
@@ -86,9 +86,10 @@ def cli(config, voxel_size, target_info, tomo_alg, mlflow_experiment_name,
         model_type,
         num_epochs, val_interval, tomo_batch_size, best_metric, num_trials, random_seed):
     """
-    CLI entry point for running optuna model architecture search.
+    "Perform model architecture search with Optuna."
     """
 
+    print('\n🚀 Starting a new Octopi Model Architecture Search...\n')
     run_model_explore(
         config, voxel_size, target_info, tomo_alg, mlflow_experiment_name, 
         trainrunids, validaterunids, data_split, model_type,
