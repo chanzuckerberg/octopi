@@ -46,7 +46,7 @@ def train_parameters(octopi: bool = False):
         
         f = click.option("--best-metric", type=str, default='avg_f1',
                         help="Metric to Monitor for Determining Best Model. To track fBetaN, use fBetaN with N as the beta-value.")(f)
-        cdf = click.option('-ncache', "--ncache-tomos", type=int, default=15,
+        f = click.option('-ncache', "--ncache-tomos", type=int, default=15,
                         help="Number of tomograms kept in memory and used for training in each epoch (SmartCache window size).")(f)
         f = click.option("--val-interval", type=int, default=10,
                         help="Interval for validation metric calculations")(f)
