@@ -20,7 +20,7 @@ class CopickDataModule:
         self.config = config
         self.root = io.load_copick_config(config)
 
-        # Member Varialbles
+        # Member Variables
         self.target_name = name
         self.target_session_id = sessionid
         self.target_user_id = userid
