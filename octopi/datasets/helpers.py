@@ -90,7 +90,7 @@ def get_data_splits(
         )
     # Option 2: TrainRunIDs and ValidateRunIDs are Provided, No Need to Split
     elif trainRunIDs is not None and validateRunIDs is not None:
-        testRunIDs = None
+        testRunIDs = []
     # Option 3: Use the Entire Copick Project, Split into Train, Validate and Test
     else:
         runIDs = list(allRunIDs.keys())
@@ -213,12 +213,10 @@ def get_parameters(datamodule):
     """
 
     base = {
-        "target_name": datamodule.target_name,
-        "target_session_id": datamodule.target_session_id,
-        "target_user_id": datamodule.target_user_id,
+        "target_uri": build_target_uri(datamodule.target_name, datamodule.target_session_id, datamodule.target_user_id, datamodule.voxel_size),
+        "target_info": [datamodule.target_user_id, datamodule.target_session_id, datamodule.target_name],
         "voxel_size": datamodule.voxel_size,
         "tomo_algorithm": datamodule.tomo_alg,
-        "tomo_batch_size": datamodule.tomo_batch_size,
     }
 
     # -------------------------
@@ -230,7 +228,6 @@ def get_parameters(datamodule):
             "config": datamodule.config,
             "trainRunIDs": list(datamodule.myRunIDs["train"].keys()),
             "valRunIDs": list(datamodule.myRunIDs["validate"].keys()),
-            "testRunIDs": list(datamodule.myRunIDs["test"].keys()),
         }
 
     # -------------------------
@@ -248,9 +245,6 @@ def get_parameters(datamodule):
                 ),
                 "valRunIDs": list(
                     datamodule.myRunIDs["validate"].get(session_key, {}).keys()
-                ),
-                "testRunIDs": list(
-                    datamodule.myRunIDs["test"].get(session_key, {}).keys()
                 ),
             })
 

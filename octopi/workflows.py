@@ -6,6 +6,7 @@ from octopi.pytorch import segmentation
 from octopi.pytorch import trainer 
 from octopi.utils import io
 import multiprocess as mp
+from pprint import pprint
 import copick, torch, os
 from tqdm import tqdm
     
@@ -78,6 +79,15 @@ def train(data_generator, loss_function, batch_size = 16,
     )
     model_trainer.sw_bs = sw_bs
     model_trainer.overlap = overlap
+
+    # Pretty Print all the Training Parameters
+    print('🔍 Training Parameters:')
+    parameters = {
+        'labels': io.check_target_config_path(data_generator)['input']['labels'],
+        'dataloader': data_generator.get_dataloader_parameters()
+    }
+    pprint(parameters, indent=2)
+    print()
 
     # Train the Model
     print(f'🔃 Starting Training...\nSaving Training Results to: {model_save_path}/\n')
@@ -269,3 +279,4 @@ def evaluate(config,
         distance_threshold_scale=distance_threshold, 
         runIDs=run_ids, save_path=save_path
     )
+

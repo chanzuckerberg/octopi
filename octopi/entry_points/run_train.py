@@ -36,9 +36,6 @@ def train_model(
     from octopi.utils import parsers, io
     from octopi.workflows import train
 
-    # Initialize the data generator to manage training and validation datasets
-    print(f'Training with {copick_config_path}\n')
-
     # # Multi-config training
     if isinstance(copick_config_path, dict):
         data_generator = generators.MultiCopickDataModule(

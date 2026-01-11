@@ -312,8 +312,8 @@ class MultiCopickDataModule:
         for session_key, runIDs in self.allRunIDs.items():
             per_session_splits[session_key] = utils.get_data_splits(
                 runIDs, 
-                trainRunIDs=None, 
-                validateRunIDs=None, 
+                trainRunIDs=trainRunIDs, 
+                validateRunIDs=validateRunIDs, 
                 train_ratio=train_ratio, val_ratio=val_ratio, 
                 test_ratio=test_ratio, 
                 create_test_dataset=create_test_dataset
@@ -328,7 +328,7 @@ class MultiCopickDataModule:
             self.myRunIDs[split_name] = {
                 session_key: per_session_splits[session_key][split_name]
                 for session_key in per_session_splits.keys()
-            } 
+            }         
 
         # ---- Class info ----
         # Pick one session/config as the "label schema source".
