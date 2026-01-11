@@ -25,18 +25,19 @@ octopi segment \
 
 By default, OCTOPI performs **4 Test-Time Augmentation (4TTA)** during segmentation to improve prediction robustness. 
 
-### Segmentation Parameters
 
-| Parameter | Description | Example |
-|-----------|-------------|---------|
-| `--config` | Path to copick configuration file | `config.json` |
-| `--model-config` | Path to model configuration file | `best_model_config.yaml` |
-| `--model-weights` | Path to trained model weights | `best_model.pth` |
-| `--voxel-size` | Voxel size of tomograms | `10` | `10` |
-| `--tomo-alg` | Tomogram algorithm for predictions | `wbp` | `wbp`, `denoised` |
-| `--seg-info` | Segmentation output specification | `predict,octopi,1` |
-| `--tomo-batch-size` | Batch size for processing | `15` |
-| `--run-ids` | Specific runs to process | All runs | `run1,run2,run3` |
+??? info "Segmentation Parameters"
+
+    | Parameter | Description | Example |
+    |-----------|-------------|---------|
+    | `--config` | Path to copick configuration file | `config.json` |
+    | `--model-config` | Path to model configuration file | `best_model_config.yaml` |
+    | `--model-weights` | Path to trained model weights | `best_model.pth` |
+    | `--voxel-size` | Voxel size of tomograms | `10` | `10` |
+    | `--tomo-alg` | Tomogram algorithm for predictions | `wbp` | `wbp`, `denoised` |
+    | `--seg-info` | Segmentation output specification | `predict,octopi,1` |
+    | `--tomo-batch-size` | Batch size for processing | `15` |
+    | `--run-ids` | Specific runs to process | All runs | `run1,run2,run3` |
 
 ## Localization 
 
@@ -51,21 +52,21 @@ octopi localize \
 
 The localization algorithm uses **particle size information** from your copick configuration to filter predictions. For each protein type, Octopi reads the expected particle radius from the copick config file. Predicted candidates smaller than `radius * radius_min_scale` or larger than `radius * radius_max_scale` are discarded as noise.
 
-### Localization Parameters
+??? info "Localization Parameters"
 
-| Parameter | Description | Example |
-|-----------|-------------|---------|
-| `--config` | Path to copick configuration file | `config.json` |
-| `--seg-info` | Segmentation input specification | `predict,unet,1` |
-| `--method` | Localization method | `watershed` |
-| `--voxel-size` | Voxel size for localization | `10` |
-| `--pick-session-id` | Session ID for particle picks | `1`|
-| `--pick-user-id` | User ID for particle picks | `octopi` |
-| `--radius-min-scale` | Minimum particle radius scale | `0.5` |
-| `--radius-max-scale` | Maximum particle radius scale | `1.0` |
-| `--filter-size` | Filter size for peak detection  (for watershed algorithm) | `10` |
-| `--pick-objects` | Specific objects to localize | All objects | `apoferritin,ribosome` |
-| `--runIDs` | Specific runs to process | All runs | `run1,run2,run3` |
+    | Parameter | Description | Example |
+    |-----------|-------------|---------|
+    | `--config` | Path to copick configuration file | `config.json` |
+    | `--seg-info` | Segmentation input specification | `predict,unet,1` |
+    | `--method` | Localization method | `watershed` |
+    | `--voxel-size` | Voxel size for localization | `10` |
+    | `--pick-session-id` | Session ID for particle picks | `1`|
+    | `--pick-user-id` | User ID for particle picks | `octopi` |
+    | `--radius-min-scale` | Minimum particle radius scale | `0.5` |
+    | `--radius-max-scale` | Maximum particle radius scale | `1.0` |
+    | `--filter-size` | Filter size for peak detection  (for watershed algorithm) | `10` |
+    | `--pick-objects` | Specific objects to localize | All objects | `apoferritin,ribosome` |
+    | `--runIDs` | Specific runs to process | All runs | `run1,run2,run3` |
 
 ## Evaluate Results
 

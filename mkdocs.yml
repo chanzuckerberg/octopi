@@ -31,6 +31,8 @@ markdown_extensions:
   - pymdownx.highlight:
       anchor_linenums: true
   - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
   - pymdownx.inlinehilite
   - admonition
   - pymdownx.details
@@ -66,11 +68,11 @@ nav:
   - Home: index.md
   - Getting Started:
     - Installation: getting-started/installation.md
-    - Import Data to Copick: getting-started/data-import.md
+    - Import to Copick: getting-started/data-import.md
     - Quick Start: getting-started/quickstart.md
   - User Guide:
     - Overview: user-guide/overview.md
-    - Import Data to Copick: getting-started/data-import.md 
+    - Import to Copick: user-guide/data-import.md 
     - Pick Particles: user-guide/pick-particles.md
     - Create Target Labels: user-guide/labels.md
     - Model Exploration: user-guide/training-basics.md

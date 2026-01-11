@@ -117,6 +117,7 @@ def cli(config, method, seg_info, voxel_size, runids,
       octopi localize -c config.json --seg-info predict,octopi,1
     """
 
+    print('\n🚀 Localizing Segmentation Masks into 3D Coordinates...\n')
     run_localize(config, method, seg_info, voxel_size, runids,
         radius_min_scale, radius_max_scale, filter_size, pick_objects, n_procs,
         pick_session_id, pick_user_id)

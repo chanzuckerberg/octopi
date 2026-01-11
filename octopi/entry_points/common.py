@@ -35,19 +35,19 @@ def train_parameters(octopi: bool = False):
             f = click.option("-nt", "--num-trials", type=int, default=10,
                             help="Number of trials for architecture search")(f)
         else:
-            f = click.option("-o", "--model-save-path", type=click.Path(), default='results',
+            f = click.option("-o", "--output", type=click.Path(), default='results',
                             help="Path to model save directory")(f)
-            f = click.option("--tversky-alpha", type=float, default=0.3,
+            f = click.option('-ta', "--tversky-alpha", type=float, default=0.3,
                             help="Alpha parameter for the Tversky loss")(f)
             f = click.option("-lr", "--lr", type=float, default=1e-3,
                             help="Learning rate for the optimizer")(f)
-            f = click.option('-ncrops', "--num-tomo-crops", type=int, default=16,
-                            help="Number of tomogram crops to use per patch")(f)
+            f = click.option('-bs', "--batch-size", type=int, default=16,
+                            help="Number of cropped 3D patches processed per training step (batch).")(f)
         
-        f = click.option("--best-metric", type=str, default='avg_f1',
+        f = click.option("-metric", "--best-metric", type=str, default='avg_f1',
                         help="Metric to Monitor for Determining Best Model. To track fBetaN, use fBetaN with N as the beta-value.")(f)
-        f = click.option('-ntomos', "--tomo-batch-size", type=int, default=15,
-                        help="Number of tomograms to load per epoch for training")(f)
+        f = click.option('-ncache', "--ncache-tomos", type=int, default=15,
+                        help="Number of tomograms kept in memory and used for training in each epoch (SmartCache window size).")(f)
         f = click.option("--val-interval", type=int, default=10,
                         help="Interval for validation metric calculations")(f)
         f = click.option('-nepochs', "--num-epochs", type=int, default=1000,
@@ -75,7 +75,7 @@ def inference_parameters():
         f = click.option('-runs', "--run-ids", type=str, default=None,
                         callback=lambda ctx, param, value: parsers.parse_list(value) if value else None,
                         help="List of run IDs for prediction, e.g., run1,run2 or [run1,run2]. If not provided, all available runs will be processed.")(f)
-        f = click.option('-ntomos', "--tomo-batch-size", type=int, default=25,
+        f = click.option('-ntomos', "--tomo-batch-size", type=int, default=1,
                         help="Batch size for tomogram processing")(f)
         f = click.option('-seginfo', "--seg-info", type=str, default='predict,octopi,1',
                         callback=lambda ctx, param, value: parsers.parse_target(value) if value else value,

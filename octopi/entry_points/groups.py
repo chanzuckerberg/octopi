@@ -37,8 +37,8 @@ click.rich_click.OPTION_GROUPS = {
         },
         {
             "name": "Training Arguments",
-            "options": ["--num-epochs", "--val-interval", "--tomo-batch-size", "--best-metric", 
-                       "--num-tomo-crops", "--lr", "--tversky-alpha", "--model-save-path"]
+            "options": ["--num-epochs", "--val-interval", "--ncache-tomos", "--best-metric", 
+                       "--batch-size", "--lr", "--tversky-alpha", "--output"]
         },
         {
             "name": "UNet-Model Arguments",
@@ -96,12 +96,9 @@ click.rich_click.OPTION_GROUPS = {
                        "--mlflow-experiment-name", "--trainRunIDs", "--validateRunIDs", "--data-split"]
         },
         {
-            "name": "Model Arguments",
-            "options": ["--model-type"]
-        },
-        {
             "name": "Training Arguments",
-            "options": ["--num-epochs", "--val-interval", "--tomo-batch-size", "--best-metric", 
+            "options": ["--model-type", "--num-epochs", "--val-interval", 
+                       "--ncache-tomos", "--best-metric", "--output",
                        "--num-trials", "--random-seed"]
         }
     ],

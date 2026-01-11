@@ -6,10 +6,11 @@ from octopi.pytorch import segmentation
 from octopi.pytorch import trainer 
 from octopi.utils import io
 import multiprocess as mp
+from pprint import pprint
 import copick, torch, os
 from tqdm import tqdm
     
-def train(data_generator, loss_function, num_crops = 16,
+def train(data_generator, loss_function, batch_size = 16,
           model_config = None, model_weights = None, lr0 = 1e-3,
           model_save_path = 'results', best_metric = 'fBeta2', 
           num_epochs = 1000, use_ema = True, val_interval = 10,
@@ -79,11 +80,20 @@ def train(data_generator, loss_function, num_crops = 16,
     model_trainer.sw_bs = sw_bs
     model_trainer.overlap = overlap
 
+    # Pretty Print all the Training Parameters
+    print('🔍 Training Parameters:')
+    parameters = {
+        'labels': io.check_target_config_path(data_generator)['input']['labels'],
+        'dataloader': data_generator.get_dataloader_parameters()
+    }
+    pprint(parameters, indent=2)
+    print()
+
     # Train the Model
     print(f'🔃 Starting Training...\nSaving Training Results to: {model_save_path}/\n')
     results = model_trainer.train(
         data_generator, model_save_path, max_epochs=num_epochs,
-        crop_size=model_config['dim_in'], my_num_samples=num_crops,
+        crop_size=model_config['dim_in'], my_num_samples=batch_size,
         val_interval=val_interval, best_metric=best_metric, verbose=True
     )
     print('✅ Training Complete!')
@@ -98,7 +108,7 @@ def train(data_generator, loss_function, num_crops = 16,
     io.save_results_to_csv(results, results_save_name)
 
 def segment(config, tomo_algorithm, voxel_size, model_weights, model_config, 
-            seg_info = ['predict', 'octopi', '1'], use_tta = False, run_ids = None):
+            seg_info = ['predict', 'octopi', '1'], batch_size = 15, run_ids = None):
     """
     Segment a Dataset using a Trained Model or Ensemble of Models
 
@@ -109,28 +119,37 @@ def segment(config, tomo_algorithm, voxel_size, model_weights, model_config,
         model_weights (str, list): The path to the model weights or a list of paths to the model weights
         model_config (str, list): The model configuration or a list of model configurations
         seg_info (list): The segmentation information
-        use_tta (bool): Whether to use test time augmentation
+        batch_size (int): The batch size for inference
         run_ids (list): The list of run IDs to use for segmentation
     """
 
     # Initialize the Predictor
-    predict = segmentation.Predictor(
-        config, model_config, model_weights,
-        apply_tta = use_tta
-    )
+    gpu_count = torch.cuda.device_count()
+    if gpu_count > 1:
+        print(f"# of GPUs Available: {gpu_count} -- Using Multi-GPU Predictor.")
+        predict = segmentation.MultiGpuPredictor(
+            config,
+            model_config,
+            model_weights
+        )
+    else:
+        print(f"# of GPUs Available: {gpu_count} -- Using Single-GPU Predictor.")
+        predict = segmentation.Predictor(
+            config,
+            model_config,
+            model_weights,
+        )
 
-    # Run batch prediction
+    # Run batch prediction and Save Processing Parameters
     predict.batch_predict(
         runIDs=run_ids,
-        num_tomos_per_batch=15,
+        num_tomos_per_batch=batch_size,
         tomo_algorithm=tomo_algorithm,
         voxel_spacing=voxel_size,
-        segmentation_name=seg_info[0],
-        segmentation_user_id=seg_info[1],
-        segmentation_session_id=seg_info[2]
+        name=seg_info[0],
+        userid=seg_info[1],
+        sessionid=seg_info[2]
     )
-
-    print('✅ Segmentation Complete!')
 
 def localize(config, voxel_size, seg_info, pick_user_id, pick_session_id, n_procs = 16,
             method = 'watershed', filter_size = 10, radius_min_scale = 0.4, radius_max_scale = 1.0,
@@ -260,3 +279,4 @@ def evaluate(config,
         distance_threshold_scale=distance_threshold, 
         runIDs=run_ids, save_path=save_path
     )
+

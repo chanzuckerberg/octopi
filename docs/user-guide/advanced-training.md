@@ -11,25 +11,22 @@ For specific use cases or when you have a known good architecture, you can train
 ```bash
 octopi train \
     --config config.json \
-    --voxel-size 10 --tomo-alg wbp --Nclass 8 \
+    --voxel-size 10 --tomo-alg wbp \
     --tomo-batch-size 50 --val-interval 10 \
     --target-info targets,octopi,1
 ```
 
-### Training Parameters
+??? info "`octopi train` parameters"
 
-| Parameter | Description | Example Value |
-|-----------|-------------|---------------|
-| `--config` | Path to copick configuration file  | `config.json` |
-| `--voxel-size` | Tomogram voxel size (Angstroms) | `10` |
-| `--tomo-alg` | Tomographic reconstruction algorithm | `wbp` (weighted back projection) |
-| `--Nclass` | Number of output classes for segmentation | `8` |
-| `--tomo-batch-size` | Batch size for tomographic processing | `50` |
-| `--num-epochs` | Total number of training epochs | `1000` |
-| `--val-interval` | Validation frequency (every N epochs) | `10` |
-| `--target-info` | Target information in format: name,framework,version | `targets,octopi,1` |
-
-!!! important "Remember that Nclass is number of classes + 1 for background."
+    | Parameter | Description | Example Value |
+    |-----------|-------------|---------------|
+    | `--config` | Path to copick configuration file  | `config.json` |
+    | `--voxel-size` | Tomogram voxel size (Angstroms) | `10` |
+    | `--tomo-alg` | Tomographic reconstruction algorithm | `wbp` (weighted back projection) |
+    | `--tomo-batch-size` | Batch size for tomographic processing | `50` |
+    | `--num-epochs` | Total number of training epochs | `1000` |
+    | `--val-interval` | Validation frequency (every N epochs) | `10` |
+    | `--target-info` | Target information in format: name,framework,version | `targets,octopi,1` |
 
 ## Fine Tuning Models
 
@@ -43,14 +40,14 @@ octopi train \
     --model-weights results/best_model_weights.pth
 ```
 
-### Fine-Tuning Parameters
+??? info "Fine-Tuning Parameters"
 
-The parameters for fine-tuning is equivalent to the base training, with the added option to provide the pre-trained model configuration and its weights.
+    The parameters for fine-tuning is equivalent to the base training, with the added option to provide the pre-trained model configuration and its weights.
 
-| Parameter | Description | Example Value |
-|-----------|-------------|---------------|
-| `--model-config` | Path to configuration file that the previous training run generated. | `results/model_config.yaml` |
-| `--model-weights` | Path to trained model weights. | `results/best_model_weights.pth` |
+    | Parameter | Description | Example Value |
+    |-----------|-------------|---------------|
+    | `--model-config` | Path to configuration file that the previous training run generated. | `results/model_config.yaml` |
+    | `--model-weights` | Path to trained model weights. | `results/best_model_weights.pth` |
 
 #### Training Outputs
 

@@ -3,7 +3,7 @@ from typing import List, Tuple
 import rich_click as click
 
 def inference(
-    copick_config_path: str,
+    config: str,
     model_weights: str, 
     model_config: str,
     seg_info: Tuple[str,str,str],
@@ -16,7 +16,7 @@ def inference(
     Perform segmentation inference using a model on provided tomograms.
 
     Args:
-        copick_config_path (str): Path to CoPick configuration file.
+        config (str): Path to CoPick configuration file.
         run_ids (List[str]): List of tomogram run IDs for inference.
         model_weights (str): Path to the trained model weights file.
         channels (List[int]): List of channel sizes for each layer.
@@ -28,11 +28,7 @@ def inference(
         segmentation_user_id (str): User ID associated with the segmentation.
         segmentation_session_id (str): Session ID for this segmentation run.
     """
-    from octopi.pytorch import segmentation
-    import torch
-    
-    gpu_count = torch.cuda.device_count()
-    print(f"Number of GPUs available: {gpu_count}")
+    from octopi.workflows import segment
 
     if ',' in model_weights:
         model_weights = model_weights.split(',')
@@ -47,45 +43,14 @@ def inference(
     else:
         print("Using Single Model Segmentation.")
 
-    if gpu_count > 1:
-        print("Using Multi-GPU Predictor.")
-        predict = segmentation.MultiGPUPredictor(
-            copick_config_path,
-            model_config,
-            model_weights
-        )
 
-        # Run Multi-GPU inference
-        predict.multi_gpu_inference(
-            runIDs=run_ids,
-            tomo_algorithm=tomo_algorithm,
-            voxel_spacing=voxel_size,
-            segmentation_name=seg_info[0],
-            segmentation_user_id=seg_info[1],
-            segmentation_session_id=seg_info[2],
-            save=True
-        )
+    segment(
+        config, tomo_algorithm, voxel_size,
+        model_weights, model_config, seg_info,
+        run_ids=run_ids, batch_size=tomo_batch_size
+    )
 
-    else:
-        print("Using Single-GPU Predictor.")
-        predict = segmentation.Predictor(
-            copick_config_path,
-            model_config,
-            model_weights,
-        )
-
-        # Run batch prediction
-        predict.batch_predict(
-            runIDs=run_ids,
-            num_tomos_per_batch=tomo_batch_size,
-            tomo_algorithm=tomo_algorithm,
-            voxel_spacing=voxel_size,
-            segmentation_name=seg_info[0],
-            segmentation_user_id=seg_info[1],
-            segmentation_session_id=seg_info[2]
-        )
-
-    print("Inference completed successfully.")
+    print("✅ Inference completed successfully.")
 
 
 @click.command('segment')
@@ -126,8 +91,7 @@ def cli(config, voxel_size,
       # Segment specific runs only
       octopi segment -c config.json \\
         --model-config model.yaml --model-weights model.pth \\
-        --run-ids TS_001,TS_002,TS_003 \\
-        --tomo-batch-size 10
+        --run-ids TS_001,TS_002,TS_003
     """
     
     # Set default values if not provided
@@ -138,8 +102,9 @@ def cli(config, voxel_size,
         seg_info[2] = "1"
 
     # Call the inference function with parsed arguments
+    print('\n🚀 Starting inference with Octopi...\n')
     inference(
-        copick_config_path=config,
+        config=config,
         model_weights=model_weights,
         model_config=model_config,
         seg_info=seg_info,
