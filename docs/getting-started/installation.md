@@ -1,12 +1,13 @@
 # Installation Guide
 
-## Quick Installation
+## Quick Installation (Recommended)
 
 octopi is available on PyPI and can be installed using pip:
 
 ```bash
 pip install octopi
 ```
+This will install the latest stable release along with all required dependencies.
 
 ## Development Installation
 
@@ -18,24 +19,45 @@ cd octopi
 pip install -e .
 ```
 
-## MLflow Setup
+The editable (-e) install ensures that local code changes are immediately reflected without reinstalling.
 
-To use MLflow for experiment tracking, create a `.env` file in your project root with the following content:
+---
 
-```bash
-MLFLOW_TRACKING_USERNAME = <Your_CZ_email>
-MLFLOW_TRACKING_PASSWORD = <Your_mlflow_access_token>
-```
+!!! success "Verify installation"
 
-You can get a CZI MLflow access token from [here](https://mlflow.cw.use4-prod.si.czi.technology/api/2.0/mlflow/users/access-token).
+    After installation, verify that the command-line interface is available:
 
-## Verification
+    ```bash
+    octopi
+    ```
+    
+    You should see output similar to the following:
 
-To verify your installation, run:
-
-```bash
-python -c "import octopi; print(octopi.__version__)"
-```
+    ```bash
+    Octopi 🐙: 🛠️ Tools for Finding Proteins in 🧊 cryo-ET data                        
+                                                                                    
+    ╭─ Options ───────────────────────────────────────────────────────────────────────╮
+    │ --help  -h  Show this message and exit.                                         │
+    ╰─────────────────────────────────────────────────────────────────────────────────╯
+    ╭─ Pre-Processing ────────────────────────────────────────────────────────────────╮
+    │ download        Download and (optionally) downsample tomograms from the         │
+    │                 CryoET-DataPortal.                                              │
+    │ import          Import MRC tomograms from a folder into a copick project.       │
+    │ create-targets  Generate segmentation targets from CoPick configurations.       │
+    ╰─────────────────────────────────────────────────────────────────────────────────╯
+    ╭─ Training ──────────────────────────────────────────────────────────────────────╮
+    │ train           Train 3D CNN U-Net models for Cryo-ET semantic segmentation.    │
+    │ model-explore   Perform model architecture search with Optuna.                  │
+    ╰─────────────────────────────────────────────────────────────────────────────────╯
+    ╭─ Inference ─────────────────────────────────────────────────────────────────────╮
+    │ segment           Segment volumes using trained neural network models.          │
+    │ localize          Convert Segmentation Masks to 3D Particle Coordinates.        │
+    │ membrane-extract  Extract membrane-bound picks based on proximity to organelle  │
+    │                   or membrane segmentation.                                     │
+    │ evaluate          Evaluate particle localization performance against ground     │
+    │                   truth annotations.                                            │
+    ╰─────────────────────────────────────────────────────────────────────────────────╯
+    ```
 
 ## Next Steps
 

@@ -86,7 +86,7 @@ def cli(config, voxel_size, target_info, tomo_alg, mlflow_experiment_name,
         model_type,
         num_epochs, val_interval, tomo_batch_size, best_metric, num_trials, random_seed):
     """
-    "Perform model architecture search with Optuna."
+    Perform model architecture search with Optuna.
     """
 
     print('\n🚀 Starting a new Octopi Model Architecture Search...\n')

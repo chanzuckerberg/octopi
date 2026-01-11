@@ -24,25 +24,25 @@ Rather than manually guessing which learning rates, batch sizes, or architectura
 octopi model-explore \
     --config config.json \
     --target-info targets,octopi,1 \
-    --voxel-size 10 --tomo-alg denoised --Nclass 8 \
+    --voxel-size 10 --tomo-alg denoised \
     --data-split 0.7 --model-type Unet \
     --num-trials 100 --best-metric fBeta3
 ```
 
 This automatically saves results to a timestamped directory and runs 10 optimization trials by default.
 
-## Key Parameters
+??? info "`octopi model-explore" parameters"
 
-| Parameter | Description | Default | Notes |
-|-----------|-------------|---------|-------|
-| `--config` | Path to copick config file(s) | - | Use multiple configs to combine datasets |
-| `--voxel-size` | Voxel size for training | `10` | Must match your target segmentations |
-| `--tomo-alg` | Tomogram algorithm | `wbp` | `wbp`, `denoised` - must match your data |
-| `--Nclass` | Number of classes | `3` | Proteins + membrane + background |
-| `--target-info` | Target segmentation info | `targets,octopi,1` | From label preparation step |
-| `--num-trials` | Number of optimization trials | `10` | More trials = better optimization (try 25-50) |
-| `--data-split` | Train/validation split | `0.8` | `0.7,0.2` = 70% train, 20% val, 10% test |
-| `--best-metric` | Optimization metric | `avg_f1` | `fBeta3` = F-beta score with β=3 (emphasizes recall over precision) |
+    | Parameter | Description | Default | Notes |
+    |-----------|-------------|---------|-------|
+    | `--config` | Path to copick config file(s) | - | Use multiple configs to combine datasets |
+    | `--voxel-size` | Voxel size for training | `10` | Must match your target segmentations |
+    | `--tomo-alg` | Tomogram algorithm | `wbp` | `wbp`, `denoised` - must match your data |
+    | `--Nclass` | Number of classes | `3` | Proteins + membrane + background |
+    | `--target-info` | Target segmentation info | `targets,octopi,1` | From label preparation step |
+    | `--num-trials` | Number of optimization trials | `10` | More trials = better optimization (try 25-50) |
+    | `--data-split` | Train/validation split | `0.8` | `0.7,0.2` = 70% train, 20% val, 10% test |
+    | `--best-metric` | Optimization metric | `avg_f1` | `fBeta3` = F-beta score with β=3 (emphasizes recall over precision) |
 
 ## What Gets Optimized
 
@@ -56,16 +56,6 @@ For each architecture, it optimizes:
 - **Hyperparameters** - Learning rate, batch size, loss function parameters
 - **Architecture details** - Channel sizes, stride configurations, residual units
 - **Training strategies** - Regularization and data augmentation
-
-## Understanding Classes
-
-The `--Nclass` parameter is critical:
-
-- **Background** (1 class) - Areas without particles
-- **Proteins** (N classes) - Each protein type gets its own class
-- **Segmentations** (M classes) - Additional targets like membranes
-
-**Example:** 6 proteins + 1 membrane + 1 background = **8 classes**
 
 ## Monitoring Your Training
 
