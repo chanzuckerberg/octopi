@@ -39,7 +39,7 @@ def train(data_generator, loss_function, batch_size = 16,
     # extract the model config from full config dict
     if isinstance(model_config, dict) and 'model' in model_config: 
         model_config = model_config['model']
-    else: 
+    elif model_config is None: 
         print('No Model Configuration Provided, Using Default Configuration')
         model_config = builder.get_default_unet_params()
         model_config['num_classes'] = data_generator.Nclasses
