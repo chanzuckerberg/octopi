@@ -69,13 +69,13 @@ def train_model(
     alpha = tversky_alpha
     beta = 1 - alpha
     loss_function = TverskyLoss(include_background=True, to_onehot_y=True, softmax=True, alpha=alpha, beta=beta)  
-    
+
     # Train the Model
     train(
         data_generator, loss_function, 
         model_config = model_config, model_weights = model_weights,
         best_metric = best_metric, num_epochs = num_epochs,
-        model_save_path = output, lr0 = lr,
+        model_save_path = output, lr0 = lr, val_interval = val_interval,
         batch_size = batch_size,
     )
 
@@ -150,6 +150,7 @@ def run_train(config, voxel_size, target_info, tomo_alg, trainrunids, validateru
     else:
         copick_configs = config[0]
     
+    # Load the model configuration
     if model_config:
         model_config_dict = io.load_yaml(model_config)
     else:

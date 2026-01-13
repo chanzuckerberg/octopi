@@ -6,6 +6,7 @@ from monai.transforms import (
     RandRotate90d, 
     NormalizeIntensityd,
     EnsureChannelFirstd, 
+    RandCropByPosNegLabeld,
     RandCropByLabelClassesd,
     RandScaleIntensityd,
     RandShiftIntensityd,
@@ -26,12 +27,23 @@ def get_transforms():
         Orientationd(keys=["image", "label"], axcodes="RAS")
     ])
 
-def get_random_transforms( input_dim, num_samples, Nclasses):
+def _pos_neg_from_bg_ratio(bg_ratio: float):
+    """
+    bg_ratio in [0,1]
+    neg is fixed at 1
+    pos increases with bg_ratio
+    """
+    neg = 1
+    pos = 1 + int(round(bg_ratio * (max_pos - 1)))
+    return pos, neg
+
+def get_random_transforms( input_dim, num_samples, Nclasses, bg_ratio: float = 0.0):
     """
     Input:
         input_dim: tuple of (nx, ny, nz)
         num_samples: int
         Nclasses: int
+        bg_ratio: float
 
     Returns random transforms.
     
@@ -39,21 +51,39 @@ def get_random_transforms( input_dim, num_samples, Nclasses):
     we avoid rotations that would move this artifact to other axes. We only rotate around
     the first axis (spatial_axes=[1, 2]) and avoid flipping along the first axis.
     """
-    return Compose([
-        RandCropByLabelClassesd(
+
+    # Check to ensure bg_ratio is within valid range
+    if not (0.0 <= bg_ratio <= 1.0):
+        raise ValueError(f"bg_ratio must be in [0,1], got {bg_ratio}")
+
+    # Determine the cropping strategy based on bg_ratio
+    if bg_ratio: # Provide Pure Background Crops
+        pos, neg = _pos_neg_from_bg_ratio(bg_ratio)
+        crop = RandCropByPosNegLabeld(
+            keys=['image', 'label'],
+            label_key="label",
+            spatial_size=[input_dim[0], input_dim[1], input_dim[2]],     
+            pos=pos, neg=neg,
+            num_samples=num_samples
+        )
+    else: # Provide Crops Based on Label Classes
+        crop = RandCropByLabelClassesd(
             keys=["image", "label"],
             label_key="label",
             spatial_size=[input_dim[0], input_dim[1], input_dim[2]],     
             num_classes=Nclasses,
             num_samples=num_samples
-        ),
-        # Only rotate around the first axis (keeping the missing wedge orientation consistent)
+        )
+
+    return Compose([
+        # Geometric augmentations
+        crop,
         RandRotate90d(keys=["image", "label"], prob=0.5, spatial_axes=[1, 2], max_k=3),
         RandFlipd(keys=["image", "label"], prob=0.5, spatial_axis=0),
         RandFlipd(keys=["image", "label"], prob=0.5, spatial_axis=1),
         RandFlipd(keys=["image", "label"], prob=0.5, spatial_axis=2),        
+        # Intensity augmentations
         RandomOrder([
-            # Intensity augmentations are still appropriate
             RandScaleIntensityd(keys="image", prob=0.5, factors=(0.85, 1.15)),
             RandShiftIntensityd(keys="image", prob=0.5, offsets=(-0.15, 0.15)),
             RandAdjustContrastd(keys="image", prob=0.5, gamma=(0.85, 1.15)),
