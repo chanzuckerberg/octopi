@@ -27,14 +27,29 @@ def get_transforms():
         Orientationd(keys=["image", "label"], axcodes="RAS")
     ])
 
-def _pos_neg_from_bg_ratio(bg_ratio: float):
+def _pos_neg_from_bg_ratio(bg_ratio: float, max_pos: int = 9):
     """
-    bg_ratio in [0,1]
-    neg is fixed at 1
-    pos increases with bg_ratio
+
+    Input:
+        bg_ratio: float in (0, 1]
+        max_pos: int, maximum number of positive samples
+
+    bg_ratio in (0, 1]
+      bg_ratio = 1.0 -> pos=1, neg=1  (50/50)
+      bg_ratio = 0.5 -> pos=2, neg=1  (66/33)
+      bg_ratio = 0.25-> pos=4, neg=1  (80/20)   
+      smaller bg_ratio -> higher pos relative to neg (more foreground bias)
+
+    max_pos caps the foreground weight so bg_ratio near 0 doesn't explode.
     """
+    if not (0.0 < bg_ratio <= 1.0):
+        raise ValueError(f"bg_ratio must be in (0, 1], got {bg_ratio}")
+
     neg = 1
-    pos = 1 + int(round(bg_ratio * (max_pos - 1)))
+    pos = int(round(1.0 / bg_ratio))
+
+    # clamp to avoid absurd ratios
+    pos = max(1, min(pos, max_pos))
     return pos, neg
 
 def get_random_transforms( input_dim, num_samples, Nclasses, bg_ratio: float = 0.0):

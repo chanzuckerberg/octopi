@@ -272,7 +272,7 @@ class ModelTrainer:
                         break
 
                 # Run the learning rate scheduler
-                early_stop = self.run_scheduler(data_load_gen, original_lr, epoch, val_interval, lr_scheduler_type)
+                early_stop = self.run_scheduler(epoch, lr_scheduler_type, best_metric)
                 if early_stop:
                     break
         finally:
@@ -289,7 +289,7 @@ class ModelTrainer:
             self.lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
                 self.optimizer, T_max=self.max_epochs, eta_min=self.min_lr )
         elif type == "onecyle":
-            max_lr = 1e-3
+            max_lr = self.lr0
             steps_per_epoch = len(self.train_loader)
             self.lr_scheduler = torch.optim.lr_scheduler.OneCycleLR(
                 self.optimizer, max_lr=max_lr, epochs=self.max_epochs, steps_per_epoch=steps_per_epoch )
@@ -308,11 +308,9 @@ class ModelTrainer:
 
     def run_scheduler(
         self, 
-        data_load_gen, 
-        original_lr: float,
         epoch: int,
-        val_interval: int,
-        type: str
+        type: str,
+        best_metric: str
         ):
         """
         Manage the learning rate scheduler, including warm-up and normal scheduling.
@@ -328,13 +326,12 @@ class ModelTrainer:
             # return False  # Continue training
 
         # Step the scheduler
-        if isinstance(self.lr_scheduler, torch.optim.lr_scheduler.CosineAnnealingLR):
-            self.lr_scheduler.step()
-        elif isinstance(self.lr_scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau) and (epoch + 1) % val_interval == 0:
+        eval_epoch = (epoch + 1) % self.val_interval == 0
+        if isinstance(self.lr_scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau) and eval_epoch:
             metric_value = self.results['val_loss'][-1][1]
             self.lr_scheduler.step(metric_value)
-        else:
-            self.lr_scheduler.step()  # Step for other schedulers
+        else: # Step for other schedulers
+            self.lr_scheduler.step() 
 
         # Check learning rate for early stopping
         current_lr = self.optimizer.param_groups[0]['lr']
