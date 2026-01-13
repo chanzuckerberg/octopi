@@ -1,6 +1,5 @@
 from __future__ import annotations
 from monai.inferers import sliding_window_inference
-from octopi.utils.progress import _progress
 from typing import List, Optional, Union
 from octopi.datasets import io as dataio
 import torch, copick, gc, os, pprint
@@ -16,6 +15,14 @@ from monai.transforms import (
     Compose, 
     NormalizeIntensity,
     EnsureChannelFirst,  
+)
+
+# For now let's suppress this warning.
+import warnings
+warnings.filterwarnings(
+    "ignore",
+    message=r"Using a non-tuple sequence for multidimensional indexing is deprecated.*",
+    category=UserWarning,
 )
 
 # Single GPU Inference Support
@@ -295,7 +302,7 @@ class Predictor:
             self.input_dim = dataio.get_input_dimensions(self.test_dataset, self.dim_in)
         
         # Main Loop for Inference
-        for data in _progress(self.test_loader, description=f"Segmenting Tomograms on GPU: {self.device}"):
+        for data in tqdm(self.test_loader, description=f"Segmenting Tomograms on GPU: {self.device}"):
             
             # Run inference on the tomogram
             tomogram = data['image'].to(self.device)
@@ -311,7 +318,8 @@ class Predictor:
                     voxel_spacing
                 )
 
-        print('✅ Predictions Complete!')
+        # Print completion message
+        if self.rank == 0: print('✅ Predictions Complete!')
 
     def create_tta_augmentations(self):
         """Define TTA augmentations and inverse transforms."""
