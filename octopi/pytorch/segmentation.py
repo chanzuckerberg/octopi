@@ -302,7 +302,7 @@ class Predictor:
             self.input_dim = dataio.get_input_dimensions(self.test_dataset, self.dim_in)
         
         # Main Loop for Inference
-        for data in tqdm(self.test_loader, description=f"Segmenting Tomograms on GPU: {self.device}"):
+        for data in tqdm(self.test_loader, desc=f"Segmenting Tomograms on GPU: {self.device}"):
             
             # Run inference on the tomogram
             tomogram = data['image'].to(self.device)

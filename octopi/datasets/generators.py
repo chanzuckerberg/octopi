@@ -13,7 +13,8 @@ class CopickDataModule:
                  sessionid: str = None,
                  userid: str = None,
                  voxel_size: float = 10, 
-                 tomo_batch_size: int = 15
+                 tomo_batch_size: int = 15,
+                 bgr: float = 0.0
                  ): 
 
         # Read Copick Projectdd
@@ -27,6 +28,7 @@ class CopickDataModule:
         self.voxel_size = voxel_size
         self.tomo_alg = tomo_alg.split(",")
         self.tomo_batch_size = tomo_batch_size        
+        self.bgr = bgr
 
         # Construct the Target URI
         self.target_uri = utils.build_target_uri(name, sessionid, userid, voxel_size)
@@ -129,7 +131,7 @@ class CopickDataModule:
         if train_transforms is None:
             train_transforms = Compose([
                 augment.get_transforms(),
-                augment.get_random_transforms(self.input_dim, num_samples, self.Nclasses)
+                augment.get_random_transforms(self.input_dim, num_samples, self.Nclasses, self.bgr)
             ])
 
         # Use SmartCacheDataset if the number of training files exceeds the tomo_batch_size
@@ -206,7 +208,8 @@ class MultiCopickDataModule:
                  sessionid: str = None,
                  userid: str = None,
                  voxel_size: float = 10,
-                 tomo_batch_size: int = 15):
+                 tomo_batch_size: int = 15,
+                 bgr: float = 0.0):
         """
         Initialize MutliCopickDataModule with multiple configs.
 
@@ -225,7 +228,8 @@ class MultiCopickDataModule:
         self.voxel_size = voxel_size
         self.tomo_alg = tomo_alg.split(",")
         self.tomo_batch_size = tomo_batch_size
-
+        self.bgr = bgr
+        
         # Construct the Target URI
         self.target_uri = utils.build_target_uri(name, sessionid, userid, voxel_size)
 
@@ -355,7 +359,7 @@ class MultiCopickDataModule:
         num_samples: int = 64,
         train_transforms: Compose = None,
         val_transforms: Compose = None,
-        val_batch_size: int = 1
+        val_batch_size: int = 1,
         ):
         """
         Create the training and validation datasets and return the DataLoaders.
@@ -378,7 +382,7 @@ class MultiCopickDataModule:
         if train_transforms is None:
             train_transforms = Compose([
                 augment.get_transforms(),
-                augment.get_random_transforms(self.input_dim, num_samples, self.Nclasses)
+                augment.get_random_transforms(self.input_dim, num_samples, self.Nclasses, self.bgr)
             ])
 
         # Create the SmartCacheDataset

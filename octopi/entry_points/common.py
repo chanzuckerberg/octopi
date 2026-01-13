@@ -52,6 +52,8 @@ def train_parameters(octopi: bool = False):
                         help="Interval for validation metric calculations")(f)
         f = click.option('-nepochs', "--num-epochs", type=int, default=1000,
                         help="Number of training epochs")(f)
+        f = click.option('--background-ratio', '-bgr', type=float, default=0.0,
+                        help="Background ratio for data augmentation. 0.0 = no background, only crop labeled objects. 1.0 = 50/50 background/foreground ratio. Values less than 1.0 increases foreground bias. (0.5 -> 2/1, 0.25 -> 4/1)")(f)
         return f
     return decorator
 

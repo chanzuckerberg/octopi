@@ -25,6 +25,7 @@ class ModelSearchSubmit:
         trainRunIDs: List[str] = None,
         validateRunIDs: List[str] = None,
         mlflow_experiment_name: str = 'explore',
+        background_ratio: float = 0.0
     ):
         """
         Initialize the ModelSearch class for architecture search with Optuna.
@@ -48,6 +49,7 @@ class ModelSearchSubmit:
             trainRunIDs (List[str]): List of training run IDs.
             validateRunIDs (List[str]): List of validation run IDs.
             data_split (str): Data split ratios.
+            background_ratio (float): Background ratio for data augmentation.
         """
 
         # Input parameters 
@@ -68,7 +70,8 @@ class ModelSearchSubmit:
         self.trainRunIDs = trainRunIDs
         self.validateRunIDs = validateRunIDs
         self.data_split = data_split
-        
+        self.background_ratio = background_ratio
+
         # Data generator - will be initialized in _initialize_data_generator()
         self.data_generator = None
 
@@ -90,7 +93,8 @@ class ModelSearchSubmit:
                 target_user_id=self.target_user_id,
                 tomo_algorithm=self.tomo_algorithm,
                 voxel_size=self.voxel_size,
-                tomo_batch_size=self.tomo_batch_size
+                tomo_batch_size=self.tomo_batch_size,
+                bgr=self.background_ratio
             )
         else:
             self.data_generator = generators.CopickDataModule(
@@ -100,7 +104,8 @@ class ModelSearchSubmit:
                 target_user_id=self.target_user_id,
                 tomo_algorithm=self.tomo_algorithm,
                 voxel_size=self.voxel_size,
-                tomo_batch_size=self.tomo_batch_size
+                tomo_batch_size=self.tomo_batch_size,
+                bgr=self.background_ratio
             )
 
         # Split datasets into training and validation

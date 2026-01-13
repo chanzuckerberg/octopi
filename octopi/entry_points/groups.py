@@ -27,9 +27,9 @@ click.rich_click.COMMAND_GROUPS = {
 click.rich_click.OPTION_GROUPS = {
     "routines train": [
         {
-            "name": "Input Arguments",
+            "name": "Input/Output Arguments",
             "options": ["--config", "--voxel-size", "--target-info", "--tomo-alg", 
-                       "--trainRunIDs", "--validateRunIDs", "--data-split"]
+                       "--trainRunIDs", "--validateRunIDs", "--data-split", "--output"]
         },
         {
             "name": "Fine-Tuning Arguments",
@@ -38,7 +38,7 @@ click.rich_click.OPTION_GROUPS = {
         {
             "name": "Training Arguments",
             "options": ["--num-epochs", "--val-interval", "--ncache-tomos", "--best-metric", 
-                       "--batch-size", "--lr", "--tversky-alpha", "--output"]
+                       "--batch-size", "--lr", "--tversky-alpha", "--background-ratio"]
         },
         {
             "name": "UNet-Model Arguments",
@@ -91,14 +91,14 @@ click.rich_click.OPTION_GROUPS = {
     ],
     "routines model-explore": [
         {
-            "name": "Input Arguments",
+            "name": "Input/Output Arguments",
             "options": ["--config", "--voxel-size", "--target-info", "--tomo-alg", 
-                       "--mlflow-experiment-name", "--trainRunIDs", "--validateRunIDs", "--data-split"]
+                       "--trainRunIDs", "--validateRunIDs", "--data-split", "--output",  "--mlflow-experiment-name",]
         },
         {
             "name": "Training Arguments",
             "options": ["--model-type", "--num-epochs", "--val-interval", 
-                       "--ncache-tomos", "--best-metric", "--output",
+                       "--ncache-tomos", "--best-metric", "--background-ratio",
                        "--num-trials", "--random-seed"]
         }
     ],
