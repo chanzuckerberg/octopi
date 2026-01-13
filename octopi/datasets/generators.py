@@ -132,16 +132,23 @@ class CopickDataModule:
                 augment.get_random_transforms(self.input_dim, num_samples, self.Nclasses)
             ])
 
-        # Create the SmartCacheDataset
-        self.train_ds = SmartCacheDataset(
-            data=train_files,                
-            transform=train_transforms,
-            cache_num=self.tomo_batch_size,  # e.g. 8–64 volumes
-            replace_rate=0.3,                # e.g. 0.2–0.3
-            num_init_workers=8,
-            num_replace_workers=8,
-            shuffle=False,
-        )
+        # Use SmartCacheDataset if the number of training files exceeds the tomo_batch_size
+        if len(train_files) > self.tomo_batch_size:
+            self.train_ds = SmartCacheDataset(
+                data=train_files,                
+                transform=train_transforms,
+                cache_num=self.tomo_batch_size,  # e.g. 8–64 volumes
+                replace_rate=0.3,                # e.g. 0.2–0.3
+                num_init_workers=8,
+                num_replace_workers=8,
+                shuffle=False,
+            )
+        else:
+            self.train_ds = CacheDataset(
+                data=train_files,                
+                transform=train_transforms,
+                cache_rate=1.0,          # cache all items
+            )
 
         # Create the DataLoader
         train_loader = DataLoader(

@@ -185,16 +185,19 @@ class ModelTrainer:
 
         # Save the original learning rate
         original_lr = self.optimizer.param_groups[0]['lr']
-        self.base_lr = original_lr
+        self.lr0 = original_lr
         self.load_learning_rate_scheduler(lr_scheduler_type)
 
+        # Check if the training dataset has smart caching
+        is_smartcache = ( hasattr(self.train_ds, "start") )
+        if is_smartcache: self.train_ds.start()
+
         # Initialize tqdm around the epoch loop
-        self.train_ds.start()
         try:
             for epoch in tqdm(range(max_epochs), desc=f"Training on GPU: {self.device}", unit="epoch"):
 
                 # Update the cache for the training dataset
-                self.train_ds.update_cache()
+                if is_smartcache: self.train_ds.update_cache()
 
                 # Compute and log average epoch loss           
                 epoch_loss = self.train_update()
@@ -228,14 +231,16 @@ class ModelTrainer:
                         (avg_f1, avg_recall, avg_precision) = (self.results['avg_f1'][-1][1], 
                                                             self.results['avg_recall'][-1][1], 
                                                             self.results['avg_precision'][-1][1])
-                        tqdm.write(f"Epoch {epoch + 1}/{max_epochs}, avg_f1_score: {avg_f1:.4f}, avg_recall: {avg_recall:.4f}, avg_precision: {avg_precision:.4f}")
+                        tqdm.write(f"Epoch {epoch + 1}/{max_epochs}, avg_f1_score: {avg_f1:.4f}, "
+                                     f"avg_recall: {avg_recall:.4f}, avg_precision: {avg_precision:.4f}")
 
                     # Reset metrics function
                     self.metrics_function.reset()
 
                     # Save the best model
-                    if self.results[best_metric][-1][1] > self.results["best_metric"]:
-                        self.results["best_metric"] = self.results[best_metric][-1][1]
+                    curr_best = self.results[best_metric][-1][1]
+                    if curr_best > self.results["best_metric"]:
+                        self.results["best_metric"] = curr_best
                         self.results["best_metric_epoch"] = epoch + 1
 
                         # Read Model Weights and Save
@@ -244,6 +249,7 @@ class ModelTrainer:
                                 self.save_model(model_save_path)
                         else:
                             self.save_model(model_save_path)
+                        if verbose: tqdm.write(f'Saving model at Epoch: {epoch + 1} with {best_metric}: {curr_best:.4f}')    
 
                     # Save plot if Local Training Call
                     if not self.use_mlflow:
@@ -255,9 +261,8 @@ class ModelTrainer:
                             axs=self.axs)
 
                     # Report/prune right after a validation step
-                    objective_val = self.results[best_metric][-1][1]   # e.g., avg_f1 or avg_fbeta
                     if trial:
-                        trial.report(objective_val, step=epoch + 1)
+                        trial.report(curr_best, step=epoch + 1)
                         if trial.should_prune():
                             raise optuna.TrialPruned()                        
 
@@ -271,7 +276,7 @@ class ModelTrainer:
                 if early_stop:
                     break
         finally:
-            self.train_ds.shutdown()
+            if is_smartcache: self.train_ds.shutdown()
 
         return self.results
 
@@ -316,7 +321,7 @@ class ModelTrainer:
         if (epoch + 1) <= self.warmup_epochs:
             scale = (epoch + 1) / self.warmup_epochs
             for param_group in self.optimizer.param_groups:
-                param_group['lr'] = self.base_lr * (0.1 + 0.9 * scale)  # 10% -> 100% over warmup
+                param_group['lr'] = self.lr0 * (0.1 + 0.9 * scale)  # 10% -> 100% over warmup
             return False # Continue training
             # for param_group in self.optimizer.param_groups:
             #     param_group['lr'] = original_lr * self.warmup_lr_factor
