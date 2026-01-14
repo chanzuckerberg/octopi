@@ -2,59 +2,6 @@ from octopi.entry_points import common
 from octopi.utils import parsers
 import rich_click as click
 
-def save_parameters(config: tuple,
-                    target_info: tuple,
-                    tomo_alg: str,
-                    voxel_size: float,
-                    model_type: str,
-                    mlflow_experiment_name: str,
-                    random_seed: int,
-                    num_trials: int,
-                    best_metric: str,
-                    num_epochs: int,
-                    ntomo_cache: int,
-                    trainRunIDs: list,
-                    validateRunIDs: list,
-                    data_split: str,
-                    output_path: str):
-    """
-    Save the Optuna search parameters to a YAML file.
-    """
-    import octopi.utils.io as io
-    import pprint
-
-    # Organize parameters into categories
-    params = {
-        "input": {
-            "copick_config": config,
-            "target_info": target_info,
-            "tomo_algorithm": tomo_alg,
-            "voxel_size": voxel_size,          
-        },
-        "optimization": {
-            "model_type": model_type,
-            "mlflow_experiment_name": mlflow_experiment_name,
-            "random_seed": random_seed,
-            "num_trials": num_trials,
-            "best_metric": best_metric
-        },
-        "training": {
-            "num_epochs": num_epochs,            
-            "ntomo_cache": ntomo_cache,
-            "trainRunIDs": trainRunIDs,
-            "validateRunIDs": validateRunIDs,
-            "data_split": data_split
-        }
-    }
-
-    # Print the parameters
-    print(f"\nParameters for Model Architecture Search:")
-    pprint.pprint(params); print()
-
-    # Save to YAML file
-    io.save_parameters_yaml(params, output_path)
-
-
 @click.command('model-explore')
 # Training Arguments
 @click.option('--random-seed', type=int, default=42,
@@ -104,7 +51,7 @@ def run_model_explore(config, voxel_size, target_info, tomo_alg, mlflow_experime
     """
     Run the model exploration.
     """
-    from octopi.pytorch.model_search_submitter import ModelSearchSubmit
+    from octopi.pytorch.submit_search import ExploreSubmitter
     import os
 
     # Parse the CoPick configuration paths
@@ -116,27 +63,8 @@ def run_model_explore(config, voxel_size, target_info, tomo_alg, mlflow_experime
     # Create the model exploration directory
     os.makedirs(output, exist_ok=True)
 
-    # Save parameters
-    save_parameters(
-        config=config,
-        target_info=target_info,
-        tomo_alg=tomo_alg,
-        voxel_size=voxel_size,
-        model_type=model_type,
-        mlflow_experiment_name=mlflow_experiment_name,
-        random_seed=random_seed,
-        num_trials=num_trials,
-        best_metric=best_metric,
-        num_epochs=num_epochs,
-        ntomo_cache=ncache_tomos,
-        trainRunIDs=trainrunids,
-        validateRunIDs=validaterunids,
-        data_split=data_split,
-        output_path=f'{output}/model-search.yaml'
-    )
-
     # Call the function with parsed arguments
-    search = ModelSearchSubmit(
+    search = ExploreSubmitter(
         copick_config=copick_configs,
         target_name=target_info[0],
         target_user_id=target_info[1],

@@ -14,7 +14,8 @@ class CopickDataModule:
                  userid: str = None,
                  voxel_size: float = 10, 
                  tomo_batch_size: int = 15,
-                 bgr: float = 0.0
+                 bgr: float = 0.0,
+                 verbose: bool = True
                  ): 
 
         # Read Copick Projectdd
@@ -29,6 +30,7 @@ class CopickDataModule:
         self.tomo_alg = tomo_alg.split(",")
         self.tomo_batch_size = tomo_batch_size        
         self.bgr = bgr
+        self.verbose = verbose
 
         # Construct the Target URI
         self.target_uri = utils.build_target_uri(name, sessionid, userid, voxel_size)
@@ -155,7 +157,7 @@ class CopickDataModule:
         # Create the DataLoader
         train_loader = DataLoader(
             self.train_ds, batch_size=1, 
-            shuffle=True, num_workers=8, 
+            shuffle=True, num_workers=4, 
             pin_memory=torch.cuda.is_available()
         )         
 
@@ -176,8 +178,8 @@ class CopickDataModule:
         val_ds = Dataset(
             data=val_files,                
             transform=val_transforms,
-            cache_rate=1.0,          # cache all val items
-            num_workers=8,           # threads for initial caching
+            # cache_rate=1.0,          # cache all val items
+            # num_workers=8,           # threads for initial caching
         )   
 
         # Create the DataLoader
@@ -188,7 +190,8 @@ class CopickDataModule:
         )
 
         # Print the data splits
-        utils.print_splits(self.myRunIDs, train_files, val_files)        
+        if self.verbose:
+            utils.print_splits(self.myRunIDs, train_files, val_files)        
 
         return train_loader, val_loader
 
@@ -434,7 +437,8 @@ class MultiCopickDataModule:
         )
 
         # Print the data splits
-        utils.print_splits(self.myRunIDs, train_files, val_files)
+        if self.verbose:
+            utils.print_splits(self.myRunIDs, train_files, val_files)
 
         return train_loader, val_loader
 

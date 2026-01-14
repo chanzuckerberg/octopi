@@ -32,40 +32,21 @@ def train_model(
     # Force a headless-safe backend everywhere (must be BEFORE pyplot import)
     matplotlib.use("Agg", force=True)
 
+    from octopi.datasets.config import DataGeneratorConfig
     from octopi.datasets import generators
     from monai.losses import TverskyLoss
     from octopi.utils import parsers, io
     from octopi.workflows import train
 
-    # # Multi-config training
-    if isinstance(copick_config_path, dict):
-        data_generator = generators.MultiCopickDataModule(
-            copick_config_path, 
-            tomo_algorithm,
-            target_info[0], 
-            sessionid = target_info[2],
-            userid = target_info[1],
-            voxel_size = voxel_size,
-            tomo_batch_size = ncache_tomos,
-            bgr = background_ratio )
-    else:  # Single-config training
-        data_generator = generators.CopickDataModule(
-            copick_config_path, 
-            tomo_algorithm,
-            target_info[0], 
-            sessionid = target_info[2],
-            userid = target_info[1],
-            voxel_size = voxel_size,
-            tomo_batch_size = ncache_tomos,
-            bgr = background_ratio )
-
-    # Get the data splits and Nclasses
-    ratios = parsers.parse_data_split(data_split)
-    data_generator.get_data_splits(
-        trainRunIDs = trainRunIDs,
-        validateRunIDs = validateRunIDs,
-        train_ratio = ratios[0], val_ratio = ratios[1], test_ratio = ratios[2],
-        create_test_dataset = False)
+    # Create a data generator 
+    cfg = DataGeneratorConfig(
+        config=copick_config_path,
+        name=target_info[0], user_id=target_info[1], session_id=target_info[2],
+        voxel_size=voxel_size, tomo_algorithm=tomo_algorithm, ntomo_cache=ncache_tomos,
+        background_ratio=background_ratio, data_split=data_split,
+        trainRunIDs=trainRunIDs, validateRunIDs=validateRunIDs
+    )
+    data_generator = cfg.create_data_generator()
     model_config['num_classes'] = data_generator.Nclasses
 
     # Loss Functions

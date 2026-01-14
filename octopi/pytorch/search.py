@@ -5,15 +5,19 @@ from octopi.models import common
 import torch, mlflow, optuna, gc
 from octopi.utils import io
 
-class BayesianModelSearch:
+# --------------------------
+# Run Model Search
+# --------------------------
 
-    def __init__(self, data_generator, model_type="Unet", parent_run_id=None, parent_run_name=None):
+class ModelExplorer:
+    def __init__(self, data_generator, model_type="Unet", output='explore_results'):
         """
         Class to handle model creation, training, and optimization.
 
         Args:
             data_generator (object): Data generator object containing dataset properties.
             model_type (str): Type of model to build ("UNet", "AttentionUnet").
+            output (str): Directory to save output results.
         """
         self.data_generator = data_generator
         self.Nclasses = data_generator.Nclasses
@@ -23,10 +27,9 @@ class BayesianModelSearch:
         self.loss_function = None
         self.metrics_function = None
         self.sampling = None
-        self.parent_run_id = parent_run_id
         
         # Define results directory path
-        self.results_dir = f'explore_results_{self.model_type}'            
+        self.output = output               
 
     def my_build_model(self, trial):
         """Builds and initializes a model based on Optuna-suggested parameters."""
@@ -50,7 +53,7 @@ class BayesianModelSearch:
         # Sample crop size and num_samples
         self.sampling = {
             'crop_size': trial.suggest_int("crop_size", 48, 192, step=16),
-            'num_samples': trial.suggest_int("num_samples", 8, 32, step=8)
+            'num_samples': 16
         }
         self.config['dim_in'] = self.sampling['crop_size']
 
@@ -58,7 +61,7 @@ class BayesianModelSearch:
         # Define optimizer
         # lr0 = trial.suggest_float("lr", 1e-4, 1e-3, log=True)
         # wd = trial.suggest_float("weight_decay", 1e-5, 1e-3, log=True)
-        self.optimizer = torch.optim.AdamW(self.model.parameters(), lr=1e-3, weight_decay=1e-4)
+        self.optimizer = torch.optim.AdamW(self.model.parameters(), lr=1e-3, weight_decay=1e-4)      
 
     def _train_model(self, trial, model_trainer, epochs, val_interval, crop_size, num_samples, best_metric):
         """Handles model training and error handling."""
@@ -97,14 +100,17 @@ class BayesianModelSearch:
         trial_num = f"trial_{trial.number}"
 
         # Start MLflow run
-        with mlflow.start_run(run_name=trial_num, nested=True):
+        with mlflow.start_run(run_name=trial_num):
             
             # Build model
             self.my_build_model(trial)
 
             # Create trainer
             self._define_optimizer(trial)
-            model_trainer = trainer.ModelTrainer(self.model, self.device, self.loss_function, self.metrics_function, self.optimizer)
+            model_trainer = trainer.ModelTrainer(
+                self.model, self.device, self.loss_function, 
+                self.metrics_function, self.optimizer
+            )
 
             # Train model and evaluate score
             score = self._train_model(
@@ -119,94 +125,13 @@ class BayesianModelSearch:
             }
             model_trainer.my_log_params(io.flatten_params(params))
 
-            # Explicitly set the parent run ID
-            mlflow.log_param("parent_run_id", self.parent_run_id)
-            mlflow.log_param("parent_run_name", self.parent_run_name)         
-
             # Save best model
             self._save_best_model(trial, model_trainer, score)
 
             # Cleanup
             self.cleanup(model_trainer)
 
-        return score        
-
-    def _setup_parallel_trial_run(self, trial, parent_run=None, gpu_count=1):
-        """Set up parallel MLflow runs and assign GPU for the trial."""
-        
-        trial_num = f"trial_{trial.number}"
-
-        # Create a child run under the parent MLflow experiment
-        mlflow_client = MlflowClient()
-        self.trial_run = mlflow_client.create_run(
-            experiment_id=mlflow_client.get_run(parent_run.info.run_id).info.experiment_id,
-            tags={"mlflow.parentRunId": parent_run.info.run_id},
-            run_name=trial_num
-        )
-        target_run_id = self.trial_run.info.run_id
-        print(f"Logging trial {trial.number} data to MLflow run: {target_run_id}")
-
-        # Assign GPU device
-        if gpu_count > 1:
-            gpu_id = trial.number % gpu_count
-            device = torch.device(f"cuda:{gpu_id}")
-            torch.cuda.set_device(device)
-        else:
-            device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-
-        return device, mlflow_client, target_run_id
-    
-    def multi_gpu_objective(self, parent_run, trial, epochs, val_interval=5, best_metric="avg_f1", gpu_count=1):
-        """
-        Trains model on multiple GPUs using a parent MLflow run.
-        """
-        self.device, self.client, self.target_run_id = self._setup_parallel_trial_run(trial, parent_run, gpu_count)
-        
-        # Build model + trainer
-        self.my_build_model(trial)
-        self._define_optimizer(trial)
-        model_trainer = trainer.ModelTrainer(
-            self.model, self.device, self.loss_function, 
-            self.metrics_function, self.optimizer
-        )
-        model_trainer.set_parallel_mlflow(self.client, self.target_run_id)
-
-        # Train Model, with error handling
-        score = None
-        run_status = "FAILED"   # default; overwritten on success/prune
-        try:
-            score = self._train_model(
-                trial, model_trainer, epochs, val_interval, 
-                self.sampling['crop_size'], self.sampling['num_samples'], 
-                best_metric)
-            # Save best model and mark run as finished
-            run_status = "FINISHED"
-            self._save_best_model(trial, model_trainer, score)
-            return score
-        except optuna.TrialPruned:
-            run_status = "KILLED"  # communicates early stop 
-            raise
-        except Exception as e:
-            run_status = "FAILED"
-            print(f"[Trial Failed] Unexpected error: {e}")
-            trial.set_user_attr("error", str(e))
-            raise optuna.TrialPruned()
-        finally:
-            self.cleanup(model_trainer)
-            model_trainer.my_log_params({"parent_run_name": parent_run.info.run_name})
-            try:
-                if self.client is not None and self.target_run_id is not None:
-                    self.client.set_terminated(self.target_run_id, status=run_status)
-            except Exception as e:
-                print(f"[Cleanup Failed] Unexpected error: {e}")
-
-    def _save_best_model(self, trial, model_trainer, score):
-        """Saves the best model if it improves upon previous scores."""
-        best_score_so_far = self.get_best_score(trial)
-        if score > best_score_so_far:
-            torch.save(model_trainer.model_weights, f'{self.results_dir}/best_model.pth')
-            io.save_parameters_to_yaml(self.model_builder, model_trainer, self.data_generator, 
-                                    f'{self.results_dir}/model_config.yaml')
+        return score
 
     def get_best_score(self, trial):
         """Retrieve the best score from the trial."""
@@ -240,5 +165,4 @@ class BayesianModelSearch:
 
         # Clear the CUDA cache and force garbage collection
         torch.cuda.empty_cache()
-        gc.collect()
-
+        gc.collect()        

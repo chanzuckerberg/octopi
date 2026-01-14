@@ -160,8 +160,7 @@ class ModelTrainer:
         self.use_mlflow = use_mlflow
 
         # Create Save Folder if It Doesn't Exist
-        if model_save_path is not None:
-            os.makedirs(model_save_path, exist_ok=True)  
+        if model_save_path: os.makedirs(model_save_path, exist_ok=True)  
 
         Nclass = data_load_gen.Nclasses
         self.create_results_dictionary(Nclass)  
@@ -241,7 +240,7 @@ class ModelTrainer:
                     curr_best = self.results[best_metric][-1][1]
                     if curr_best > self.results["best_metric"]:
                         self.results["best_metric"] = curr_best
-                        self.results["best_metric_epoch"] = epoch + 1
+                        self.results["best_metric_epoch"] = epoch + 1  
 
                         # Read Model Weights and Save
                         if self.ema_experiment:
@@ -249,22 +248,21 @@ class ModelTrainer:
                                 self.save_model(model_save_path)
                         else:
                             self.save_model(model_save_path)
-                        if verbose: tqdm.write(f'Saving model at Epoch: {epoch + 1} with {best_metric}: {curr_best:.4f}')    
-
-                    # Save plot if Local Training Call
-                    if not self.use_mlflow:
-                        self.fig, self.axs = viz.plot_training_results(
-                            self.results, 
-                            data_load_gen.class_names,
-                            save_plot=os.path.join(model_save_path, "net_train_history.png"), 
-                            fig=self.fig, 
-                            axs=self.axs)
+                        if verbose: tqdm.write(f'Saving model at Epoch: {epoch + 1} with {best_metric}: {curr_best:.4f}')  
 
                     # Report/prune right after a validation step
                     if trial:
                         trial.report(curr_best, step=epoch + 1)
                         if trial.should_prune():
-                            raise optuna.TrialPruned()                        
+                            raise optuna.TrialPruned()
+                    else: # Local Training Call
+                        # Save convergence plots
+                        self.fig, self.axs = viz.plot_training_results(
+                            self.results, 
+                            data_load_gen.class_names,
+                            save_plot=os.path.join(model_save_path, "net_train_history.png"), 
+                            fig=self.fig, 
+                            axs=self.axs)                
 
                     # After Validation Metrics are Logged, Check for Early Stopping
                     if self.stopping_criteria.should_stop_training(epoch_loss, results=self.results, check_metrics=True):
@@ -341,16 +339,21 @@ class ModelTrainer:
 
         return False  # Continue training
         
-    def save_model(self, model_save_path: str):
+    def save_model(self, output: str):
+        """
+        Save Model to output path
+        """
 
         # Store Model Weights as Member Variable
         self.model_weights = self.model.state_dict()
 
         # Save Model Weights to *.pth file
-        if model_save_path is not None:
-            torch.save(self.model_weights, os.path.join(model_save_path, "best_model.pth"))
+        if os.path.exists(output): torch.save(self.model_weights, os.path.join(output, "best_model.pth"))
 
     def create_results_dictionary(self, Nclass: int):
+        """
+        Create the Dictionary that stores all the intermediate results.
+        """
 
         self.results = {
             'loss': [],
@@ -409,17 +412,17 @@ class ModelTrainer:
             self.results[metric_name].append((curr_step, value))
 
         # Log to MLflow or client
-        if self.client is not None and self.trial_run_id is not None:
-            for metric_name, value in metrics_dict.items():
-                self.client.log_metric(
-                    run_id=self.trial_run_id,
-                    key=metric_name,
-                    value=value,
-                    step=curr_step,
-                )
-        elif self.use_mlflow:
-            for metric_name, value in metrics_dict.items():
-                mlflow.log_metric(metric_name, value, step=curr_step)
+        # if self.client is not None and self.trial_run_id is not None:
+        #     for metric_name, value in metrics_dict.items():
+        #         self.client.log_metric(
+        #             run_id=self.trial_run_id,
+        #             key=metric_name,
+        #             value=value,
+        #             step=curr_step,
+        #         )
+        # elif self.use_mlflow:
+        #     for metric_name, value in metrics_dict.items():
+        #         mlflow.log_metric(metric_name, value, step=curr_step)
 
     def fbeta(self, precision, recall):
 
