@@ -50,7 +50,7 @@ class BayesianModelSearch:
         # Sample crop size and num_samples
         self.sampling = {
             'crop_size': trial.suggest_int("crop_size", 48, 192, step=16),
-            'num_samples': 8
+            'num_samples': trial.suggest_int("num_samples", 8, 32, step=8)
         }
         self.config['dim_in'] = self.sampling['crop_size']
 

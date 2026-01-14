@@ -12,7 +12,7 @@ def save_parameters(config: tuple,
                     num_trials: int,
                     best_metric: str,
                     num_epochs: int,
-                    tomo_batch_size: int,
+                    ntomo_cache: int,
                     trainRunIDs: list,
                     validateRunIDs: list,
                     data_split: str,
@@ -40,7 +40,7 @@ def save_parameters(config: tuple,
         },
         "training": {
             "num_epochs": num_epochs,            
-            "tomo_batch_size": tomo_batch_size,
+            "ntomo_cache": ntomo_cache,
             "trainRunIDs": trainRunIDs,
             "validateRunIDs": validateRunIDs,
             "data_split": data_split
@@ -86,7 +86,7 @@ def save_parameters(config: tuple,
 def cli(
     config, voxel_size, target_info, tomo_alg, mlflow_experiment_name, 
     trainrunids, validaterunids, data_split, model_type, num_epochs, background_ratio,
-    val_interval, tomo_batch_size, best_metric, num_trials, random_seed, output):
+    val_interval, ncache_tomos, best_metric, num_trials, random_seed, output):
     """
     Perform model architecture search with Optuna.
     """
@@ -95,12 +95,12 @@ def cli(
     run_model_explore(
         config, voxel_size, target_info, tomo_alg, mlflow_experiment_name, 
         trainrunids, validaterunids, data_split, model_type, background_ratio, 
-        num_epochs, val_interval, tomo_batch_size, best_metric, num_trials, random_seed, output
+        num_epochs, val_interval, ncache_tomos, best_metric, num_trials, random_seed, output
     )
 
 def run_model_explore(config, voxel_size, target_info, tomo_alg, mlflow_experiment_name, 
         trainrunids, validaterunids, data_split, model_type, background_ratio,
-        num_epochs, val_interval, tomo_batch_size, best_metric, num_trials, random_seed, output):
+        num_epochs, val_interval, ncache_tomos, best_metric, num_trials, random_seed, output):
     """
     Run the model exploration.
     """
@@ -128,7 +128,7 @@ def run_model_explore(config, voxel_size, target_info, tomo_alg, mlflow_experime
         num_trials=num_trials,
         best_metric=best_metric,
         num_epochs=num_epochs,
-        tomo_batch_size=tomo_batch_size,
+        ntomo_cache=ncache_tomos,
         trainRunIDs=trainrunids,
         validateRunIDs=validaterunids,
         data_split=data_split,
@@ -150,7 +150,7 @@ def run_model_explore(config, voxel_size, target_info, tomo_alg, mlflow_experime
         num_trials=num_trials,
         trainRunIDs=trainrunids,
         validateRunIDs=validaterunids, 
-        tomo_batch_size=tomo_batch_size,
+        ntomo_cache=ncache_tomos,
         best_metric=best_metric,
         val_interval=val_interval,
         data_split=data_split,
@@ -158,7 +158,7 @@ def run_model_explore(config, voxel_size, target_info, tomo_alg, mlflow_experime
     )
 
     # Run the model search
-    search.run_model_search()
+    search.run_model_search(output=output)
 
 
 if __name__ == "__main__":

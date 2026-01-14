@@ -21,7 +21,7 @@ class ModelSearchSubmit:
         data_split: str = 0.8,
         random_seed: int = 42,
         val_interval: int = 10,
-        tomo_batch_size: int = 15,
+        ntomo_cache: int = 15,
         trainRunIDs: List[str] = None,
         validateRunIDs: List[str] = None,
         mlflow_experiment_name: str = 'explore',
@@ -43,7 +43,7 @@ class ModelSearchSubmit:
             random_seed (int): Seed for reproducibility.
             num_epochs (int): Number of epochs per trial.
             num_trials (int): Number of trials for hyperparameter optimization.
-            tomo_batch_size (int): Batch size for tomogram loading.
+            ntomo_cache (int): Batch size for tomogram loading.
             best_metric (str): Metric to optimize.
             val_interval (int): Validation interval.
             trainRunIDs (List[str]): List of training run IDs.
@@ -64,7 +64,7 @@ class ModelSearchSubmit:
         self.random_seed = random_seed
         self.num_epochs = num_epochs
         self.num_trials = num_trials
-        self.tomo_batch_size = tomo_batch_size
+        self.ntomo_cache = ntomo_cache
         self.best_metric = best_metric
         self.val_interval = val_interval
         self.trainRunIDs = trainRunIDs
@@ -88,24 +88,20 @@ class ModelSearchSubmit:
         if isinstance(self.copick_config, dict):
             self.data_generator = generators.MultiCopickDataModule(
                 self.copick_config,
+                self.tomo_algorithm,
                 self.target_name,
-                target_session_id=self.target_session_id,
-                target_user_id=self.target_user_id,
-                tomo_algorithm=self.tomo_algorithm,
-                voxel_size=self.voxel_size,
-                tomo_batch_size=self.tomo_batch_size,
-                bgr=self.background_ratio
+                self.target_session_id, self.target_user_id,
+                self.voxel_size,
+                self.ntomo_cache, self.background_ratio
             )
         else:
             self.data_generator = generators.CopickDataModule(
                 self.copick_config,
+                self.tomo_algorithm,
                 self.target_name,
-                target_session_id=self.target_session_id,
-                target_user_id=self.target_user_id,
-                tomo_algorithm=self.tomo_algorithm,
-                voxel_size=self.voxel_size,
-                tomo_batch_size=self.tomo_batch_size,
-                bgr=self.background_ratio
+                self.target_session_id, self.target_user_id,
+                self.voxel_size,
+                self.ntomo_cache, self.background_ratio
             )
 
         # Split datasets into training and validation
@@ -116,9 +112,6 @@ class ModelSearchSubmit:
             train_ratio = ratios[0], val_ratio = ratios[1], test_ratio = ratios[2],
             create_test_dataset = False
         )
-        
-        # Get the reload frequency
-        self.data_generator.get_reload_frequency(self.num_epochs)
         self.Nclass = self.data_generator.Nclasses
         
     def _print_input_configs(self):
@@ -131,7 +124,7 @@ class ModelSearchSubmit:
             print(f'  {self.copick_config}')
         print()
 
-    def run_model_search(self):
+    def run_model_search(self, output='explore_results'):
         """Performs model architecture search using Optuna and MLflow."""
 
         # Set up MLflow tracking
@@ -145,7 +138,7 @@ class ModelSearchSubmit:
         mlflow.set_experiment(self.mlflow_experiment_name)
     
         # Create a storage object with heartbeat configuration
-        storage_url = f"sqlite:///explore_results_{self.model_type}/trials.db"
+        storage_url = f"sqlite:///{output}/trials.db"
         self.storage = optuna.storages.RDBStorage(
             url=storage_url,
             heartbeat_interval=60,  # Record heartbeat every minute

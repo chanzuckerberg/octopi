@@ -1,4 +1,4 @@
-from monai.data import DataLoader, SmartCacheDataset, CacheDataset
+from monai.data import DataLoader, SmartCacheDataset, CacheDataset, Dataset
 from octopi.datasets import helpers as utils
 from monai.transforms import Compose
 from octopi.datasets import augment
@@ -173,7 +173,7 @@ class CopickDataModule:
             val_transforms = augment.get_transforms()
 
         # Create the CacheDataset
-        val_ds = CacheDataset(
+        val_ds = Dataset(
             data=val_files,                
             transform=val_transforms,
             cache_rate=1.0,          # cache all val items
