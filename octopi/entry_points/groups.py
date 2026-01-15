@@ -93,7 +93,7 @@ click.rich_click.OPTION_GROUPS = {
         {
             "name": "Input/Output Arguments",
             "options": ["--config", "--voxel-size", "--target-info", "--tomo-alg", 
-                       "--trainRunIDs", "--validateRunIDs", "--data-split", "--output",  "--mlflow-experiment-name",]
+                       "--trainRunIDs", "--validateRunIDs", "--data-split", "--output",  "--study-name",]
         },
         {
             "name": "Training Arguments",
