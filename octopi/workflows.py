@@ -36,21 +36,14 @@ def train(data_generator, loss_function, batch_size = 16,
         overlap (float): The overlap for sliding window inference during validation
     """
 
-    # If No Model Configuration is Provided, Use the Default Configuration
-    if model_config is None:
-        model_config = {
-            'architecture': 'Unet',
-            'num_classes': data_generator.Nclasses,
-            'dim_in': 80,
-            'strides': [2, 2, 1],
-            'channels': [48, 64, 80, 80],
-            'dropout': 0.0, 'num_res_units': 1,
-        }
-        print('No Model Configuration Provided, Using Default Configuration')
-        print(model_config)
     # extract the model config from full config dict
-    elif isinstance(model_config, dict) and 'model' in model_config: 
+    if isinstance(model_config, dict) and 'model' in model_config: 
         model_config = model_config['model']
+    elif model_config is None: 
+        print('No Model Configuration Provided, Using Default Configuration')
+        model_config = builder.get_default_unet_params()
+        model_config['num_classes'] = data_generator.Nclasses
+        print(model_config)
 
     # Monai Functions
     metrics_function = ConfusionMatrixMetric(include_background=False, metric_name=["recall",'precision','f1 score'], reduction="none")

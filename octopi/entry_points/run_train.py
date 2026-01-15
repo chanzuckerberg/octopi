@@ -21,7 +21,8 @@ def train_model(
     num_epochs: int = 100,  
     val_interval: int = 5,
     best_metric: str = 'avg_f1',
-    data_split: str = '0.8'
+    data_split: str = '0.8',
+    background_ratio: float = 0.0
     ):
     """
     Train a 3D U-Net model using the specified CoPick configuration and target information.
@@ -31,51 +32,34 @@ def train_model(
     # Force a headless-safe backend everywhere (must be BEFORE pyplot import)
     matplotlib.use("Agg", force=True)
 
+    from octopi.datasets.config import DataGeneratorConfig
     from octopi.datasets import generators
     from monai.losses import TverskyLoss
     from octopi.utils import parsers, io
     from octopi.workflows import train
 
-    # # Multi-config training
-    if isinstance(copick_config_path, dict):
-        data_generator = generators.MultiCopickDataModule(
-            copick_config_path, 
-            tomo_algorithm,
-            target_info[0], 
-            sessionid = target_info[2],
-            userid = target_info[1],
-            voxel_size = voxel_size,
-            tomo_batch_size = ncache_tomos )
-    else:  # Single-config training
-        data_generator = generators.CopickDataModule(
-            copick_config_path, 
-            tomo_algorithm,
-            target_info[0], 
-            sessionid = target_info[2],
-            userid = target_info[1],
-            voxel_size = voxel_size,
-            tomo_batch_size = ncache_tomos )
-
-    # Get the data splits and Nclasses
-    ratios = parsers.parse_data_split(data_split)
-    data_generator.get_data_splits(
-        trainRunIDs = trainRunIDs,
-        validateRunIDs = validateRunIDs,
-        train_ratio = ratios[0], val_ratio = ratios[1], test_ratio = ratios[2],
-        create_test_dataset = False)
+    # Create a data generator 
+    cfg = DataGeneratorConfig(
+        config=copick_config_path,
+        name=target_info[0], user_id=target_info[1], session_id=target_info[2],
+        voxel_size=voxel_size, tomo_algorithm=tomo_algorithm, ntomo_cache=ncache_tomos,
+        background_ratio=background_ratio, data_split=data_split,
+        trainRunIDs=trainRunIDs, validateRunIDs=validateRunIDs
+    )
+    data_generator = cfg.create_data_generator()
     model_config['num_classes'] = data_generator.Nclasses
 
     # Loss Functions
     alpha = tversky_alpha
     beta = 1 - alpha
     loss_function = TverskyLoss(include_background=True, to_onehot_y=True, softmax=True, alpha=alpha, beta=beta)  
-    
+
     # Train the Model
     train(
         data_generator, loss_function, 
         model_config = model_config, model_weights = model_weights,
         best_metric = best_metric, num_epochs = num_epochs,
-        model_save_path = output, lr0 = lr,
+        model_save_path = output, lr0 = lr, val_interval = val_interval,
         batch_size = batch_size,
     )
 
@@ -118,11 +102,12 @@ def get_model_config(channels, strides, res_units, dim_in):
               callback=lambda ctx, param, value: parsers.parse_target(value),
               help="Target information, e.g., 'name' or 'name,user_id,session_id'. Default is 'targets,octopi,1'.")
 @common.config_parameters(single_config=False)
-def cli(config, voxel_size, target_info, tomo_alg, trainrunids, validaterunids, data_split,
-        model_config, model_weights,
-        channels, strides, res_units, dim_in,
-        num_epochs, val_interval, ncache_tomos, best_metric, 
-        batch_size, lr, tversky_alpha, output):
+def cli(
+    config, voxel_size, target_info, tomo_alg, trainrunids, validaterunids, data_split,
+    model_config, model_weights,
+    channels, strides, res_units, dim_in,
+    num_epochs, val_interval, ncache_tomos, best_metric, 
+    batch_size, lr, tversky_alpha, background_ratio, output):
     """
     Train 3D CNN U-Net models for Cryo-ET semantic segmentation.
     """
@@ -132,13 +117,13 @@ def cli(config, voxel_size, target_info, tomo_alg, trainrunids, validaterunids, 
         model_config, model_weights,
         channels, strides, res_units, dim_in,
         num_epochs, val_interval, ncache_tomos, best_metric, 
-        batch_size, lr, tversky_alpha, output)
+        batch_size, lr, tversky_alpha, background_ratio, output)
 
 def run_train(config, voxel_size, target_info, tomo_alg, trainrunids, validaterunids, data_split,
         model_config, model_weights,
         channels, strides, res_units, dim_in,
         num_epochs, val_interval, ncache_tomos, best_metric, 
-        batch_size, lr, tversky_alpha, output):
+        batch_size, lr, tversky_alpha, background_ratio, output):
     """
     Run the training model.
     """
@@ -150,6 +135,7 @@ def run_train(config, voxel_size, target_info, tomo_alg, trainrunids, validateru
     else:
         copick_configs = config[0]
     
+    # Load the model configuration
     if model_config:
         model_config_dict = io.load_yaml(model_config)
     else:
@@ -173,7 +159,8 @@ def run_train(config, voxel_size, target_info, tomo_alg, trainrunids, validateru
         best_metric=best_metric,
         trainRunIDs=trainrunids,
         validateRunIDs=validaterunids,
-        data_split=data_split
+        data_split=data_split,
+        background_ratio=background_ratio
     )
 
 if __name__ == '__main__':

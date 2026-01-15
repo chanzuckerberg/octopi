@@ -1,4 +1,4 @@
-from monai.data import DataLoader, SmartCacheDataset, CacheDataset
+from monai.data import DataLoader, SmartCacheDataset, CacheDataset, Dataset
 from octopi.datasets import helpers as utils
 from monai.transforms import Compose
 from octopi.datasets import augment
@@ -13,7 +13,9 @@ class CopickDataModule:
                  sessionid: str = None,
                  userid: str = None,
                  voxel_size: float = 10, 
-                 tomo_batch_size: int = 15
+                 tomo_batch_size: int = 15,
+                 bgr: float = 0.0,
+                 verbose: bool = True
                  ): 
 
         # Read Copick Projectdd
@@ -27,6 +29,8 @@ class CopickDataModule:
         self.voxel_size = voxel_size
         self.tomo_alg = tomo_alg.split(",")
         self.tomo_batch_size = tomo_batch_size        
+        self.bgr = bgr
+        self.verbose = verbose
 
         # Construct the Target URI
         self.target_uri = utils.build_target_uri(name, sessionid, userid, voxel_size)
@@ -129,24 +133,31 @@ class CopickDataModule:
         if train_transforms is None:
             train_transforms = Compose([
                 augment.get_transforms(),
-                augment.get_random_transforms(self.input_dim, num_samples, self.Nclasses)
+                augment.get_random_transforms(self.input_dim, num_samples, self.Nclasses, self.bgr)
             ])
 
-        # Create the SmartCacheDataset
-        self.train_ds = SmartCacheDataset(
-            data=train_files,                
-            transform=train_transforms,
-            cache_num=self.tomo_batch_size,  # e.g. 8–64 volumes
-            replace_rate=0.3,                # e.g. 0.2–0.3
-            num_init_workers=8,
-            num_replace_workers=8,
-            shuffle=False,
-        )
+        # Use SmartCacheDataset if the number of training files exceeds the tomo_batch_size
+        if len(train_files) > self.tomo_batch_size:
+            self.train_ds = SmartCacheDataset(
+                data=train_files,                
+                transform=train_transforms,
+                cache_num=self.tomo_batch_size,  # e.g. 8–64 volumes
+                replace_rate=0.3,                # e.g. 0.2–0.3
+                num_init_workers=8,
+                num_replace_workers=8,
+                shuffle=False,
+            )
+        else:
+            self.train_ds = CacheDataset(
+                data=train_files,                
+                transform=train_transforms,
+                cache_rate=1.0,          # cache all items
+            )
 
         # Create the DataLoader
         train_loader = DataLoader(
             self.train_ds, batch_size=1, 
-            shuffle=True, num_workers=8, 
+            shuffle=True, num_workers=4, 
             pin_memory=torch.cuda.is_available()
         )         
 
@@ -164,11 +175,11 @@ class CopickDataModule:
             val_transforms = augment.get_transforms()
 
         # Create the CacheDataset
-        val_ds = CacheDataset(
+        val_ds = Dataset(
             data=val_files,                
             transform=val_transforms,
-            cache_rate=1.0,          # cache all val items
-            num_workers=8,           # threads for initial caching
+            # cache_rate=1.0,          # cache all val items
+            # num_workers=8,           # threads for initial caching
         )   
 
         # Create the DataLoader
@@ -179,7 +190,8 @@ class CopickDataModule:
         )
 
         # Print the data splits
-        utils.print_splits(self.myRunIDs, train_files, val_files)        
+        if self.verbose:
+            utils.print_splits(self.myRunIDs, train_files, val_files)        
 
         return train_loader, val_loader
 
@@ -199,7 +211,10 @@ class MultiCopickDataModule:
                  sessionid: str = None,
                  userid: str = None,
                  voxel_size: float = 10,
-                 tomo_batch_size: int = 15):
+                 tomo_batch_size: int = 15,
+                 bgr: float = 0.0,
+                 verbose: bool = True
+                 ):
         """
         Initialize MutliCopickDataModule with multiple configs.
 
@@ -218,7 +233,9 @@ class MultiCopickDataModule:
         self.voxel_size = voxel_size
         self.tomo_alg = tomo_alg.split(",")
         self.tomo_batch_size = tomo_batch_size
-
+        self.bgr = bgr
+        self.verbose = verbose
+        
         # Construct the Target URI
         self.target_uri = utils.build_target_uri(name, sessionid, userid, voxel_size)
 
@@ -348,7 +365,7 @@ class MultiCopickDataModule:
         num_samples: int = 64,
         train_transforms: Compose = None,
         val_transforms: Compose = None,
-        val_batch_size: int = 1
+        val_batch_size: int = 1,
         ):
         """
         Create the training and validation datasets and return the DataLoaders.
@@ -371,7 +388,7 @@ class MultiCopickDataModule:
         if train_transforms is None:
             train_transforms = Compose([
                 augment.get_transforms(),
-                augment.get_random_transforms(self.input_dim, num_samples, self.Nclasses)
+                augment.get_random_transforms(self.input_dim, num_samples, self.Nclasses, self.bgr)
             ])
 
         # Create the SmartCacheDataset
@@ -423,7 +440,8 @@ class MultiCopickDataModule:
         )
 
         # Print the data splits
-        utils.print_splits(self.myRunIDs, train_files, val_files)
+        if self.verbose:
+            utils.print_splits(self.myRunIDs, train_files, val_files)
 
         return train_loader, val_loader
 

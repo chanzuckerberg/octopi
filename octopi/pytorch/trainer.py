@@ -1,6 +1,5 @@
 from octopi.utils import visualization_tools as viz
 from monai.inferers import sliding_window_inference
-from octopi.utils.progress import _progress
 from octopi.utils import stopping_criteria
 from monai.transforms import AsDiscrete
 from monai.data import decollate_batch
@@ -29,10 +28,6 @@ class ModelTrainer:
         self.metrics_function = metrics_function
         self.optimizer = optimizer
 
-        self.parallel_mlflow = False
-        self.client = None
-        self.trial_run_id = None
-
         # Default F-Beta Value
         self.beta = 2
         self.overlap = 0.5
@@ -46,14 +41,6 @@ class ModelTrainer:
         # Initialize Figure and Axes for Plotting
         self.fig = None; self.axs = None
 
-    def set_parallel_mlflow(self, 
-                            client,
-                            trial_run_id):
-        
-        self.parallel_mlflow = True
-        self.client = client
-        self.trial_run_id = trial_run_id
-    
     def train_update(self):
         """
         Train the model for one epoch.
@@ -143,7 +130,6 @@ class ModelTrainer:
         val_interval: int = 15,
         lr_scheduler_type: str = 'cosine', 
         best_metric: str = 'avg_f1',
-        use_mlflow: bool = False,
         verbose: bool = False,
         trial: optuna.trial.Trial = None
     ):
@@ -153,16 +139,17 @@ class ModelTrainer:
         self.warmup_lr_factor = 0.1
         self.min_lr = 1e-6
 
+        # Store training parameters
         self.max_epochs = max_epochs
         self.crop_size = crop_size
         self.num_samples = my_num_samples
         self.val_interval = val_interval
-        self.use_mlflow = use_mlflow
+        self.use_mlflow = trial # if model exploration call, use mlflow logging
 
         # Create Save Folder if It Doesn't Exist
-        if model_save_path is not None:
-            os.makedirs(model_save_path, exist_ok=True)  
+        if model_save_path: os.makedirs(model_save_path, exist_ok=True)  
 
+        # Get number of classes and create results dictionary
         Nclass = data_load_gen.Nclasses
         self.create_results_dictionary(Nclass)  
 
@@ -185,16 +172,19 @@ class ModelTrainer:
 
         # Save the original learning rate
         original_lr = self.optimizer.param_groups[0]['lr']
-        self.base_lr = original_lr
+        self.lr0 = original_lr
         self.load_learning_rate_scheduler(lr_scheduler_type)
 
+        # Check if the training dataset has smart caching
+        is_smartcache = ( hasattr(self.train_ds, "start") )
+        if is_smartcache: self.train_ds.start()
+
         # Initialize tqdm around the epoch loop
-        self.train_ds.start()
         try:
             for epoch in tqdm(range(max_epochs), desc=f"Training on GPU: {self.device}", unit="epoch"):
 
                 # Update the cache for the training dataset
-                self.train_ds.update_cache()
+                if is_smartcache: self.train_ds.update_cache()
 
                 # Compute and log average epoch loss           
                 epoch_loss = self.train_update()
@@ -228,38 +218,40 @@ class ModelTrainer:
                         (avg_f1, avg_recall, avg_precision) = (self.results['avg_f1'][-1][1], 
                                                             self.results['avg_recall'][-1][1], 
                                                             self.results['avg_precision'][-1][1])
-                        tqdm.write(f"Epoch {epoch + 1}/{max_epochs}, avg_f1_score: {avg_f1:.4f}, avg_recall: {avg_recall:.4f}, avg_precision: {avg_precision:.4f}")
+                        tqdm.write(f"Epoch {epoch + 1}/{max_epochs}, avg_f1_score: {avg_f1:.4f}, "
+                                     f"avg_recall: {avg_recall:.4f}, avg_precision: {avg_precision:.4f}")
 
                     # Reset metrics function
                     self.metrics_function.reset()
 
                     # Save the best model
-                    if self.results[best_metric][-1][1] > self.results["best_metric"]:
-                        self.results["best_metric"] = self.results[best_metric][-1][1]
-                        self.results["best_metric_epoch"] = epoch + 1
+                    curr_val = self.results[best_metric][-1][1]
+                    if curr_val > self.results["best_metric"]:
+                        self.results["best_metric"] = curr_val
+                        self.results["best_metric_epoch"] = epoch + 1  
 
-                        # Read Model Weights and Save
+                        # Read Model Weights and (optionally) Save
                         if self.ema_experiment:
                             with self.ema_handler.average_parameters():
                                 self.save_model(model_save_path)
                         else:
                             self.save_model(model_save_path)
+                        if verbose:
+                            tqdm.write(f'Saving model at Epoch: {epoch + 1} with {best_metric}: {curr_val:.4f}')  
 
-                    # Save plot if Local Training Call
-                    if not self.use_mlflow:
+                    # Report/prune right after a validation step
+                    if trial:
+                        trial.report(curr_val, step=epoch + 1)
+                        if trial.should_prune():
+                            raise optuna.TrialPruned()
+                    else: # Local Training Call
+                        # Save convergence plots
                         self.fig, self.axs = viz.plot_training_results(
                             self.results, 
                             data_load_gen.class_names,
                             save_plot=os.path.join(model_save_path, "net_train_history.png"), 
                             fig=self.fig, 
-                            axs=self.axs)
-
-                    # Report/prune right after a validation step
-                    objective_val = self.results[best_metric][-1][1]   # e.g., avg_f1 or avg_fbeta
-                    if trial:
-                        trial.report(objective_val, step=epoch + 1)
-                        if trial.should_prune():
-                            raise optuna.TrialPruned()                        
+                            axs=self.axs)                
 
                     # After Validation Metrics are Logged, Check for Early Stopping
                     if self.stopping_criteria.should_stop_training(epoch_loss, results=self.results, check_metrics=True):
@@ -267,11 +259,11 @@ class ModelTrainer:
                         break
 
                 # Run the learning rate scheduler
-                early_stop = self.run_scheduler(data_load_gen, original_lr, epoch, val_interval, lr_scheduler_type)
+                early_stop = self.run_scheduler(epoch, lr_scheduler_type, best_metric)
                 if early_stop:
                     break
         finally:
-            self.train_ds.shutdown()
+            if is_smartcache: self.train_ds.shutdown()
 
         return self.results
 
@@ -284,7 +276,7 @@ class ModelTrainer:
             self.lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
                 self.optimizer, T_max=self.max_epochs, eta_min=self.min_lr )
         elif type == "onecyle":
-            max_lr = 1e-3
+            max_lr = self.lr0
             steps_per_epoch = len(self.train_loader)
             self.lr_scheduler = torch.optim.lr_scheduler.OneCycleLR(
                 self.optimizer, max_lr=max_lr, epochs=self.max_epochs, steps_per_epoch=steps_per_epoch )
@@ -303,11 +295,9 @@ class ModelTrainer:
 
     def run_scheduler(
         self, 
-        data_load_gen, 
-        original_lr: float,
         epoch: int,
-        val_interval: int,
-        type: str
+        type: str,
+        best_metric: str
         ):
         """
         Manage the learning rate scheduler, including warm-up and normal scheduling.
@@ -316,20 +306,19 @@ class ModelTrainer:
         if (epoch + 1) <= self.warmup_epochs:
             scale = (epoch + 1) / self.warmup_epochs
             for param_group in self.optimizer.param_groups:
-                param_group['lr'] = self.base_lr * (0.1 + 0.9 * scale)  # 10% -> 100% over warmup
+                param_group['lr'] = self.lr0 * (0.1 + 0.9 * scale)  # 10% -> 100% over warmup
             return False # Continue training
             # for param_group in self.optimizer.param_groups:
             #     param_group['lr'] = original_lr * self.warmup_lr_factor
             # return False  # Continue training
 
         # Step the scheduler
-        if isinstance(self.lr_scheduler, torch.optim.lr_scheduler.CosineAnnealingLR):
-            self.lr_scheduler.step()
-        elif isinstance(self.lr_scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau) and (epoch + 1) % val_interval == 0:
+        eval_epoch = (epoch + 1) % self.val_interval == 0
+        if isinstance(self.lr_scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau) and eval_epoch:
             metric_value = self.results['val_loss'][-1][1]
             self.lr_scheduler.step(metric_value)
-        else:
-            self.lr_scheduler.step()  # Step for other schedulers
+        else: # Step for other schedulers
+            self.lr_scheduler.step() 
 
         # Check learning rate for early stopping
         current_lr = self.optimizer.param_groups[0]['lr']
@@ -339,17 +328,20 @@ class ModelTrainer:
 
         return False  # Continue training
         
-    def save_model(self, model_save_path: str):
-
+    def save_model(self, output: str):
+        """
+        Save Model to output path
+        """
         # Store Model Weights as Member Variable
         self.model_weights = self.model.state_dict()
 
         # Save Model Weights to *.pth file
-        if model_save_path is not None:
-            torch.save(self.model_weights, os.path.join(model_save_path, "best_model.pth"))
+        if output: torch.save(self.model_weights, os.path.join(output, "best_model.pth"))
 
     def create_results_dictionary(self, Nclass: int):
-
+        """
+        Create the Dictionary that stores all the intermediate results.
+        """
         self.results = {
             'loss': [],
             'val_loss': [],
@@ -374,6 +366,9 @@ class ModelTrainer:
         metrics_dict: dict,
         curr_step: int,
         ):
+        """
+        Log metrics to the results dictionary and (optionally) MLflow/client.
+        """
 
         # If metrics_dict contains multiple elements (e.g., recall, precision, f1), process them
         if len(metrics_dict) > 1:
@@ -404,22 +399,17 @@ class ModelTrainer:
         for metric_name, value in metrics_dict.items():
             if metric_name not in self.results:
                 self.results[metric_name] = []
-            self.results[metric_name].append((curr_step, value))
+            self.results[metric_name].append((curr_step, value))          
 
         # Log to MLflow or client
-        if self.client is not None and self.trial_run_id is not None:
-            for metric_name, value in metrics_dict.items():
-                self.client.log_metric(
-                    run_id=self.trial_run_id,
-                    key=metric_name,
-                    value=value,
-                    step=curr_step,
-                )
-        elif self.use_mlflow:
+        if self.use_mlflow:
             for metric_name, value in metrics_dict.items():
                 mlflow.log_metric(metric_name, value, step=curr_step)
 
     def fbeta(self, precision, recall):
+        """
+        Calculate the F-Beta score given precision and recall.
+        """
 
         # Handle division by zero
         numerator = (1 + self.beta**2) * (precision * recall)
@@ -431,21 +421,14 @@ class ModelTrainer:
             numerator / denominator,
             torch.zeros_like(precision)
         )
-        return result
-
-    def my_log_params(
-        self,
-        params_dict: dict, 
-        ):
-
-        if self.client is not None and self.trial_run_id is not None:
-            for key, value in params_dict.items():
-                self.client.log_param(run_id=self.trial_run_id, key=key, value=value)
-        else:
-            mlflow.log_params(params_dict)  
+        return result 
 
     # Example input: best_metric = 'fBeta2_class3' or 'fBeta1' or 'f1_class2'
     def resolve_best_metric(self, best_metric):
+        """
+        Resolve the best metric string to match the keys in the results dictionary.
+        """
+
         fbeta_pattern = r"^fBeta(\d+)(?:_class(\d+))?$"  # Matches fBetaX or fBetaX_classY
         match = re.match(fbeta_pattern, best_metric)
 

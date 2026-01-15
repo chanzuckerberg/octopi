@@ -217,6 +217,7 @@ def get_parameters(datamodule):
         "target_info": [datamodule.target_user_id, datamodule.target_session_id, datamodule.target_name],
         "voxel_size": datamodule.voxel_size,
         "tomo_algorithm": datamodule.tomo_alg,
+        "background_ratio": datamodule.bgr,
     }
 
     # -------------------------

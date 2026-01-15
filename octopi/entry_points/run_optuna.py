@@ -2,59 +2,6 @@ from octopi.entry_points import common
 from octopi.utils import parsers
 import rich_click as click
 
-def save_parameters(config: tuple,
-                    target_info: tuple,
-                    tomo_alg: str,
-                    voxel_size: float,
-                    model_type: str,
-                    mlflow_experiment_name: str,
-                    random_seed: int,
-                    num_trials: int,
-                    best_metric: str,
-                    num_epochs: int,
-                    tomo_batch_size: int,
-                    trainRunIDs: list,
-                    validateRunIDs: list,
-                    data_split: str,
-                    output_path: str):
-    """
-    Save the Optuna search parameters to a YAML file.
-    """
-    import octopi.utils.io as io
-    import pprint
-
-    # Organize parameters into categories
-    params = {
-        "input": {
-            "copick_config": config,
-            "target_info": target_info,
-            "tomo_algorithm": tomo_alg,
-            "voxel_size": voxel_size,          
-        },
-        "optimization": {
-            "model_type": model_type,
-            "mlflow_experiment_name": mlflow_experiment_name,
-            "random_seed": random_seed,
-            "num_trials": num_trials,
-            "best_metric": best_metric
-        },
-        "training": {
-            "num_epochs": num_epochs,            
-            "tomo_batch_size": tomo_batch_size,
-            "trainRunIDs": trainRunIDs,
-            "validateRunIDs": validateRunIDs,
-            "data_split": data_split
-        }
-    }
-
-    # Print the parameters
-    print(f"\nParameters for Model Architecture Search:")
-    pprint.pprint(params); print()
-
-    # Save to YAML file
-    io.save_parameters_yaml(params, output_path)
-
-
 @click.command('model-explore')
 # Training Arguments
 @click.option('--random-seed', type=int, default=42,
@@ -73,36 +20,38 @@ def save_parameters(config: tuple,
 @click.option('-truns', '--trainRunIDs', type=str, default=None,
               callback=lambda ctx, param, value: parsers.parse_list(value) if value else None,
               help="List of training run IDs, e.g., run1,run2 or [run1,run2]")
-@click.option('--mlflow-experiment-name', type=str, default="model-search",
-              help="Name of the MLflow experiment")
+@click.option('--study-name', type=str, default="model-search",
+              help="Name of the Optuna/MLflow experiment")
 @click.option('-alg', '--tomo-alg', type=str, default='wbp',
               help="Tomogram algorithm used for training, provide a comma-separated list of algorithms for multiple options. (e.g., 'denoised,wbp')")
 @click.option('-tinfo', '--target-info', type=str, default="targets,octopi,1",
               callback=lambda ctx, param, value: parsers.parse_target(value),
               help="Target information, e.g., 'name' or 'name,user_id,session_id'")
+@click.option('-o', '--output', type=str, default='explore_results',
+              help="Name of the output directory")
 @common.config_parameters(single_config=False)
-def cli(config, voxel_size, target_info, tomo_alg, mlflow_experiment_name, 
-        trainrunids, validaterunids, data_split,
-        model_type,
-        num_epochs, val_interval, tomo_batch_size, best_metric, num_trials, random_seed):
+def cli(
+    config, voxel_size, target_info, tomo_alg, study_name, 
+    trainrunids, validaterunids, data_split, model_type, num_epochs, background_ratio,
+    val_interval, ncache_tomos, best_metric, num_trials, random_seed, output):
     """
     Perform model architecture search with Optuna.
     """
 
     print('\n🚀 Starting a new Octopi Model Architecture Search...\n')
     run_model_explore(
-        config, voxel_size, target_info, tomo_alg, mlflow_experiment_name, 
-        trainrunids, validaterunids, data_split, model_type,
-        num_epochs, val_interval, tomo_batch_size, best_metric, num_trials, random_seed
+        config, voxel_size, target_info, tomo_alg, study_name, 
+        trainrunids, validaterunids, data_split, model_type, background_ratio, 
+        num_epochs, val_interval, ncache_tomos, best_metric, num_trials, random_seed, output
     )
 
-def run_model_explore(config, voxel_size, target_info, tomo_alg, mlflow_experiment_name, 
-        trainrunids, validaterunids, data_split, model_type,
-        num_epochs, val_interval, tomo_batch_size, best_metric, num_trials, random_seed):
+def run_model_explore(config, voxel_size, target_info, tomo_alg, study_name, 
+        trainrunids, validaterunids, data_split, model_type, background_ratio,
+        num_epochs, val_interval, ncache_tomos, best_metric, num_trials, random_seed, output):
     """
     Run the model exploration.
     """
-    from octopi.pytorch.model_search_submitter import ModelSearchSubmit
+    from octopi.pytorch.submit_search import ExploreSubmitter
     import os
 
     # Parse the CoPick configuration paths
@@ -112,29 +61,10 @@ def run_model_explore(config, voxel_size, target_info, tomo_alg, mlflow_experime
         copick_configs = config[0]
 
     # Create the model exploration directory
-    os.makedirs(f'explore_results_{model_type}', exist_ok=True)
-
-    # Save parameters
-    save_parameters(
-        config=config,
-        target_info=target_info,
-        tomo_alg=tomo_alg,
-        voxel_size=voxel_size,
-        model_type=model_type,
-        mlflow_experiment_name=mlflow_experiment_name,
-        random_seed=random_seed,
-        num_trials=num_trials,
-        best_metric=best_metric,
-        num_epochs=num_epochs,
-        tomo_batch_size=tomo_batch_size,
-        trainRunIDs=trainrunids,
-        validateRunIDs=validaterunids,
-        data_split=data_split,
-        output_path=f'explore_results_{model_type}/octopi.yaml'
-    )
+    os.makedirs(output, exist_ok=True)
 
     # Call the function with parsed arguments
-    search = ModelSearchSubmit(
+    search = ExploreSubmitter(
         copick_config=copick_configs,
         target_name=target_info[0],
         target_user_id=target_info[1],
@@ -142,20 +72,20 @@ def run_model_explore(config, voxel_size, target_info, tomo_alg, mlflow_experime
         tomo_algorithm=tomo_alg,
         voxel_size=voxel_size,
         model_type=model_type,
-        mlflow_experiment_name=mlflow_experiment_name,
         random_seed=random_seed,
         num_epochs=num_epochs,
         num_trials=num_trials,
         trainRunIDs=trainrunids,
         validateRunIDs=validaterunids, 
-        tomo_batch_size=tomo_batch_size,
+        ntomo_cache=ncache_tomos,
         best_metric=best_metric,
         val_interval=val_interval,
-        data_split=data_split
+        data_split=data_split,
+        background_ratio=background_ratio
     )
 
     # Run the model search
-    search.run_model_search()
+    search.run_model_search(study_name, output)
 
 
 if __name__ == "__main__":

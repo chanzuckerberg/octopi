@@ -94,7 +94,7 @@ def get_optimizer_parameters(trainer):
     optimizer_parameters = {
         'my_num_samples': trainer.num_samples,  
         'val_interval': trainer.val_interval,
-        'lr': trainer.optimizer.param_groups[0]['lr'],
+        'lr': trainer.lr0,
         'optimizer': trainer.optimizer.__class__.__name__,
         'metrics_function': trainer.metrics_function.__class__.__name__,
         'loss_function': trainer.loss_function.__class__.__name__,
