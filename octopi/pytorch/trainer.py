@@ -1,6 +1,5 @@
 from octopi.utils import visualization_tools as viz
 from monai.inferers import sliding_window_inference
-from octopi.utils.progress import _progress
 from octopi.utils import stopping_criteria
 from monai.transforms import AsDiscrete
 from monai.data import decollate_batch
@@ -29,10 +28,6 @@ class ModelTrainer:
         self.metrics_function = metrics_function
         self.optimizer = optimizer
 
-        self.parallel_mlflow = False
-        self.client = None
-        self.trial_run_id = None
-
         # Default F-Beta Value
         self.beta = 2
         self.overlap = 0.5
@@ -46,14 +41,6 @@ class ModelTrainer:
         # Initialize Figure and Axes for Plotting
         self.fig = None; self.axs = None
 
-    def set_parallel_mlflow(self, 
-                            client,
-                            trial_run_id):
-        
-        self.parallel_mlflow = True
-        self.client = client
-        self.trial_run_id = trial_run_id
-    
     def train_update(self):
         """
         Train the model for one epoch.
@@ -143,7 +130,6 @@ class ModelTrainer:
         val_interval: int = 15,
         lr_scheduler_type: str = 'cosine', 
         best_metric: str = 'avg_f1',
-        use_mlflow: bool = False,
         verbose: bool = False,
         trial: optuna.trial.Trial = None
     ):
@@ -153,15 +139,17 @@ class ModelTrainer:
         self.warmup_lr_factor = 0.1
         self.min_lr = 1e-6
 
+        # Store training parameters
         self.max_epochs = max_epochs
         self.crop_size = crop_size
         self.num_samples = my_num_samples
         self.val_interval = val_interval
-        self.use_mlflow = use_mlflow
+        self.use_mlflow = trial # if model exploration call, use mlflow logging
 
         # Create Save Folder if It Doesn't Exist
         if model_save_path: os.makedirs(model_save_path, exist_ok=True)  
 
+        # Get number of classes and create results dictionary
         Nclass = data_load_gen.Nclasses
         self.create_results_dictionary(Nclass)  
 
@@ -378,6 +366,9 @@ class ModelTrainer:
         metrics_dict: dict,
         curr_step: int,
         ):
+        """
+        Log metrics to the results dictionary and (optionally) MLflow/client.
+        """
 
         # If metrics_dict contains multiple elements (e.g., recall, precision, f1), process them
         if len(metrics_dict) > 1:
@@ -408,26 +399,17 @@ class ModelTrainer:
         for metric_name, value in metrics_dict.items():
             if metric_name not in self.results:
                 self.results[metric_name] = []
-            self.results[metric_name].append((curr_step, value))
-
-        if self.use_mlflow:
-            # Convert tensors / numpy types to plain floats for MLflow
-            safe = {}
-            for k, v in metrics_dict.items():
-                try:
-                    safe[k] = float(v.item()) if hasattr(v, "item") else float(v)
-                except Exception:
-                    # If something weird sneaks in, skip it rather than crashing
-                    continue
-
-            mlflow.log_metrics(safe, step=curr_step)            
+            self.results[metric_name].append((curr_step, value))          
 
         # Log to MLflow or client
-        # if self.use_mlflow:
-        #     for metric_name, value in metrics_dict.items():
-        #         mlflow.log_metric(metric_name, value, step=curr_step)
+        if self.use_mlflow:
+            for metric_name, value in metrics_dict.items():
+                mlflow.log_metric(metric_name, value, step=curr_step)
 
     def fbeta(self, precision, recall):
+        """
+        Calculate the F-Beta score given precision and recall.
+        """
 
         # Handle division by zero
         numerator = (1 + self.beta**2) * (precision * recall)
@@ -439,21 +421,14 @@ class ModelTrainer:
             numerator / denominator,
             torch.zeros_like(precision)
         )
-        return result
-
-    def my_log_params(
-        self,
-        params_dict: dict, 
-        ):
-
-        if self.client is not None and self.trial_run_id is not None:
-            for key, value in params_dict.items():
-                self.client.log_param(run_id=self.trial_run_id, key=key, value=value)
-        else:
-            mlflow.log_params(params_dict)  
+        return result 
 
     # Example input: best_metric = 'fBeta2_class3' or 'fBeta1' or 'f1_class2'
     def resolve_best_metric(self, best_metric):
+        """
+        Resolve the best metric string to match the keys in the results dictionary.
+        """
+
         fbeta_pattern = r"^fBeta(\d+)(?:_class(\d+))?$"  # Matches fBetaX or fBetaX_classY
         match = re.match(fbeta_pattern, best_metric)
 

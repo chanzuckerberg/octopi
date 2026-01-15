@@ -74,7 +74,6 @@ class ModelExplorer:
                 val_interval=val_interval,
                 my_num_samples=num_samples,
                 best_metric=best_metric,
-                use_mlflow=True,
                 verbose=False,
                 trial=trial
             )
@@ -149,7 +148,7 @@ class ModelExplorer:
             'model': self.model_builder.get_model_parameters(),
             'optimizer': io.get_optimizer_parameters(model_trainer)
         }    
-        model_trainer.my_log_params(io.flatten_params(params))
+        mlflow.log_params(io.flatten_params(params))
         mlflow.set_tags({
             "study_name": trial.study.study_name,
             "trial_number": str(trial.number),
