@@ -237,22 +237,23 @@ class ModelTrainer:
                     self.metrics_function.reset()
 
                     # Save the best model
-                    curr_best = self.results[best_metric][-1][1]
-                    if curr_best > self.results["best_metric"]:
-                        self.results["best_metric"] = curr_best
+                    curr_val = self.results[best_metric][-1][1]
+                    if curr_val > self.results["best_metric"]:
+                        self.results["best_metric"] = curr_val
                         self.results["best_metric_epoch"] = epoch + 1  
 
-                        # Read Model Weights and Save
+                        # Read Model Weights and (optionally) Save
                         if self.ema_experiment:
                             with self.ema_handler.average_parameters():
                                 self.save_model(model_save_path)
                         else:
                             self.save_model(model_save_path)
-                        if verbose: tqdm.write(f'Saving model at Epoch: {epoch + 1} with {best_metric}: {curr_best:.4f}')  
+                        if verbose:
+                            tqdm.write(f'Saving model at Epoch: {epoch + 1} with {best_metric}: {curr_val:.4f}')  
 
                     # Report/prune right after a validation step
                     if trial:
-                        trial.report(curr_best, step=epoch + 1)
+                        trial.report(curr_val, step=epoch + 1)
                         if trial.should_prune():
                             raise optuna.TrialPruned()
                     else: # Local Training Call
@@ -348,7 +349,7 @@ class ModelTrainer:
         self.model_weights = self.model.state_dict()
 
         # Save Model Weights to *.pth file
-        if os.path.exists(output): torch.save(self.model_weights, os.path.join(output, "best_model.pth"))
+        if output: torch.save(self.model_weights, os.path.join(output, "best_model.pth"))
 
     def create_results_dictionary(self, Nclass: int):
         """

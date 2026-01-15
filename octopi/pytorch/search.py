@@ -19,17 +19,17 @@ class ModelExplorer:
             model_type (str): Type of model to build ("UNet", "AttentionUnet").
             output (str): Directory to save output results.
         """
+
+        # Member variables
         self.data_generator = data_generator
         self.Nclasses = data_generator.Nclasses
-        self.device = None
         self.model_type = model_type
+        self.output = output               
+        self.device = None
         self.model = None
         self.loss_function = None
         self.metrics_function = None
         self.sampling = None
-        
-        # Define results directory path
-        self.output = output               
 
     def my_build_model(self, trial):
         """Builds and initializes a model based on Optuna-suggested parameters."""
@@ -139,6 +139,14 @@ class ModelExplorer:
             return trial.study.best_value
         except ValueError:
             return -float('inf')
+
+    def _save_best_model(self, trial, model_trainer, score):
+        """Saves the best model if it improves upon previous scores."""
+        best_score_so_far = self.get_best_score(trial)
+        if score > best_score_so_far:
+            torch.save(model_trainer.model_weights, f'{self.output}/best_model.pth')
+            io.save_parameters_to_yaml(self.model_builder, model_trainer, self.data_generator, 
+                                    f'{self.output}/model_config.yaml')            
 
     def cleanup(self, model_trainer):
         """Handles cleanup of resources."""

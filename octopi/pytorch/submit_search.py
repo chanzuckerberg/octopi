@@ -96,16 +96,20 @@ def gpu_worker_loop(
     storage = make_storage(storage_url)
     study = get_study(study_name, storage, submit_kwargs.get("val_interval", 10))
 
-    # Build datamodule per-worker
-    cfg = config.DataGeneratorConfig.from_dict(submit_kwargs)
-    data_generator = cfg.create_data_generator()
-    model_search = ModelExplorer(data_generator, submit_kwargs["model_type"], submit_kwargs["output"])
-
     # Main loop: keep asking for new trials until enough trials have been completed or something breaks
     while not stop_event.is_set():
         try:
             # Ask for a new trial
             trial = study.ask()
+
+            # Verbose to show data splits (# runs / tomograms) for only the first trial
+            if trial.number == 0: verbose = True
+            else: verbose = False
+
+            # Build datamodule per-worker
+            cfg = config.DataGeneratorConfig.from_dict(submit_kwargs)
+            data_generator = cfg.create_data_generator(verbose=verbose)
+            model_search = ModelExplorer(data_generator, submit_kwargs["model_type"], submit_kwargs["output"])            
 
             try:
                 value = model_search.objective(
