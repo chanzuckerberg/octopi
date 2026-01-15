@@ -20,8 +20,8 @@ import rich_click as click
 @click.option('-truns', '--trainRunIDs', type=str, default=None,
               callback=lambda ctx, param, value: parsers.parse_list(value) if value else None,
               help="List of training run IDs, e.g., run1,run2 or [run1,run2]")
-@click.option('--mlflow-experiment-name', type=str, default="model-search",
-              help="Name of the MLflow experiment")
+@click.option('--study-name', type=str, default="model-search",
+              help="Name of the Optuna/MLflow experiment")
 @click.option('-alg', '--tomo-alg', type=str, default='wbp',
               help="Tomogram algorithm used for training, provide a comma-separated list of algorithms for multiple options. (e.g., 'denoised,wbp')")
 @click.option('-tinfo', '--target-info', type=str, default="targets,octopi,1",
@@ -31,7 +31,7 @@ import rich_click as click
               help="Name of the output directory")
 @common.config_parameters(single_config=False)
 def cli(
-    config, voxel_size, target_info, tomo_alg, mlflow_experiment_name, 
+    config, voxel_size, target_info, tomo_alg, study_name, 
     trainrunids, validaterunids, data_split, model_type, num_epochs, background_ratio,
     val_interval, ncache_tomos, best_metric, num_trials, random_seed, output):
     """
@@ -40,12 +40,12 @@ def cli(
 
     print('\n🚀 Starting a new Octopi Model Architecture Search...\n')
     run_model_explore(
-        config, voxel_size, target_info, tomo_alg, mlflow_experiment_name, 
+        config, voxel_size, target_info, tomo_alg, study_name, 
         trainrunids, validaterunids, data_split, model_type, background_ratio, 
         num_epochs, val_interval, ncache_tomos, best_metric, num_trials, random_seed, output
     )
 
-def run_model_explore(config, voxel_size, target_info, tomo_alg, mlflow_experiment_name, 
+def run_model_explore(config, voxel_size, target_info, tomo_alg, study_name, 
         trainrunids, validaterunids, data_split, model_type, background_ratio,
         num_epochs, val_interval, ncache_tomos, best_metric, num_trials, random_seed, output):
     """
@@ -72,7 +72,6 @@ def run_model_explore(config, voxel_size, target_info, tomo_alg, mlflow_experime
         tomo_algorithm=tomo_alg,
         voxel_size=voxel_size,
         model_type=model_type,
-        mlflow_experiment_name=mlflow_experiment_name,
         random_seed=random_seed,
         num_epochs=num_epochs,
         num_trials=num_trials,
@@ -86,7 +85,7 @@ def run_model_explore(config, voxel_size, target_info, tomo_alg, mlflow_experime
     )
 
     # Run the model search
-    search.run_model_search(output=output)
+    search.run_model_search(study_name, output)
 
 
 if __name__ == "__main__":

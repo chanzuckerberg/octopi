@@ -52,7 +52,7 @@ class ModelExplorer:
 
         # Sample crop size and num_samples
         self.sampling = {
-            'crop_size': trial.suggest_int("crop_size", 48, 192, step=16),
+            'crop_size': trial.suggest_int("crop_size", 48, 160, step=16),
             'num_samples': 16
         }
         self.config['dim_in'] = self.sampling['crop_size']
@@ -97,7 +97,7 @@ class ModelExplorer:
         self.device = device
         
         # Set a unique run name for each trial
-        trial_num = f"trial_{trial.number}"
+        trial_num = f"trial_{trial.number:03d}"
 
         # Start MLflow run
         with mlflow.start_run(run_name=trial_num):
@@ -116,20 +116,13 @@ class ModelExplorer:
             score = self._train_model(
                 trial, model_trainer, epochs, val_interval, 
                 self.sampling['crop_size'], self.sampling['num_samples'], 
-                best_metric)               
-
-            # Log parameters and metrics
-            params = {
-                'model': self.model_builder.get_model_parameters(),
-                'optimizer': io.get_optimizer_parameters(model_trainer)
-            }
-            model_trainer.my_log_params(io.flatten_params(params))
+                best_metric)
 
             # Save best model
             self._save_best_model(trial, model_trainer, score)
 
             # Cleanup
-            self.cleanup(model_trainer)
+            self.cleanup(model_trainer, trial)
 
         return score
 
@@ -148,7 +141,7 @@ class ModelExplorer:
             io.save_parameters_to_yaml(self.model_builder, model_trainer, self.data_generator, 
                                     f'{self.output}/model_config.yaml')            
 
-    def cleanup(self, model_trainer):
+    def cleanup(self, model_trainer, trial):
         """Handles cleanup of resources."""
 
         # Log training parameters
@@ -157,6 +150,10 @@ class ModelExplorer:
             'optimizer': io.get_optimizer_parameters(model_trainer)
         }    
         model_trainer.my_log_params(io.flatten_params(params))
+        mlflow.set_tags({
+            "study_name": trial.study.study_name,
+            "trial_number": str(trial.number),
+        })
     
         # Delete the trainer and optimizer objects
         del model_trainer, self.optimizer

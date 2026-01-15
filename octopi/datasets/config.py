@@ -28,9 +28,6 @@ class DataGeneratorConfig:
     data_split: str = "0.8"
     trainRunIDs: Optional[List[str]] = field(default_factory=list)
     validateRunIDs: Optional[List[str]] = field(default_factory=list)
-    
-    # Verbosity
-    verbose: bool = True
 
     # -------------------------
     # Constructors
@@ -71,14 +68,14 @@ class DataGeneratorConfig:
                 self.config, tomo_alg,
                 self.name, self.session_id, self.user_id,
                 self.voxel_size, self.ntomo_cache, self.background_ratio,
-                self.verbose
+                verbose
             )
         else:
             data_generator = generators.CopickDataModule(
                 self.config, tomo_alg,
                 self.name, self.session_id, self.user_id,
                 self.voxel_size, self.ntomo_cache, self.background_ratio,
-                self.verbose
+                verbose
             )
 
         # Parse split

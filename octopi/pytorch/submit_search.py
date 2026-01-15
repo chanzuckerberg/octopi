@@ -35,9 +35,7 @@ def make_storage(storage_url: str):
     # For multi-worker: prefer Postgres/MySQL. SQLite can lock.
     return optuna.storages.RDBStorage(
         url=storage_url,
-        heartbeat_interval=60,
         grace_period=600,
-        failed_trial_callback=optuna.storages.RetryFailedTrialCallback(max_retry=1),
         engine_kwargs={"pool_pre_ping": True},
     )
 
@@ -167,7 +165,7 @@ class ExploreSubmitter:
         val_interval: int = 10,
         ntomo_cache: int = 15,
         trainRunIDs: List[str] = None, validateRunIDs: List[str] = None,
-        mlflow_experiment_name: str = 'explore',
+        study_name: str = 'explore',
         background_ratio: float = 0.0
     ):
         """
@@ -182,7 +180,6 @@ class ExploreSubmitter:
             voxel_size (float): Voxel size for tomograms.
             Nclass (int): Number of prediction classes.
             model_type (str): Type of model to use.
-            mlflow_experiment_name (str): MLflow experiment name.
             random_seed (int): Seed for reproducibility.
             num_epochs (int): Number of epochs per trial.
             num_trials (int): Number of trials for hyperparameter optimization.
@@ -203,7 +200,6 @@ class ExploreSubmitter:
         self.tomo_algorithm = tomo_algorithm
         self.voxel_size = voxel_size
         self.model_type = model_type
-        self.mlflow_experiment_name = mlflow_experiment_name
         self.random_seed = random_seed
         self.num_epochs = num_epochs
         self.num_trials = num_trials
@@ -224,9 +220,6 @@ class ExploreSubmitter:
 
         # Set random seed for reproducibility
         config.set_seed(self.random_seed)
-    
-        # Set the MLflow experiment 
-        mlflow.set_experiment(self.mlflow_experiment_name)
 
         # Get list of available GPU IDs
         gpu_ids = list(range(torch.cuda.device_count()))
@@ -234,7 +227,7 @@ class ExploreSubmitter:
             raise RuntimeError("No GPUs visible. If you expect GPUs, check CUDA setup.")
 
         # Get the parameters
-        submit_kwargs = self.get_parameters()
+        submit_kwargs = self.get_parameters(study_name)
         submit_kwargs["output"] = output
         self.save_parameters(submit_kwargs, output)
 
@@ -243,6 +236,9 @@ class ExploreSubmitter:
         storage_url = f"sqlite:///{output}/trials.db"
         storage = make_storage(storage_url)
         study = get_study(study_name, storage, self.val_interval)
+
+        # Set the MLflow experiment 
+        mlflow.set_experiment(study_name)
 
         # Supervisor process: start one worker process per GPU
         mp.set_start_method("spawn", force=True)
@@ -352,7 +348,7 @@ class ExploreSubmitter:
         # Save to CSV
         df.to_csv(f"{output}/optuna_results.csv", index=False)
 
-    def get_parameters(self):
+    def get_parameters(self, study_name: str) -> dict:
         """Returns the parameters of the model search submitter."""
         return dict(
             config=self.copick_config,
@@ -363,7 +359,7 @@ class ExploreSubmitter:
             data_split=self.data_split, random_seed=self.random_seed,
             val_interval=self.val_interval, ntomo_cache=self.ntomo_cache,
             trainRunIDs=self.trainRunIDs, validateRunIDs=self.validateRunIDs,
-            mlflow_experiment_name=self.mlflow_experiment_name
+            study_name=study_name
         )
 
     def save_parameters(self, params, output):

@@ -212,7 +212,9 @@ class MultiCopickDataModule:
                  userid: str = None,
                  voxel_size: float = 10,
                  tomo_batch_size: int = 15,
-                 bgr: float = 0.0):
+                 bgr: float = 0.0,
+                 verbose: bool = True
+                 ):
         """
         Initialize MutliCopickDataModule with multiple configs.
 
@@ -232,6 +234,7 @@ class MultiCopickDataModule:
         self.tomo_alg = tomo_alg.split(",")
         self.tomo_batch_size = tomo_batch_size
         self.bgr = bgr
+        self.verbose = verbose
         
         # Construct the Target URI
         self.target_uri = utils.build_target_uri(name, sessionid, userid, voxel_size)

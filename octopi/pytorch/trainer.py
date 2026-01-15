@@ -344,7 +344,6 @@ class ModelTrainer:
         """
         Save Model to output path
         """
-
         # Store Model Weights as Member Variable
         self.model_weights = self.model.state_dict()
 
@@ -355,7 +354,6 @@ class ModelTrainer:
         """
         Create the Dictionary that stores all the intermediate results.
         """
-
         self.results = {
             'loss': [],
             'val_loss': [],
@@ -412,16 +410,20 @@ class ModelTrainer:
                 self.results[metric_name] = []
             self.results[metric_name].append((curr_step, value))
 
+        if self.use_mlflow:
+            # Convert tensors / numpy types to plain floats for MLflow
+            safe = {}
+            for k, v in metrics_dict.items():
+                try:
+                    safe[k] = float(v.item()) if hasattr(v, "item") else float(v)
+                except Exception:
+                    # If something weird sneaks in, skip it rather than crashing
+                    continue
+
+            mlflow.log_metrics(safe, step=curr_step)            
+
         # Log to MLflow or client
-        # if self.client is not None and self.trial_run_id is not None:
-        #     for metric_name, value in metrics_dict.items():
-        #         self.client.log_metric(
-        #             run_id=self.trial_run_id,
-        #             key=metric_name,
-        #             value=value,
-        #             step=curr_step,
-        #         )
-        # elif self.use_mlflow:
+        # if self.use_mlflow:
         #     for metric_name, value in metrics_dict.items():
         #         mlflow.log_metric(metric_name, value, step=curr_step)
 
