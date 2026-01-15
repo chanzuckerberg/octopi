@@ -1,6 +1,6 @@
+from click.types import FloatRange
 from octopi.utils import parsers
 import rich_click as click
-from typing import List, Tuple
 
 def model_parameters(octopi: bool = False):
     """Decorator for adding model parameters"""
@@ -52,8 +52,13 @@ def train_parameters(octopi: bool = False):
                         help="Interval for validation metric calculations")(f)
         f = click.option('-nepochs', "--num-epochs", type=int, default=1000,
                         help="Number of training epochs")(f)
-        f = click.option('--background-ratio', '-bgr', type=float, default=0.0,
-                        help="Background ratio for data augmentation. 0.0 = no background, only crop labeled objects. 1.0 = 50/50 background/foreground ratio. Values less than 1.0 increases foreground bias. (0.5 -> 2/1, 0.25 -> 4/1)")(f)
+        f = click.option('--background-ratio', '-bgr', type=FloatRange(0.0, 1.0, min_open=False, max_open=False), default=0.0,
+                        help=(
+                            "Controls background-vs-foreground crop sampling.\n"
+                            "  0.0 : disable pos/neg sampling (only labeled-object crops)\n"
+                            "  1.0 : 50/50 foreground/background\n"
+                            " <1.0 : foreground-biased sampling (0.5→2/1, 0.25→4/1)"
+                        ),)(f)
         return f
     return decorator
 
