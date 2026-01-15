@@ -72,7 +72,9 @@ def get_random_transforms( input_dim, num_samples, Nclasses, bg_ratio: float = 0
         raise ValueError(f"bg_ratio must be in [0,1], got {bg_ratio}")
 
     # Determine the cropping strategy based on bg_ratio
-    if bg_ratio: # Provide Pure Background Crops
+    if bg_ratio: 
+        # Mixed pos/neg crops: include some background (neg) 
+        # but never more than foreground (pos)    
         pos, neg = _pos_neg_from_bg_ratio(bg_ratio)
         crop = RandCropByPosNegLabeld(
             keys=['image', 'label'],
