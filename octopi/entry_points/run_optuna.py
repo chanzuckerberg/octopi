@@ -20,7 +20,7 @@ import rich_click as click
 @click.option('-truns', '--trainRunIDs', type=str, default=None,
               callback=lambda ctx, param, value: parsers.parse_list(value) if value else None,
               help="List of training run IDs, e.g., run1,run2 or [run1,run2]")
-@click.option('--study-name', type=str, default="model-search",
+@click.option('-n', '--study-name', type=str, default="model-search",
               help="Name of the Optuna/MLflow experiment")
 @click.option('-alg', '--tomo-alg', type=str, default='wbp',
               help="Tomogram algorithm used for training, provide a comma-separated list of algorithms for multiple options. (e.g., 'denoised,wbp')")
