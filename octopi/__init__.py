@@ -1,4 +1,4 @@
-__version__ = "1.4.0"
+__version__ = "1.5.0"
 
 # Shared CLI context settings for all commands
 cli_context = {

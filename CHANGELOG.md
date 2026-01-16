@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.5.0](https://github.com/chanzuckerberg/octopi/compare/octopi-v1.4.0...octopi-v1.5.0) (2026-01-16)
+
+
+### ✨ Features
+
+* Cache dataset, Provide Support for Multi Tomogram Algorithms ([#52](https://github.com/chanzuckerberg/octopi/issues/52)) ([fd4842a](https://github.com/chanzuckerberg/octopi/commit/fd4842a12020653a686c8407eee99c9c18994db9))
+* Cropping control ([#54](https://github.com/chanzuckerberg/octopi/issues/54)) ([983d8ee](https://github.com/chanzuckerberg/octopi/commit/983d8ee64b923c11092ae43cf6648c1bdfa1d18c))
+
+
+### 🐞 Bug Fixes
+
+* dashboards description ([#56](https://github.com/chanzuckerberg/octopi/issues/56)) ([56b92a1](https://github.com/chanzuckerberg/octopi/commit/56b92a1f2302e9dce03a3582db8693255ef9fc7c))
+* Improve the Documents for training and optuna stability ([#55](https://github.com/chanzuckerberg/octopi/issues/55)) ([3c1c3d0](https://github.com/chanzuckerberg/octopi/commit/3c1c3d00f6ecebef91f7a18ef0aeab2a6ecd2165))
+
 ## [1.4.0](https://github.com/chanzuckerberg/octopi/compare/octopi-v1.3.3...octopi-v1.4.0) (2025-12-23)
 
 
