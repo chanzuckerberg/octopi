@@ -56,22 +56,22 @@ def get_sampler():
         multivariate=True
     )
 
-def get_pruner(val_interval: int):
+def get_pruner(val_interval: int, n_warmup_steps: int = 300):
     """Returns Optuna's pruning strategy."""
     return optuna.pruners.MedianPruner(
         n_startup_trials=10,    # let at least 10 full trials run before pruning
-        n_warmup_steps=300,     # dont prune before 300 epochs/steps
+        n_warmup_steps=n_warmup_steps,     # dont prune before 300 epochs/steps
         interval_steps=val_interval       # check each interval
     )    
 
-def get_study(study_name: str, storage: str, val_interval: int):
+def get_study(study_name: str, storage: str, val_interval: int, n_warmup_steps: int = 300):
     """Returns the Optuna study object."""
     return optuna.create_study(
             study_name=study_name,
             storage=storage,
             direction="maximize",
             sampler=get_sampler(),
-            pruner=get_pruner(val_interval),
+            pruner=get_pruner(val_interval, n_warmup_steps),
             load_if_exists=True,
         )
 
@@ -211,6 +211,7 @@ class ExploreSubmitter:
         self.model_type = model_type
         self.random_seed = random_seed
         self.num_epochs = num_epochs
+        self.n_warmup_steps = int(num_epochs / 3)
         self.num_trials = num_trials
         self.ntomo_cache = ntomo_cache
         self.best_metric = best_metric
@@ -244,7 +245,7 @@ class ExploreSubmitter:
         os.makedirs(output, exist_ok=True)
         storage_url = f"sqlite:///{output}/trials.db"
         storage = make_storage(storage_url)
-        study = get_study(study_name, storage, self.val_interval)
+        study = get_study(study_name, storage, self.val_interval, self.n_warmup_steps)
 
         # Set the MLflow experiment 
         mlflow.set_experiment(study_name)
