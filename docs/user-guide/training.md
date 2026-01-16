@@ -284,14 +284,6 @@ Octopi supports two complementary workflows:
         - Best-performing model checkpoints
         - Per-trial metrics and configurations
 
-    !!! tip "Best Practices"
-
-        1. **Start with default parameters** - Let optimization do the work
-        2. **Use multiple data sources** - Combine real and synthetic data when available
-        3. **Run sufficient trials** - At least 20-25 for good optimization
-        4. **Monitor progress** - Use Optuna dashboard to track convergence
-        5. **Validate results** - Check that best model makes sense for your data        
-
 ## Next Steps
 
 After training is complete:

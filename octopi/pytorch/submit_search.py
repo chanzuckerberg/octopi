@@ -60,7 +60,7 @@ def get_pruner(val_interval: int, n_warmup_steps: int = 300):
     """Returns Optuna's pruning strategy."""
     return optuna.pruners.MedianPruner(
         n_startup_trials=10,    # let at least 10 full trials run before pruning
-        n_warmup_steps=n_warmup_steps,     # dont prune before 300 epochs/steps
+        n_warmup_steps=n_warmup_steps,     # dont prune before (nepochs / 3) epochs
         interval_steps=val_interval       # check each interval
     )    
 
