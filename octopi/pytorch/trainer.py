@@ -151,6 +151,7 @@ class ModelTrainer:
 
         # Get number of classes and create results dictionary
         Nclass = data_load_gen.Nclasses
+        self.class_names = data_load_gen.class_names
         self.create_results_dictionary(Nclass)  
 
         # Resolve the best metric
@@ -248,7 +249,7 @@ class ModelTrainer:
                         # Save convergence plots
                         self.fig, self.axs = viz.plot_training_results(
                             self.results, 
-                            data_load_gen.class_names,
+                            self.class_names,
                             save_plot=os.path.join(model_save_path, "net_train_history.png"), 
                             fig=self.fig, 
                             axs=self.axs)                
@@ -361,6 +362,26 @@ class ModelTrainer:
 
         self.metric_names = self.results.keys()
 
+    def _map_class_to_name(self, metric_name: str) -> str:
+        """
+        Replace class indices in metric names with class names for logging.
+        Example: f1_class2 -> f1_ribosome (if class_names[1] == 'ribosome')
+        """
+        m = re.search(r"_class(\d+)", metric_name)
+        if not m:
+            return metric_name
+
+        class_idx_1based = int(m.group(1))
+        class_idx_0based = class_idx_1based - 1
+
+        if 0 <= class_idx_0based < len(self.class_names):
+            class_name = self.class_names[class_idx_0based]
+
+            # replace only the "classN" token (not the whole metric)
+            return metric_name.replace(f"class{class_idx_1based}", class_name)
+
+        return metric_name          
+
     def my_log_metrics(
         self,
         metrics_dict: dict,
@@ -404,6 +425,7 @@ class ModelTrainer:
         # Log to MLflow or client
         if self.use_mlflow:
             for metric_name, value in metrics_dict.items():
+                metric_name = self._map_class_to_name(metric_name)
                 mlflow.log_metric(metric_name, value, step=curr_step)
 
     def fbeta(self, precision, recall):

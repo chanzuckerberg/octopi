@@ -32,7 +32,7 @@ def train_parameters(octopi: bool = False):
     """Decorator for adding training parameters"""
     def decorator(f):
         if octopi:
-            f = click.option("-nt", "--num-trials", type=int, default=10,
+            f = click.option("-nt", "--num-trials", type=int, default=100,
                             help="Number of trials for architecture search")(f)
         else:
             f = click.option("-o", "--output", type=click.Path(), default='results',

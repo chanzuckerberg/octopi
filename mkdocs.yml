@@ -75,8 +75,7 @@ nav:
     - Import to Copick: user-guide/data-import.md 
     - Pick Particles: user-guide/pick-particles.md
     - Create Target Labels: user-guide/labels.md
-    - Model Exploration: user-guide/training-basics.md
-    - Train Individual Models: user-guide/advanced-training.md
+    - Train Models: user-guide/training.md
     - Inference: user-guide/inference.md
   - API Tutorial: 
     - Overview: api/index.md

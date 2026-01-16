@@ -15,6 +15,7 @@ import pandas as pd
 # -----------------------------
 POLL_S = 5
 MAX_RESTARTS_PER_GPU = 25
+CHECK_DB_EVERY_S = 120 # 2 minutes, to detect external study changes
 
 @dataclass
 class WorkerSpec:
@@ -35,8 +36,16 @@ def make_storage(storage_url: str):
     # For multi-worker: prefer Postgres/MySQL. SQLite can lock.
     return optuna.storages.RDBStorage(
         url=storage_url,
+        heartbeat_interval=60,
         grace_period=600,
-        engine_kwargs={"pool_pre_ping": True},
+        failed_trial_callback=optuna.storages.RetryFailedTrialCallback(max_retry=1),
+        engine_kwargs={
+            "connect_args": {
+                "timeout": 300,  # 5 minutes timeout for lock acquisition
+                "check_same_thread": False  # Allow multi-threaded access
+            },
+            "pool_pre_ping": True  # Verify connections before using
+        }
     )
 
 def get_sampler():
@@ -47,22 +56,22 @@ def get_sampler():
         multivariate=True
     )
 
-def get_pruner(val_interval: int):
+def get_pruner(val_interval: int, n_warmup_steps: int = 300):
     """Returns Optuna's pruning strategy."""
     return optuna.pruners.MedianPruner(
         n_startup_trials=10,    # let at least 10 full trials run before pruning
-        n_warmup_steps=150,     # dont prune before 150 epochs/steps
+        n_warmup_steps=n_warmup_steps,     # dont prune before (nepochs / 3) epochs
         interval_steps=val_interval       # check each interval
     )    
 
-def get_study(study_name: str, storage: str, val_interval: int):
+def get_study(study_name: str, storage: str, val_interval: int, n_warmup_steps: int = 300):
     """Returns the Optuna study object."""
     return optuna.create_study(
             study_name=study_name,
             storage=storage,
             direction="maximize",
             sampler=get_sampler(),
-            pruner=get_pruner(val_interval),
+            pruner=get_pruner(val_interval, n_warmup_steps),
             load_if_exists=True,
         )
 
@@ -92,7 +101,7 @@ def gpu_worker_loop(
 
     # Each worker creates its own storage/study handle to avoid SQLite locking issues
     storage = make_storage(storage_url)
-    study = get_study(study_name, storage, submit_kwargs.get("val_interval", 10))
+    study = optuna.load_study(study_name=study_name, storage=storage)
 
     # Main loop: keep asking for new trials until enough trials have been completed or something breaks
     while not stop_event.is_set():
@@ -202,6 +211,7 @@ class ExploreSubmitter:
         self.model_type = model_type
         self.random_seed = random_seed
         self.num_epochs = num_epochs
+        self.n_warmup_steps = int(num_epochs / 3)
         self.num_trials = num_trials
         self.ntomo_cache = ntomo_cache
         self.best_metric = best_metric
@@ -235,7 +245,7 @@ class ExploreSubmitter:
         os.makedirs(output, exist_ok=True)
         storage_url = f"sqlite:///{output}/trials.db"
         storage = make_storage(storage_url)
-        study = get_study(study_name, storage, self.val_interval)
+        study = get_study(study_name, storage, self.val_interval, self.n_warmup_steps)
 
         # Set the MLflow experiment 
         mlflow.set_experiment(study_name)
@@ -262,38 +272,48 @@ class ExploreSubmitter:
             start_worker(gid)
 
         # Monitor the workers and manage the study
+        last_db_check = 0.0
         try:
             while True:
-                # Optional: stop when total trials reached
-                # (This is a *soft* stop; workers also check this themselves)
-                storage = make_storage(storage_url)
-                study = optuna.load_study(study_name=study_name, storage=storage)
-                done = count_terminal_trials(study)
-                if done >= self.num_trials:
-                    print(f"[supervisor] reached { done } trials >= target {self.num_trials}. stopping.", flush=True)
-                    break
 
-                # Monitor + restart dead workers
+                # --- cheap: monitor + restart dead workers ---
                 for gid, spec in specs.items():
                     p = spec.proc
                     if p is None:
                         continue
-                    # Check if the process is still alive
                     if not p.is_alive():
                         code = p.exitcode
                         print(f"[supervisor] worker gpu={gid} died exitcode={code}", flush=True)
-
                         spec.restarts += 1
                         if spec.restarts > MAX_RESTARTS_PER_GPU:
                             raise RuntimeError(f"worker on gpu {gid} exceeded restart limit ({MAX_RESTARTS_PER_GPU})")
-
-                        # restart
                         start_worker(gid)
+
+                # --- expensive: touch DB occasionally ---
+                now = time.time()
+                if now - last_db_check >= CHECK_DB_EVERY_S:
+                    last_db_check = now
+                    try:
+                        # reload study view (optional but good)
+                        study = optuna.load_study(study_name=study_name, storage=storage)
+                        done = count_terminal_trials(study)
+                        print(f"[supervisor] done={done}/{self.num_trials}", flush=True)
+
+                        if done >= self.num_trials:
+                            print(f"[supervisor] reached {done} trials >= target {self.num_trials}. stopping.", flush=True)
+                            break
+
+                    except Exception as e:
+                        # handle db locked, transient net fs weirdness, etc.
+                        if "database is locked" in str(e).lower():
+                            print("[supervisor] DB locked; will retry later.", flush=True)
+                        else:
+                            raise
+
                 # Sleep for a short interval before checking again
                 time.sleep(POLL_S)
         except KeyboardInterrupt:
             print("[supervisor] Ctrl-C received. stopping.", flush=True)
-
         finally:
             stop_event.set()
             # Give workers a moment to exit gracefully
