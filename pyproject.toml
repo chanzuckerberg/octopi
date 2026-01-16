@@ -44,7 +44,7 @@ dependencies = [
     "rich-click",
     "copick-utils",
     "multiprocess",
-    "python-dotenv",
+    "optuna-dashboard",
     "optuna-integration[botorch,pytorch_lightning]",
 ]
 

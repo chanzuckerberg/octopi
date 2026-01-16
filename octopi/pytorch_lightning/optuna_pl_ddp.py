@@ -11,7 +11,6 @@ from pytorch_lightning import Trainer
 from pytorch_lightning.loggers import MLFlowLogger
 from pytorch_lightning.callbacks import ModelCheckpoint, LearningRateMonitor
 from monai.data import DataLoader, Dataset, CacheDataset, decollate_batch
-from dotenv import load_dotenv
 from monai.transforms import (
     Compose,
     EnsureChannelFirstd,
@@ -238,22 +237,6 @@ def objective(trial: optuna.trial.Trial) -> float:
 
 if __name__ == "__main__":
     args = get_args()
-    # MLflow setup
-    username = os.getenv('MLFLOW_TRACKING_USERNAME')
-    password = os.getenv('MLFLOW_TRACKING_PASSWORD')
-    if not password or not username:
-        print("Password not found in environment, loading from .env file...")
-        load_dotenv()  # Loads environment variables from a .env file
-        username = os.getenv('MLFLOW_TRACKING_USERNAME')
-        password = os.getenv('MLFLOW_TRACKING_PASSWORD')
-        
-    # Check again after loading .env file
-    if not password:
-        raise ValueError("Password is not set in environment variables or .env file!")
-    else:
-        print("Password loaded successfully")
-        os.environ['MLFLOW_TRACKING_USERNAME'] = username
-        os.environ['MLFLOW_TRACKING_PASSWORD'] = password    
     
     pruner: optuna.pruners.BasePruner = (
         optuna.pruners.MedianPruner() if args.pruning else optuna.pruners.NopPruner()

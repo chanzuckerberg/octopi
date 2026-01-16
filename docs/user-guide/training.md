@@ -204,14 +204,21 @@ Octopi supports two complementary workflows:
 
     ### Monitoring Your Training
 
-    Monitor optimization progress in real-time:
+    Track the progress of model exploration runs in real time, inspect trial performance, and understand which hyperparameters and architectural choices drive model quality.
 
     === "Optuna Dashboard"
 
+        Octopi integrates with **Optuna** to provide a high-level view of the architecture and hyperparameter search process. This dashboard is best suited for understanding **which trials perform best**, **which parameters matter most**, and **how the optimization converges over time**.
+
         **Setup Options:**
 
-        - **VS Code Extension** - Install Optuna extension for integrated monitoring
-        - **Web Dashboard** - Follow [Optuna dashboard guide](https://optuna-dashboard.readthedocs.io/en/latest/getting-started.html)
+        - **Web Dashboard** – Launch the Optuna dashboard directly from the command line:
+        ```bash
+        optuna-dashboard sqlite:///{path-to}/trials.db
+        ```
+        Replace `path/to/trials.db` with the path to the Optuna study database located in the model exploration output directory.
+
+        - **VS Code Extension** - Install Optuna extension for integrated monitoring, right click on `trials.db` in the file navigator to launch the dashboard.
 
         **What you'll see:**
 
@@ -222,6 +229,8 @@ Octopi supports two complementary workflows:
         - Optimization history and convergence trends
 
     === "MLflow Tracking"
+
+        **MLflow** complements Optuna by providing detailed, per-trial training information, including loss curves, validation metrics, model checkpoints, and configuration artifacts.
 
         If you are running `octopi model-explore` on your **local machine**, start the MLflow UI in the same environment:
 
