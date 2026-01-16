@@ -3,7 +3,6 @@ Argument parsing and configuration utilities.
 """
 
 from typing import List, Tuple, Union
-from dotenv import load_dotenv
 import argparse
 
 def parse_list(value: str) -> List[str]:
