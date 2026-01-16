@@ -362,21 +362,23 @@ class ModelTrainer:
 
         self.metric_names = self.results.keys()
 
-    def _metric_name_with_class(self, metric_name: str) -> str:
+    def _map_class_to_name(self, metric_name: str) -> str:
         """
         Replace class indices in metric names with class names for logging.
-        Example: f1_class2 -> f1_membrane
+        Example: f1_class2 -> f1_ribosome (if class_names[1] == 'ribosome')
         """
-        match = re.search(r"_class(\d+)", metric_name)
-        if not match:
+        m = re.search(r"_class(\d+)", metric_name)
+        if not m:
             return metric_name
 
-        class_idx = int(match.group(1))
+        class_idx_1based = int(m.group(1))
+        class_idx_0based = class_idx_1based - 1
 
-        # Safety check (class indices start at 1 in your code)
-        if class_idx < len(self.class_names):
-            class_name = self.class_names[class_idx]
-            return metric_name.replace(f"class{class_idx}", class_name)
+        if 0 <= class_idx_0based < len(self.class_names):
+            class_name = self.class_names[class_idx_0based]
+
+            # replace only the "classN" token (not the whole metric)
+            return metric_name.replace(f"class{class_idx_1based}", class_name)
 
         return metric_name          
 
@@ -423,7 +425,7 @@ class ModelTrainer:
         # Log to MLflow or client
         if self.use_mlflow:
             for metric_name, value in metrics_dict.items():
-                metric_name = self._metric_name_with_class(metric_name)
+                metric_name = self._map_class_to_name(metric_name)
                 mlflow.log_metric(metric_name, value, step=curr_step)
 
     def fbeta(self, precision, recall):
