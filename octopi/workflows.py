@@ -61,8 +61,8 @@ def train(data_generator, loss_function, batch_size = 16,
     model.to(device) 
 
     # Optimizer
-    optimizer = torch.optim.AdamW(
-        model.parameters(), lr=lr0, weight_decay=1e-4
+    optimizer = torch.optim.Adam(
+        model.parameters(), lr=lr0#, weight_decay=5e-4
     )
 
     # Create UNet-Trainer
@@ -101,7 +101,8 @@ def train(data_generator, loss_function, batch_size = 16,
     io.save_results_to_csv(results, results_save_name)
 
 def segment(config, tomo_algorithm, voxel_size, model_weights, model_config, 
-            seg_info = ['predict', 'octopi', '1'], batch_size = 15, run_ids = None):
+            seg_info = ['predict', 'octopi', '1'], run_ids = None, batch_size = 1,
+            swbs = 4, overlap = 0.5):
     """
     Segment a Dataset using a Trained Model or Ensemble of Models
 
@@ -112,7 +113,8 @@ def segment(config, tomo_algorithm, voxel_size, model_weights, model_config,
         model_weights (str, list): The path to the model weights or a list of paths to the model weights
         model_config (str, list): The model configuration or a list of model configurations
         seg_info (list): The segmentation information
-        batch_size (int): The batch size for inference
+        swbs (int): The sliding window batch size for inference
+        overlap (float): The overlap between sliding windows for inference
         run_ids (list): The list of run IDs to use for segmentation
     """
 
@@ -194,6 +196,9 @@ def localize(config, voxel_size, seg_info, pick_user_id, pick_session_id, n_proc
         objects = [obj for obj in objects if obj[0] in pick_objects]
         if len(objects) == 0:
             raise ValueError(f"No valid objects found for localization after filtering. Mismatched names: {pick_objects} and {[obj[0] for obj in objects0]}")
+
+    # Print the objects that will be localized 
+    print(f'Objects to be localized:\n{objects}\n')
 
     # Get all RunIDs
     if run_ids is None:

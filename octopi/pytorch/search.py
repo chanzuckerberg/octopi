@@ -51,17 +51,19 @@ class ModelExplorer:
         )
 
         # Sample crop size and num_samples
+        sizes = [64, 80, 96, 112, 128, 144, 160]
         self.sampling = {
-            'crop_size': trial.suggest_int("crop_size", 48, 160, step=16),
-            'num_samples': 16
+            'crop_size': trial.suggest_categorical("crop_size", sizes),
+            'num_samples': trial.suggest_categorical("num_samples", [2, 4, 8, 16])
         }
         self.config['dim_in'] = self.sampling['crop_size']
 
     def _define_optimizer(self, trial):
         # Define optimizer
-        # lr0 = trial.suggest_float("lr", 1e-4, 1e-3, log=True)
-        # wd = trial.suggest_float("weight_decay", 1e-5, 1e-3, log=True)
-        self.optimizer = torch.optim.AdamW(self.model.parameters(), lr=1e-3, weight_decay=1e-4)      
+        lr0 = trial.suggest_float("lr", 1e-4, 1e-3, log=True)
+        wd = trial.suggest_float("weight_decay", 1e-4, 1e-2, log=True)
+        self.optimizer = torch.optim.AdamW(self.model.parameters(), lr=lr0, weight_decay=wd)              
+        # self.optimizer = torch.optim.AdamW(self.model.parameters(), lr=1e-3, weight_decay=1e-4)      
 
     def _train_model(self, trial, model_trainer, epochs, val_interval, crop_size, num_samples, best_metric):
         """Handles model training and error handling."""

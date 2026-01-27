@@ -9,8 +9,9 @@ def inference(
     seg_info: Tuple[str,str,str],
     voxel_size: float,
     tomo_algorithm: str,
-    tomo_batch_size: int,
     run_ids: List[str],
+    swbs: int,
+    overlap: float,
     ):
     """
     Perform segmentation inference using a model on provided tomograms.
@@ -47,7 +48,7 @@ def inference(
     segment(
         config, tomo_algorithm, voxel_size,
         model_weights, model_config, seg_info,
-        run_ids=run_ids, batch_size=tomo_batch_size
+        run_ids=run_ids, swbs = swbs, overlap=overlap
     )
 
     print("✅ Inference completed successfully.")
@@ -62,7 +63,8 @@ def inference(
 @common.config_parameters(single_config=True)
 def cli(config, voxel_size,
         model_config, model_weights,
-        tomo_alg, seg_info, tomo_batch_size, run_ids):
+        tomo_alg, seg_info, run_ids,
+        sliding_window_batch_size, overlap):
     """
     Segment volumes using trained neural network models.
     
@@ -110,10 +112,10 @@ def cli(config, voxel_size,
         seg_info=seg_info,
         voxel_size=voxel_size,
         tomo_algorithm=tomo_alg,
-        tomo_batch_size=tomo_batch_size,
         run_ids=run_ids,
+        swbs=sliding_window_batch_size,
+        overlap=overlap
     )
-
 
 if __name__ == "__main__":
     cli()
