@@ -61,8 +61,8 @@ def train(data_generator, loss_function, batch_size = 16,
     model.to(device) 
 
     # Optimizer
-    optimizer = torch.optim.Adam(
-        model.parameters(), lr=lr0#, weight_decay=5e-4
+    optimizer = torch.optim.AdamW(
+        model.parameters(), lr=lr0, weight_decay=1e-3
     )
 
     # Create UNet-Trainer
