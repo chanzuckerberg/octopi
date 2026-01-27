@@ -5,6 +5,7 @@ from octopi.datasets import io as dataio
 import torch, copick, gc, os, pprint
 from copick_utils.io import writers
 import torch.multiprocessing as mp
+from contextlib import nullcontext
 from dataclasses import dataclass
 from octopi.models import common
 from octopi.utils import io
@@ -31,6 +32,8 @@ class Predictor:
                  config: str,
                  model_config: Union[str, List[str]],
                  model_weights: Union[str, List[str]],
+                 sw_bs: int = 4,
+                 overlap: float = 0.5,
                  apply_tta: bool = True,
                  device: Optional[str] = None,
                  rank: int = 0
@@ -67,12 +70,14 @@ class Predictor:
         self.model_weights = model_weights
 
         # Sliding Window Inference Parameters
-        self.sw_bs = 4 # sliding window batch size
-        self.overlap = 0.5 # overlap between windows
+        self.sw_bs = sw_bs # sliding window batch size
+        self.overlap = overlap # overlap between windows
         self.sw = None
 
         # Set the device
         self.device = device if device else torch.device('cuda')
+        self.acc_device = self.device
+        print(f'Using device: {self.device}')
 
         # Handle Single Model Config or Multiple Model Configs
         if isinstance(model_config, str):
@@ -86,6 +91,29 @@ class Predictor:
 
         # Diagnostics 
         self.rank = rank
+    
+        # Force CPU Assembly
+        self._force_cpu_assembly = False
+
+    def _is_cuda_oom(self, e: BaseException) -> bool:
+        msg = str(e).lower()
+        return (
+            isinstance(e, torch.cuda.OutOfMemoryError)
+            or "cuda out of memory" in msg
+        )
+
+    def _set_cpu_assembly_mode(self, enabled: bool):
+        self._force_cpu_assembly = enabled
+        self.acc_device = torch.device("cpu") if enabled else self.device        
+
+    def _clear_cuda(self):
+        try:
+            if torch.cuda.is_available():
+                torch.cuda.synchronize()
+                torch.cuda.empty_cache()
+        except Exception:
+            pass
+        gc.collect()        
 
     def _print(self, *args, **kwargs):
         if self.rank == 0:
@@ -130,25 +158,54 @@ class Predictor:
             self._print(f'Model Soup is Enabled : {len(self.models)} models loaded for ensemble inference')
     
     @torch.inference_mode()
-    def _run_single_model_inference(self, model, input_data):
-        """Run sliding window inference on a single model."""
-        with torch.amp.autocast(device_type="cuda", dtype=torch.float16):
+    def _run_single_model_inference(self, model, input_data, out_device: torch.device):
+        """
+        Always compute patches on self.device (cuda:rank),
+        assemble output on out_device (cuda or cpu).
+        """
+        sw_device = self.device
+
+        amp_ctx = (
+            torch.amp.autocast(device_type="cuda", dtype=torch.float16)
+            if sw_device.type == "cuda"
+            else nullcontext()
+        )
+
+        with amp_ctx:
             return sliding_window_inference(
                 inputs=input_data,
                 roi_size=(self.dim_in, self.dim_in, self.dim_in),
                 sw_batch_size=self.sw_bs,
                 predictor=model,
                 overlap=self.overlap,
+                sw_device=sw_device,   # patch compute
+                device=out_device,     # assembly
             )
+                
+    def _infer_adaptive(self, model, x):
+        if x.device != self.device:
+            x = x.to(self.device, non_blocking=True)
+
+        if getattr(self, "_force_cpu_assembly", False):
+            return self._run_single_model_inference(model, x, out_device=torch.device("cpu"))
+
+        try:
+            return self._run_single_model_inference(model, x, out_device=self.device)
+        except BaseException as e:
+            if not self._is_cuda_oom(e):
+                raise
+            self._clear_cuda()
+            self._set_cpu_assembly_mode(True)
+            return self._run_single_model_inference(model, x, out_device=torch.device("cpu"))
 
     @torch.inference_mode()
     def _apply_tta_single_model(self, model, single_sample):
         """Apply TTA to a single model and single sample."""
-        # Initialize probability accumulator
+        
+        # Initialize probability accumulator, move to device if using CUDA
         acc_probs = torch.zeros(
             (1, self.Nclass, *single_sample.shape[2:]), 
-            dtype=torch.float32, device=self.device
-        )
+            dtype=torch.float32, device=self.acc_device )
         
         # Process each augmentation
         for tta_transform, inverse_transform in zip(self.tta_transforms, self.inverse_tta_transforms):
@@ -156,16 +213,20 @@ class Predictor:
             aug_sample = tta_transform(single_sample)
             
             # Run inference
-            predictions = self._run_single_model_inference(model, aug_sample)
+            predictions = self._infer_adaptive(model, aug_sample)
             
             # Get softmax probabilities
             probs = torch.softmax(predictions[0], dim=0)
             
+            # If we're in CPU fallback mode, do the inverse rotation on CPU (avoid rot90 GPU alloc)
+            if self.acc_device.type == "cpu" and probs.device.type == "cuda":
+                probs = probs.cpu()
+
             # Apply inverse transform
             inv_probs = inverse_transform(probs)
             
             # Accumulate probabilities
-            acc_probs[0] += inv_probs
+            acc_probs[0] += inv_probs.to(self.acc_device, non_blocking=True)
             
             # Clear memory
             del predictions, probs, inv_probs, aug_sample
@@ -194,8 +255,7 @@ class Predictor:
             # Initialize probability accumulator for this sample
             acc_probs = torch.zeros(
                 (self.Nclass, *single_sample.shape[2:]), 
-                dtype=torch.float32, device=self.device
-            )
+                dtype=torch.float32, device=self.acc_device )
             
             # Process each model
             for model in self.models:
@@ -204,7 +264,8 @@ class Predictor:
                     model_probs = self._apply_tta_single_model(model, single_sample)
                 # Run inference without TTA
                 else:
-                    predictions = self._run_single_model_inference(model, single_sample)
+                    # predictions = self._run_single_model_inference(model, single_sample)
+                    predictions = self._infer_adaptive(model, single_sample)
                     model_probs = torch.softmax(predictions[0], dim=0)
                     del predictions
                 
@@ -238,35 +299,38 @@ class Predictor:
         if isinstance(input_data, np.ndarray):
             is_numpy = True
             input_data = torch.from_numpy(input_data)
-        
-        # Apply transforms directly to tensor (no dictionary needed)
+
         pre_transforms = Compose([
             EnsureChannelFirst(channel_dim="no_channel"),
-            NormalizeIntensity(),                         
+            NormalizeIntensity(),
         ])
-        
         input_data = pre_transforms(input_data)
-        
-        # Add batch dimension and move to device
+
         input_data = input_data.unsqueeze(0).to(self.device)
-        
-        # Run inference
-        pred = self._run_inference(input_data)[0]
-        
+
+        try:
+            pred = self._run_inference(input_data)[0]
+        except BaseException as e:
+            if not self._is_cuda_oom(e):
+                raise
+            print('[WARNING] CUDA out of memory. Falling back to CPU assembly/averaging.')
+            self._clear_cuda()
+            self._set_cpu_assembly_mode(True)  
+            pred = self._run_inference(input_data)[0]
+
         if is_numpy:
             pred = pred.cpu().numpy()
         return pred
 
     def batch_predict(
         self, 
-        num_tomos_per_batch: int = 4, 
+        num_tomos_per_batch: int = 1, 
         runIDs: Optional[List[str]] = None,
         voxel_spacing: float = 10,
         tomo_algorithm: str = 'denoised', 
         name: str = 'predict',
         userid: str = 'octopi',
-        sessionid: str = '1',
-        progress_q = None ):
+        sessionid: str = '1' ):
         """
         Run inference on tomograms in batches.
         
@@ -306,7 +370,16 @@ class Predictor:
             
             # Run inference on the tomogram
             tomogram = data['image'].to(self.device)
-            preds = self._run_inference(tomogram)
+            try:
+                preds = self._run_inference(tomogram)
+            except BaseException as e:
+                # If the error is not a CUDA out-of-memory error, re-raise it
+                if not self._is_cuda_oom(e):
+                    raise e
+                print('[WARNING] CUDA out of memory. Falling back to CPU.')
+                self._clear_cuda()
+                self._set_cpu_assembly_mode(True) 
+                preds = self._run_inference(tomogram)
             
             # Write the Prediction to the corresponding runs
             for i in range(len(preds)):
@@ -358,11 +431,16 @@ class Predictor:
                 "tomo_alg": tomo_algorithm,
                 "voxel_size": voxel_size
             },
+            'labels': model_config['labels'],
             'model': {
                 'configs': self.model_config,
                 'weights': self.model_weights
             },
-            'labels': model_config['labels'],
+            'parameters': {
+                'sw_bs': self.sw_bs,
+                'overlap': self.overlap,
+                'apply_tta': self.apply_tta
+            },
             "outputs": {
                 "seg_name": seg_info[0],
                 "seg_user_id": seg_info[1],
@@ -391,6 +469,8 @@ class _JobSpec:
     config: str
     model_config: Union[str, List[str]]
     model_weights: Union[str, List[str]]
+    sw_bs: int
+    overlap: float
     apply_tta: bool
 
     runIDs: List[str]
@@ -430,6 +510,8 @@ def _worker_process(
         config=job.config,
         model_config=job.model_config,
         model_weights=job.model_weights,
+        sw_bs=job.sw_bs,
+        overlap=job.overlap,
         apply_tta=job.apply_tta,
         device=device,
         rank=local_rank
@@ -463,6 +545,8 @@ class MultiGpuPredictor:
         config: str,
         model_config: Union[str, List[str]],
         model_weights: Union[str, List[str]],
+        sw_bs: int = 4,
+        overlap: float = 0.5,
         apply_tta: bool = True,
         device: Optional[str] = None,  # ignored; we choose per-process cuda device
     ):
@@ -471,6 +555,9 @@ class MultiGpuPredictor:
         self.model_config = model_config
         self.model_weights = model_weights
         self.apply_tta = apply_tta
+
+        self.sw_bs = sw_bs
+        self.overlap = overlap
 
     def batch_predict(
         self,
@@ -501,6 +588,8 @@ class MultiGpuPredictor:
                 config=self.config,
                 model_config=self.model_config,
                 model_weights=self.model_weights,
+                sw_bs=self.sw_bs,
+                overlap=self.overlap,
                 apply_tta=self.apply_tta,
                 device=torch.device("cuda:0"),
             )
@@ -513,10 +602,11 @@ class MultiGpuPredictor:
                 userid=userid,
                 sessionid=sessionid,
             )          
+            return
                 
         # Each process gets the same job spec except runIDs shard differs.
         jobs = []
-        shards = _shard_round_robin(runIDs, world_size)
+        shards = _shard_round_robin(runIDs, world_size)       
         for shard in shards:
             jobs.append(
                 _JobSpec(
@@ -524,6 +614,8 @@ class MultiGpuPredictor:
                     model_config=self.model_config,
                     model_weights=self.model_weights,
                     apply_tta=self.apply_tta,
+                    sw_bs=self.sw_bs,
+                    overlap=self.overlap,
                     runIDs=shard,
                     num_tomos_per_batch=num_tomos_per_batch,
                     tomo_algorithm=tomo_algorithm,
@@ -532,7 +624,7 @@ class MultiGpuPredictor:
                     userid=userid,
                     sessionid=sessionid,
                 )
-            )
+            )  
 
         # IMPORTANT: use spawn (not fork) for CUDA safety
         mp.spawn(_spawn_entry, args=(jobs,), nprocs=world_size, join=True)

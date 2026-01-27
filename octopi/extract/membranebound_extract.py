@@ -5,31 +5,24 @@ from typing import Tuple
 import numpy as np
 import math
 
-def process_membrane_bound_extract(run,
-                                   voxel_size: float,
-                                   picks_info: Tuple[str, str, str],
-                                   membrane_info: Tuple[str, str, str],
-                                   organelle_info: Tuple[str, str, str],
-                                   save_user_id: str,
-                                   save_session_id: str,
-                                   distance_threshold: float):
-
+def process_membrane_bound_extract(
+    run, voxel_size: float,
+    picks_info: Tuple[str, str, str],
+    seg_info: Tuple[str, str, str],
+    save_user_id: str, save_session_id: str,
+    distance_threshold: float
+    ):
     """
     Process membrane-bound particles and extract their coordinates and orientations.
     
     Args:
         run: CoPick run object.
         voxel_size: Voxel size for coordinate scaling.
-        segmentation_name: Name of the segmentation object.
-        segmentation_user_id: User ID for the segmentation.
-        segmentation_session_id: Session ID for the segmentation.
-        picks_name: Name of the particle picks object.
-        picks_user_id: User ID for the particle picks.
-        picks_session_id: Session ID for the particle picks.
+        seg_info: Tuple containing segmentation name, user ID, and session ID.
+        picks_info: Tuple containing picks name, user ID, and session ID.
         save_user_id: User ID for saving processed picks.
         save_session_id: Session ID for saving close picks.
         distance_threshold: Maximum distance to consider a particle close to the membrane.
-        organelle_seg: Whether to compute organelle centers from segmentation.
     """  
 
     # Increment session ID for the second class
@@ -50,55 +43,29 @@ def process_membrane_bound_extract(run,
 
     nPoints = len(coordinates)
 
-    # Determine which Segmentation to Use for Filtering
-    if membrane_info is None:
-        # Flag to distinguish between organelle and membrane segmentation
-        membranes_provided = False
-        seg = readers.segmentation(
-            run, 
-            voxel_size, 
-            organelle_info[0],
-            user_id=organelle_info[1], 
-            session_id=organelle_info[2],
-            raise_error=False)
-        # If No Segmentation is Found, Return
-        if seg is None: return     
-        elif nPoints == 0 or np.unique(seg).max() == 0:
-            print(f'[Warning] RunID: {run.name} - Organelle-Seg Unique Values: {np.unique(seg)}, nPoints: {nPoints}')
-            return                                            
-    else:
-        # Read both Organelle and Membrane Segmentations
-        membranes_provided = True
-        seg = readers.segmentation(
-            run, 
-            voxel_size, 
-            membrane_info[0],
-            user_id=membrane_info[1], 
-            session_id=membrane_info[2],
-            raise_error=False)
-
-        organelle_seg = readers.segmentation(
-            run, 
-            voxel_size, 
-            organelle_info[0],
-            user_id=organelle_info[1], 
-            session_id=organelle_info[2],
-            raise_error=False)
-        
-        # If No Segmentation is Found, Return
-        if seg is None or seg is None: return
-        elif nPoints == 0 or np.unique(seg).max() == 0:
-            print(f'[Warning] RunID: {run.name} - Organelle-Seg Unique Values: {np.unique(seg)}, nPoints: {nPoints}')
-            return
-        
-        # Tempory Solution to Ensure Labels are the Same:
-        seg[seg > 0] += 1
+    # Read both Organelle and Membrane Segmentations
+    seg = readers.segmentation(
+        run, 
+        voxel_size, 
+        seg_info[0],
+        user_id=seg_info[1], 
+        session_id=seg_info[2],
+        raise_error=False)
+    
+    # If No Segmentation is Found, Return
+    if seg is None or seg is None: return
+    elif nPoints == 0 or np.unique(seg).max() == 0:
+        print(f'[Warning] RunID: {run.name} - Organelle-Seg Unique Values: {np.unique(seg)}, nPoints: {nPoints}')
+        return
+    
+    # Tempory Solution to Ensure Labels are the Same:
+    seg[seg > 0] += 1
 
     if nPoints > 0:
 
         # Step 1: Find Closest Points to Segmentation of Interest
         points, closest_labels = closest_organelle_points(
-            organelle_seg, 
+            seg, 
             coordinates, 
             max_distance=distance_threshold, 
             return_labels_array=True
@@ -113,7 +80,7 @@ def process_membrane_bound_extract(run,
         orientations[:,3,3] = 1 
 
         # Step 2: Get Organelle Centers (Optional if an organelle segmentation is provided)
-        organelle_centers = organelle_points(organelle_seg)
+        organelle_centers = organelle_points(seg)
 
         # Step 3: Get All the Rotation Matrices from Euler Angles Based on Normal Vector
         if len(close_indices) > 0:

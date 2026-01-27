@@ -7,8 +7,7 @@ def extract_membrane_bound_picks(
     voxel_size: float,
     distance_threshold: float,
     picks_info: Tuple[str, str, str],
-    organelle_info: Tuple[str, str, str],
-    membrane_info: Tuple[str, str, str],
+    seg_info: Tuple[str, str, str],
     save_user_id: str,
     save_session_id: str,
     runIDs: List[str],
@@ -39,8 +38,7 @@ def extract_membrane_bound_picks(
                 root.get_run(run_id),  
                 voxel_size, 
                 picks_info, 
-                membrane_info,
-                organelle_info,
+                seg_info,
                 save_user_id, 
                 save_session_id,
                 distance_threshold
@@ -55,8 +53,7 @@ def extract_membrane_bound_picks(
 def save_parameters(config: str,
                     voxel_size: float,
                     picks_info: tuple,
-                    membrane_info: tuple,
-                    organelle_info: tuple,
+                    seg_info: tuple,
                     save_user_id: str,
                     save_session_id: str,
                     distance_threshold: float,
@@ -70,8 +67,7 @@ def save_parameters(config: str,
             "config": config,
             "voxel_size": voxel_size,
             "picks_info": picks_info,
-            "membrane_info": membrane_info,
-            "organelle_info": organelle_info
+            "seg_info": seg_info
         },
         "output": {
             "save_user_id": save_user_id,
@@ -93,33 +89,30 @@ def save_parameters(config: str,
 
 @click.command('membrane-extract')
 # Output Arguments
-@click.option('--save-session-id', type=str, required=True,
+@click.option('-ssid','--save-session-id', type=str, required=True,
               help="Session ID to save the new picks")
-@click.option('--save-user-id', type=str, default=None,
+@click.option('-suid','--save-user-id', type=str, default=None,
               help="User ID to save the new picks (defaults to picks user ID)")
 # Parameters
-@click.option('--n-procs', type=int, default=None,
+@click.option('-np', '--n-procs', type=int, default=None,
               help="Number of processes to use (defaults to CPU count)")
-@click.option('--distance-threshold', type=float, default=10,
+@click.option('-dt', '--distance-threshold', type=float, default=10,
               help="Distance threshold for membrane proximity")
 # Input Arguments
-@click.option('--runIDs', type=str, default=None,
+@click.option('-rids','--runIDs', type=str, default=None,
               callback=lambda ctx, param, value: parsers.parse_list(value) if value else None,
               help="List of run IDs to process")
-@click.option('--organelle-info', type=str, default=None,
-              callback=lambda ctx, param, value: parsers.parse_target(value) if value else None,
-              help='Query for the organelles segmentations (e.g., "name" or "name,user_id,session_id")')
-@click.option('--membrane-info', type=str, default=None,
+@click.option('-si','--seg-info', type=str, default=None,
               callback=lambda ctx, param, value: parsers.parse_target(value) if value else None,
               help='Query for the membrane segmentation (e.g., "name" or "name,user_id,session_id")')
-@click.option('--picks-info', type=str, required=True,
+@click.option('-pi','--picks-info', type=str, required=True,
               callback=lambda ctx, param, value: parsers.parse_target(value),
               help='Query for the picks (e.g., "name" or "name,user_id,session_id")')
 @click.option('-vs', '--voxel-size', type=float, default=10,
               help="Voxel size")
 @click.option('-c', '--config', type=click.Path(exists=True), required=True,
               help="Path to the configuration file")
-def cli(config, voxel_size, picks_info, membrane_info, organelle_info, runIDs,
+def cli(config, voxel_size, picks_info, seg_info, runids,
         distance_threshold, n_procs,
         save_user_id, save_session_id):
     """
@@ -135,42 +128,50 @@ def cli(config, voxel_size, picks_info, membrane_info, organelle_info, runIDs,
       # Extract membrane-bound picks with default distance threshold
       octopi membrane-extract -c config.json \\
         --picks-info predictions,octopi,1 \\
-        --membrane-info membrane,octopi,1 \\
-        --organelle-info organelle,octopi,1 \\
+        --seg-info membrane,membrain-seg,1 \\
         --save-user-id octopi \\
         --save-session-id 1
     """
 
     run_mb_extract(
         config, voxel_size,
-        picks_info, membrane_info, organelle_info,
-        runIDs, distance_threshold, n_procs,
+        picks_info, seg_info,
+        runids, distance_threshold, n_procs,
         save_user_id, save_session_id
     )
 
 
 def run_mb_extract(
-    config, voxel_size, picks_info, membrane_info, 
-    organelle_info, runIDs, distance_threshold, n_procs,
+    config, voxel_size, picks_info, seg_info, 
+    runIDs, distance_threshold, n_procs,
     save_user_id, save_session_id):
+
+    import octopi.utils.io as io
+    import copick, os
     
     # Default save_user_id to picks_info user_id if not specified
     if save_user_id is None: 
         save_user_id = picks_info[1]
 
-    # Save parameters
+    # Save JSON with Parameters
+    root = copick.from_file(config)
+    overlay_root = io.remove_prefix(root.config.overlay_root)
+    basepath = os.path.join(overlay_root, 'logs')
+    os.makedirs(basepath, exist_ok=True)
     output_yaml = f'membrane-extract_{save_user_id}_{save_session_id}.yaml'
+    output_path = os.path.join(basepath, output_yaml)        
+
+    # Save parameters
     save_parameters(
         config=config,
         voxel_size=voxel_size,
         picks_info=picks_info,
-        membrane_info=membrane_info,
-        organelle_info=organelle_info,
+        seg_info=seg_info,
         save_user_id=save_user_id,
         save_session_id=save_session_id,
         distance_threshold=distance_threshold,
         runIDs=runIDs,
-        output_path=output_yaml
+        output_path=output_path
     )
 
     extract_membrane_bound_picks(
@@ -178,8 +179,7 @@ def run_mb_extract(
         voxel_size=voxel_size,
         distance_threshold=distance_threshold,
         picks_info=picks_info,
-        membrane_info=membrane_info,
-        organelle_info=organelle_info,
+        seg_info=seg_info,
         save_user_id=save_user_id,
         save_session_id=save_session_id,
         runIDs=runIDs,

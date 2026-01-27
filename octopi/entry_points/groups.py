@@ -71,7 +71,7 @@ click.rich_click.OPTION_GROUPS = {
         },
         {
             "name": "Inference Arguments",
-            "options": ["--seg-info", "--tomo-batch-size", "--run-ids"]
+            "options": ["--seg-info", "--sliding-window-batch-size", "--overlap", "--run-ids"]
         }
     ],
     "routines localize": [

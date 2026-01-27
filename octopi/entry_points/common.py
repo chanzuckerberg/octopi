@@ -1,4 +1,4 @@
-from click.types import FloatRange
+from click.types import FloatRange, IntRange
 from octopi.utils import parsers
 import rich_click as click
 
@@ -82,13 +82,15 @@ def inference_parameters():
         f = click.option('-runs', "--run-ids", type=str, default=None,
                         callback=lambda ctx, param, value: parsers.parse_list(value) if value else None,
                         help="List of run IDs for prediction, e.g., run1,run2 or [run1,run2]. If not provided, all available runs will be processed.")(f)
-        f = click.option('-ntomos', "--tomo-batch-size", type=int, default=1,
-                        help="Batch size for tomogram processing")(f)
         f = click.option('-seginfo', "--seg-info", type=str, default='predict,octopi,1',
                         callback=lambda ctx, param, value: parsers.parse_target(value) if value else value,
                         help='Information Query to save Segmentation predictions under (e.g., "name" or "name,user_id,session_id" - Default UserID is octopi and SessionID is 1')(f)
         f = click.option('-alg', "--tomo-alg", type=str, default='wbp',
                         help="Tomogram algorithm used for produces segmentation prediction masks")(f)
+        f = click.option('-swbs', "--sliding-window-batch-size", default=4, type=IntRange(min=1),
+                        help="Batch size for sliding window inference")(f)
+        f = click.option('--overlap', '-o', default=0.5, type=FloatRange(0.0, 1.0),
+                        help="Overlap fraction for sliding window inference")(f)
         return f
     return decorator
 

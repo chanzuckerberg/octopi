@@ -25,8 +25,6 @@ def print_target_summary(train_targets: dict, target_segmentation_name: str, max
         radius_info = f", radius={info['radius']:.1f}Å" if info['radius'] else ""
         print(f"  {info['label']:3d} → {name} ({obj_type}{radius_info})")
     
-    print("="*60)
-    print(f"💡 Use --num-classes {maxval + 1} when training with this target")
     print("="*60 + "\n")
 
 def generate_targets(
