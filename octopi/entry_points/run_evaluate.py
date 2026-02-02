@@ -28,7 +28,7 @@ def my_evaluator(
     eval.run(save_path=save_path, distance_threshold_scale=distance_threshold_scale, runIDs=runIDs)
 
 
-@click.command('evaluate', context_settings=cli_context)
+@click.command('evaluate', context_settings=cli_context, no_args_is_help=True)
 # Output Arguments
 @click.option('-o','--output', type=click.Path(), default='scores',
               help="Path to save evaluation results")

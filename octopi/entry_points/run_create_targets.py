@@ -141,7 +141,7 @@ def add_segmentation_targets(
     return train_targets    
 
 
-@click.command('create-targets')
+@click.command('create-targets', no_args_is_help=True)
 # Output Arguments
 @click.option('-sid', '--target-session-id', type=str, default="1",
               help="Session ID for the target segmentation")

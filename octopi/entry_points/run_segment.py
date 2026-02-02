@@ -54,7 +54,7 @@ def inference(
     print("✅ Inference completed successfully.")
 
 
-@click.command('segment')
+@click.command('segment', no_args_is_help=True)
 # Inference Arguments
 @common.inference_parameters()
 # Model Arguments
