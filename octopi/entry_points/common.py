@@ -21,9 +21,9 @@ def model_parameters(octopi: bool = False):
 def inference_model_parameters():
     """Decorator for adding inference model parameters"""
     def decorator(f):
-        f = click.option("-mw", "--model-weights", type=click.Path(exists=True), required=True,
+        f = click.option("-mw", "--model-weights", type=str, required=True,
                         help="Path to the model weights file")(f)
-        f = click.option("-mc", "--model-config", type=click.Path(exists=True), required=True,
+        f = click.option("-mc", "--model-config", type=str, required=True,
                         help="Path to the model configuration file")(f)
         return f
     return decorator

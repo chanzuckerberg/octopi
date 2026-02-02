@@ -86,11 +86,11 @@ class Predictor:
             raise ValueError("Number of model configs must match number of model weights.")
         self.model_config = model_config            
 
-        # Load the model(s)
-        self._load_models(model_config, model_weights)
-
         # Diagnostics 
         self.rank = rank
+
+        # Load the model(s)
+        self._load_models(model_config, model_weights)        
     
         # Force CPU Assembly
         self._force_cpu_assembly = False
