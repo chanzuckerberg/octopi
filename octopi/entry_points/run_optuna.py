@@ -2,7 +2,7 @@ from octopi.entry_points import common
 from octopi.utils import parsers
 import rich_click as click
 
-@click.command('model-explore')
+@click.command('model-explore', no_args_is_help=True)
 # Training Arguments
 @click.option('--random-seed', type=int, default=42,
               help="Random seed for reproducibility")
@@ -29,11 +29,22 @@ import rich_click as click
               help="Target information, e.g., 'name' or 'name,user_id,session_id'")
 @click.option('-o', '--output', type=str, default='explore_results',
               help="Name of the output directory")
+
+# Submitit Arguments
+@click.option('--submitit', type=bool, default=False,
+              help="Submit trials via SLURM (submitit) instead of local GPUs")
+@click.option('--njobs', '-nj', type=int, default=5,
+              help="Number of concurrent training jobs when using submitit")
+@click.option('--compute-constraint', '-cc', type=str, default='4,16',
+              help='Compute constraint for number of CPUs requested and mem-per-cpu requested. (e.g., "4,16" for 4 CPUs and 16GB per CPU)')
+@click.option('--timeout', type=int, default=1080,
+              help="SLURM job timeout in minutes when using submitit")
 @common.config_parameters(single_config=False)
 def cli(
     config, voxel_size, target_info, tomo_alg, study_name, 
     trainrunids, validaterunids, data_split, model_type, num_epochs, background_ratio,
-    val_interval, ncache_tomos, best_metric, num_trials, random_seed, output):
+    val_interval, ncache_tomos, best_metric, num_trials, random_seed, output,
+    submitit, njobs, compute_constraint, timeout):
     """
     Perform model architecture search with Optuna.
     """
@@ -41,17 +52,19 @@ def cli(
     print('\n🚀 Starting a new Octopi Model Architecture Search...\n')
     run_model_explore(
         config, voxel_size, target_info, tomo_alg, study_name, 
-        trainrunids, validaterunids, data_split, model_type, background_ratio, 
-        num_epochs, val_interval, ncache_tomos, best_metric, num_trials, random_seed, output
+        trainrunids, validaterunids, data_split, model_type, background_ratio,
+        num_epochs, val_interval, ncache_tomos, best_metric, num_trials, random_seed, output,
+        submitit=submitit, njobs=njobs, compute_constraint=compute_constraint, timeout=timeout,
     )
 
 def run_model_explore(config, voxel_size, target_info, tomo_alg, study_name, 
         trainrunids, validaterunids, data_split, model_type, background_ratio,
-        num_epochs, val_interval, ncache_tomos, best_metric, num_trials, random_seed, output):
+        num_epochs, val_interval, ncache_tomos, best_metric, num_trials, random_seed, 
+        output, submitit, njobs, compute_constraint, timeout):
     """
-    Run the model exploration.
+    Run the model exploration (local GPUs or SLURM via submitit).
     """
-    from octopi.pytorch.submit_search import ExploreSubmitter
+    from octopi.pytorch.submit_search import SubmititExplorer, ExploreSubmitter
     import os
 
     # Parse the CoPick configuration paths
@@ -63,8 +76,7 @@ def run_model_explore(config, voxel_size, target_info, tomo_alg, study_name,
     # Create the model exploration directory
     os.makedirs(output, exist_ok=True)
 
-    # Call the function with parsed arguments
-    search = ExploreSubmitter(
+    base_kwargs = dict(
         copick_config=copick_configs,
         target_name=target_info[0],
         target_user_id=target_info[1],
@@ -76,13 +88,28 @@ def run_model_explore(config, voxel_size, target_info, tomo_alg, study_name,
         num_epochs=num_epochs,
         num_trials=num_trials,
         trainRunIDs=trainrunids,
-        validateRunIDs=validaterunids, 
+        validateRunIDs=validaterunids,
         ntomo_cache=ncache_tomos,
         best_metric=best_metric,
         val_interval=val_interval,
         data_split=data_split,
-        background_ratio=background_ratio
+        background_ratio=background_ratio,
+        submitit=submitit,
+        njobs=njobs,
+        compute_constraint=compute_constraint,
+        timeout=timeout,
     )
+
+    if submitit:
+        from octopi.pytorch.submit_search import SubmititExplorer
+        search = SubmititExplorer(
+            njobs=njobs,
+            compute_constraint=compute_constraint,
+            timeout=timeout,
+            **base_kwargs,
+        )
+    else:
+        search = ExploreSubmitter(**base_kwargs)
 
     # Run the model search
     search.run_model_search(study_name, output)

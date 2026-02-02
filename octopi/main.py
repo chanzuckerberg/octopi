@@ -16,7 +16,7 @@ def routines():
     """Octopi 🐙: 🛠️ Tools for Finding Proteins in 🧊 cryo-ET data"""
     pass
 
-routines.add_command(download)
+routines.add_command(download,)
 routines.add_command(import_tomograms)
 routines.add_command(train_model)
 routines.add_command(create_targets)

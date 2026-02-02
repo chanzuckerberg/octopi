@@ -39,6 +39,7 @@ dependencies = [
     "mrcfile",
     "kaleido",
     "requests",
+    "submitit",
     "torch-ema",
     "ipywidgets",
     "rich-click",

@@ -100,6 +100,10 @@ click.rich_click.OPTION_GROUPS = {
             "options": ["--model-type", "--num-epochs", "--val-interval", 
                        "--ncache-tomos", "--best-metric", "--background-ratio",
                        "--num-trials", "--random-seed"]
+        },
+        {
+            "name": "Submitit Arguments",
+            "options": ["--slurm", "--njobs", "--compute-constraint", "--timeout"]
         }
     ],
     "routines evaluate": [
