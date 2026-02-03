@@ -38,7 +38,7 @@ import rich_click as click
 @click.option('--compute-constraint', '-cc', type=str, default='4,16',
               help='Compute constraint for number of CPUs requested and mem-per-cpu requested. (e.g., "4,16" for 4 CPUs and 16GB per CPU)')
 @click.option('--timeout', type=int, default=4,
-              help="SLURM job timeout in minutes when using submitit (hours)")
+              help="SLURM job timeout per trial when using submitit (hours)")
 @common.config_parameters(single_config=False)
 def cli(
     config, voxel_size, target_info, tomo_alg, study_name, 
@@ -96,11 +96,14 @@ def run_model_explore(config, voxel_size, target_info, tomo_alg, study_name,
         background_ratio=background_ratio,
     )
 
+
     if submitit:
         timeout = timeout * 60 # convert hours to minutes
+        (ncpus, cpu_mem) = parse_compute_constraint(compute_constraint)
         search = SubmititExplorer(
             n_concurrent_jobs=njobs,
-            compute_constraint=compute_constraint,
+            cpus_per_task=ncpus,
+            mem_per_cpu=cpu_mem,
             slurm_timeout_min=timeout,
             **base_kwargs,
         )
@@ -110,6 +113,20 @@ def run_model_explore(config, voxel_size, target_info, tomo_alg, study_name,
     # Run the model search
     search.run_model_search(study_name, output)
 
+def parse_compute_constraint(compute_constraint: str) -> tuple[int, int]:
+    """Parse 'cpus,mem_per_cpu_gb' (e.g. '4,16') into (cpus_per_task, mem_gb_total)."""
+    parts = [p.strip() for p in compute_constraint.split(",")]
+    if len(parts) != 2:
+        raise ValueError(
+            f"compute_constraint must be 'cpus,mem_per_cpu_gb' (e.g. '4,16'), got: {compute_constraint!r}"
+        )
+    cpus = int(parts[0])
+    mem_per_cpu_gb = int(parts[1])
+    if cpus < 1 or mem_per_cpu_gb < 1:
+        raise ValueError(
+            f"compute_constraint cpus and mem_per_cpu_gb must be positive, got: {compute_constraint!r}"
+        )
+    return cpus, mem_per_cpu_gb
 
 if __name__ == "__main__":
     cli()

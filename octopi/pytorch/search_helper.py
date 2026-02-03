@@ -14,6 +14,7 @@ from typing import Optional
 POLL_S = 5
 MAX_RESTARTS_PER_GPU = 25
 CHECK_DB_EVERY_S = 120 # 2 minutes, to detect external study changes
+PRINT_EVERY_S = 60 # print submitit once per minute
 
 @dataclass
 class WorkerSpec:
@@ -173,6 +174,7 @@ def run_one_trial(storage_url: str, study_name: str, submit_kwargs: dict):
     storage = make_storage(storage_url)
     study = optuna.load_study(study_name=study_name, storage=storage)
     trial = study.ask()
+    print(f"[run_one_trial] START trial={trial.number}", flush=True)
 
     verbose = trial.number == 0
     cfg = config.DataGeneratorConfig.from_dict(submit_kwargs)

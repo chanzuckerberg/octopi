@@ -263,41 +263,32 @@ class ExploreSubmitter:
 # Submitit-backed Model Search (SLURM jobs; refill pool as jobs complete)
 # -------------------------
 
-def _parse_compute_constraint(compute_constraint: str) -> tuple[int, int]:
-    """Parse 'cpus,mem_per_cpu_gb' (e.g. '4,16') into (cpus_per_task, mem_gb_total)."""
-    parts = [p.strip() for p in compute_constraint.split(",")]
-    if len(parts) != 2:
-        raise ValueError(
-            f"compute_constraint must be 'cpus,mem_per_cpu_gb' (e.g. '4,16'), got: {compute_constraint!r}"
-        )
-    cpus = int(parts[0])
-    mem_per_cpu_gb = int(parts[1])
-    if cpus < 1 or mem_per_cpu_gb < 1:
-        raise ValueError(
-            f"compute_constraint cpus and mem_per_cpu_gb must be positive, got: {compute_constraint!r}"
-        )
-    mem_gb_total = cpus * mem_per_cpu_gb
-    return cpus, mem_gb_total
-
-
 class SubmititExplorer(ExploreSubmitter):
     """Model architecture search via submitit: submit N concurrent SLURM jobs, refill as they complete."""
 
     def __init__(
         self,
         n_concurrent_jobs: int = 5,
-        compute_constraint: str = "4,16",
-        slurm_partition: str = "gpu",
+        cpus_per_task: int = 4,
+        mem_per_cpu: int = 16,
         slurm_timeout_min: int = 1080,
         submitit_folder: str = "submitit_logs",
         **kwargs,
     ):
         super().__init__(**kwargs)
         self.n_concurrent_jobs = n_concurrent_jobs
-        self.slurm_partition = slurm_partition
+        self.slurm_partition =  "gpu"
         self.slurm_timeout_min = slurm_timeout_min
-        self.slurm_cpus_per_task, self.slurm_mem_gb = _parse_compute_constraint(compute_constraint)
+        self.slurm_cpus_per_task = cpus_per_task
+        self.mem_per_cpu_gb = mem_per_cpu
         self.submitit_folder = submitit_folder
+
+        print('🚀 Using Submitit Explorer for Model Architecture Search with the following settings:')
+        print(f"  - Concurrent Jobs: {self.n_concurrent_jobs}")
+        print(f"  - Compute Constraint (cpus, mem_per_cpu_gb): {self.slurm_cpus_per_task}, {self.mem_per_cpu_gb}")
+        print(f"  - SLURM Partition: {self.slurm_partition}")
+        print(f"  - SLURM Timeout (min): {self.slurm_timeout_min}")
+        print(f"  - Submitit Folder: {self.submitit_folder}")
 
     def _run_worker_pool(
         self,
@@ -309,13 +300,19 @@ class SubmititExplorer(ExploreSubmitter):
         os.makedirs(log_dir, exist_ok=True)
         executor = submitit.AutoExecutor(folder=log_dir)
         executor.update_parameters(
-            slurm_partition=self.slurm_partition,
             timeout_min=self.slurm_timeout_min,
+            slurm_partition=self.slurm_partition,
             cpus_per_task=self.slurm_cpus_per_task,
-            mem_gb=self.slurm_mem_gb,
-            gpus_per_node=1,
+            slurm_additional_parameters={
+                "mem-per-cpu": f"{self.mem_per_cpu_gb}G",
+                "gpus": "1",
+            }
         )
 
+        # Printing status every helper.PRINT_EVERY_S seconds
+        last_print = 0
+
+        # Start the submitit job pool
         storage = helper.make_storage(storage_url)
         running = []
         num_trials = self.num_trials
@@ -339,9 +336,18 @@ class SubmititExplorer(ExploreSubmitter):
                     print(f"[submitit] job {j.job_id} finished with error: {e}", flush=True)
                 running.remove(j)
 
+            # Check study progress
             study = optuna.load_study(study_name=study_name, storage=storage)
             done_count = helper.count_terminal_trials(study)
-            print(f"[submitit] done={done_count}/{num_trials} running={len(running)}", flush=True)
+
+            # Print status periodically
+            now = time.time()
+            if now - last_print >= helper.PRINT_EVERY_S:
+                print(
+                    f"[submitit] done={done_count}/{num_trials} running={len(running)}",
+                    flush=True,
+                )
+                last_print = now
 
             if done_count >= num_trials and not running:
                 break
