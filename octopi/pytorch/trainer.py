@@ -3,7 +3,7 @@ from monai.inferers import sliding_window_inference
 from octopi.utils import stopping_criteria
 from monai.transforms import AsDiscrete
 from monai.data import decollate_batch
-import torch, os, mlflow, re, optuna
+import torch, os, mlflow, re, optuna, time
 import torch_ema as ema
 from tqdm import tqdm 
 import numpy as np
@@ -386,6 +386,8 @@ class ModelTrainer:
         self,
         metrics_dict: dict,
         curr_step: int,
+        n_retries: int = 15,
+        wait_time: int = 5, # seconds
         ):
         """
         Log metrics to the results dictionary and (optionally) MLflow/client.
@@ -422,11 +424,25 @@ class ModelTrainer:
                 self.results[metric_name] = []
             self.results[metric_name].append((curr_step, value))          
 
-        # Log to MLflow or client
+        # Log to MLflow or client (best-effort: retry on lock, then continue trial on failure)
         if self.use_mlflow:
             for metric_name, value in metrics_dict.items():
                 metric_name = self._map_class_to_name(metric_name)
-                mlflow.log_metric(metric_name, value, step=curr_step)
+                last_err = None
+                for attempt in range(n_retries):
+                    try:
+                        mlflow.log_metric(metric_name, value, step=curr_step)
+                        break
+                    except Exception as e:
+                        last_err = e
+                        if attempt < n_retries - 1:
+                            time.sleep(wait_time)
+                else:
+                    warnings.warn(
+                        f"MLflow log_metric failed after retries (trial continues): {last_err}",
+                        UserWarning,
+                        stacklevel=2,
+                    )
 
     def fbeta(self, precision, recall):
         """

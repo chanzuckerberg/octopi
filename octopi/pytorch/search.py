@@ -81,15 +81,19 @@ class ModelExplorer:
             )
             return results['best_metric']
 
+        except optuna.TrialPruned:
+            # Re-raise so run_one_trial / gpu_worker_loop can tell(trial, state=PRUNED)
+            raise
         except torch.cuda.OutOfMemoryError:
             print(f"[Trial Failed] OOM Error for model={model_trainer.model}, crop_size={crop_size}, num_samples={num_samples}")
             trial.set_user_attr("out_of_memory", True)
-            raise optuna.TrialPruned()
-
+            raise
         except Exception as e:
+            # Re-raise so run_one_trial / gpu_worker_loop can tell(trial, state=FAIL).
+            # Do not convert to TrialPruned (e.g. MLflow "database is locked" should be FAIL).
             print(f"[Trial Failed] Unexpected error: {e}")
             trial.set_user_attr("error", str(e))
-            raise optuna.TrialPruned()        
+            raise        
 
     def objective(self, trial, epochs, device, val_interval=15, best_metric="avg_f1"):
         """Runs the full training process for a given trial."""

@@ -1,11 +1,14 @@
 from __future__ import annotations
 
-import torch, mlflow, optuna, os, time, traceback
+from sqlalchemy.exc import OperationalError as SA_OperationalError
 from octopi.pytorch.search import ModelExplorer
+import os, time, traceback, sqlite3, random
 from optuna.trial import TrialState
+from sqlite3 import OperationalError
 import torch.multiprocessing as mp
 from octopi.datasets import config
 from dataclasses import dataclass
+import torch, mlflow, optuna
 from typing import Optional
 
 # -----------------------------
@@ -21,6 +24,39 @@ class WorkerSpec:
     gpu_id: int
     proc: Optional[mp.Process] = None
     restarts: int = 0
+
+# -----------------------------
+# Optuna DB retry (SQLite lock in multi-job)
+# -----------------------------
+OPTUNA_DB_MAX_ATTEMPTS = 15
+OPTUNA_DB_WAIT_S = 5 # seconds
+
+def _is_sqlite_lock(e: Exception) -> bool:
+    msg = str(e).lower()
+    is_sqlite_op = isinstance(e, sqlite3.OperationalError)
+    is_sa_op = isinstance(e, SA_OperationalError)
+    # look for lock/busy/timeouts which indicate transient contention
+    return (is_sqlite_op or is_sa_op) and (
+        "database is locked" in msg
+        or "database is busy" in msg
+        or "locked" in msg
+        or "timeout" in msg
+    )
+
+
+def _retry_optuna_db(callable_fn, *args, **kwargs):
+    """Run an Optuna DB operation with retries and wait on failure (e.g. database is locked)."""
+    last_err = None
+    for attempt in range(OPTUNA_DB_MAX_ATTEMPTS):
+        try:
+            return callable_fn(*args, **kwargs)
+        except Exception as e:
+            if not _is_sqlite_lock(e):
+                raise
+            last_err = e
+            if attempt < OPTUNA_DB_MAX_ATTEMPTS - 1:
+                time.sleep(OPTUNA_DB_WAIT_S * random.uniform(0.8, 1.2))
+    raise last_err
 
 # -----------------------------
 # Optuna utilities
@@ -105,8 +141,8 @@ def gpu_worker_loop(
     # Main loop: keep asking for new trials until enough trials have been completed or something breaks
     while not stop_event.is_set():
         try:
-            # Ask for a new trial
-            trial = study.ask()
+            # Ask for a new trial (retry on DB lock)
+            trial = _retry_optuna_db(study.ask)
 
             # Verbose to show data splits (# runs / tomograms) for only the first trial
             if trial.number == 0: verbose = True
@@ -125,15 +161,15 @@ def gpu_worker_loop(
                     val_interval=int(submit_kwargs.get("val_interval", 10)),
                     best_metric=str(submit_kwargs.get("best_metric", "avg_f1")),
                 )
-                study.tell(trial, value)
+                _retry_optuna_db(study.tell, trial, value)
                 print(f"[worker {gpu_id}] COMPLETE trial={trial.number} value={value}", flush=True)
 
             except optuna.TrialPruned:
-                study.tell(trial, state=TrialState.PRUNED)
+                _retry_optuna_db(study.tell, trial, state=TrialState.PRUNED)
                 print(f"[worker {gpu_id}] PRUNED trial={trial.number}", flush=True)
 
             except torch.cuda.OutOfMemoryError:
-                study.tell(trial, state=TrialState.FAIL)
+                _retry_optuna_db(study.tell, trial, state=TrialState.FAIL)
                 print(f"[worker {gpu_id}] FAILED(OOM) trial={trial.number}", flush=True)
                 try:
                     torch.cuda.empty_cache()
@@ -142,7 +178,7 @@ def gpu_worker_loop(
                 time.sleep(2)
 
             except Exception as e:
-                study.tell(trial, state=TrialState.FAIL)
+                _retry_optuna_db(study.tell, trial, state=TrialState.FAIL)
                 print(f"[worker {gpu_id}] FAILED(EXC) trial={trial.number}: {e}", flush=True)
                 traceback.print_exc()
                 try:
@@ -173,7 +209,7 @@ def run_one_trial(storage_url: str, study_name: str, submit_kwargs: dict):
 
     storage = make_storage(storage_url)
     study = optuna.load_study(study_name=study_name, storage=storage)
-    trial = study.ask()
+    trial = _retry_optuna_db(study.ask)
     print(f"[run_one_trial] START trial={trial.number}", flush=True)
 
     verbose = trial.number == 0
@@ -191,15 +227,15 @@ def run_one_trial(storage_url: str, study_name: str, submit_kwargs: dict):
             val_interval=int(submit_kwargs.get("val_interval", 10)),
             best_metric=str(submit_kwargs.get("best_metric", "avg_f1")),
         )
-        study.tell(trial, value)
+        _retry_optuna_db(study.tell, trial, value)
         print(f"[run_one_trial] COMPLETE trial={trial.number} value={value}", flush=True)
         return value
     except optuna.TrialPruned:
-        study.tell(trial, state=TrialState.PRUNED)
+        _retry_optuna_db(study.tell, trial, state=TrialState.PRUNED)
         print(f"[run_one_trial] PRUNED trial={trial.number}", flush=True)
         raise
     except torch.cuda.OutOfMemoryError:
-        study.tell(trial, state=TrialState.FAIL)
+        _retry_optuna_db(study.tell, trial, state=TrialState.FAIL)
         print(f"[run_one_trial] FAILED(OOM) trial={trial.number}", flush=True)
         try:
             torch.cuda.empty_cache()
@@ -207,7 +243,7 @@ def run_one_trial(storage_url: str, study_name: str, submit_kwargs: dict):
             pass
         raise
     except Exception as e:
-        study.tell(trial, state=TrialState.FAIL)
+        _retry_optuna_db(study.tell, trial, state=TrialState.FAIL)
         print(f"[run_one_trial] FAILED(EXC) trial={trial.number}: {e}", flush=True)
         traceback.print_exc()
         try:
