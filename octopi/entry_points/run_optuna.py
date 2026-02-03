@@ -37,8 +37,8 @@ import rich_click as click
               help="Number of concurrent training jobs when using submitit")
 @click.option('--compute-constraint', '-cc', type=str, default='4,16',
               help='Compute constraint for number of CPUs requested and mem-per-cpu requested. (e.g., "4,16" for 4 CPUs and 16GB per CPU)')
-@click.option('--timeout', type=int, default=1080,
-              help="SLURM job timeout in minutes when using submitit")
+@click.option('--timeout', type=int, default=4,
+              help="SLURM job timeout in minutes when using submitit (hours)")
 @common.config_parameters(single_config=False)
 def cli(
     config, voxel_size, target_info, tomo_alg, study_name, 
@@ -94,18 +94,14 @@ def run_model_explore(config, voxel_size, target_info, tomo_alg, study_name,
         val_interval=val_interval,
         data_split=data_split,
         background_ratio=background_ratio,
-        submitit=submitit,
-        njobs=njobs,
-        compute_constraint=compute_constraint,
-        timeout=timeout,
     )
 
     if submitit:
-        from octopi.pytorch.submit_search import SubmititExplorer
+        timeout = timeout * 60 # convert hours to minutes
         search = SubmititExplorer(
-            njobs=njobs,
+            n_concurrent_jobs=njobs,
             compute_constraint=compute_constraint,
-            timeout=timeout,
+            slurm_timeout_min=timeout,
             **base_kwargs,
         )
     else:

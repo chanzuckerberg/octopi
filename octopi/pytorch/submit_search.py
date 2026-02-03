@@ -263,16 +263,32 @@ class ExploreSubmitter:
 # Submitit-backed Model Search (SLURM jobs; refill pool as jobs complete)
 # -------------------------
 
+def _parse_compute_constraint(compute_constraint: str) -> tuple[int, int]:
+    """Parse 'cpus,mem_per_cpu_gb' (e.g. '4,16') into (cpus_per_task, mem_gb_total)."""
+    parts = [p.strip() for p in compute_constraint.split(",")]
+    if len(parts) != 2:
+        raise ValueError(
+            f"compute_constraint must be 'cpus,mem_per_cpu_gb' (e.g. '4,16'), got: {compute_constraint!r}"
+        )
+    cpus = int(parts[0])
+    mem_per_cpu_gb = int(parts[1])
+    if cpus < 1 or mem_per_cpu_gb < 1:
+        raise ValueError(
+            f"compute_constraint cpus and mem_per_cpu_gb must be positive, got: {compute_constraint!r}"
+        )
+    mem_gb_total = cpus * mem_per_cpu_gb
+    return cpus, mem_gb_total
+
+
 class SubmititExplorer(ExploreSubmitter):
     """Model architecture search via submitit: submit N concurrent SLURM jobs, refill as they complete."""
 
     def __init__(
         self,
         n_concurrent_jobs: int = 5,
+        compute_constraint: str = "4,16",
         slurm_partition: str = "gpu",
         slurm_timeout_min: int = 1080,
-        slurm_cpus_per_task: int = 4,
-        slurm_mem_gb: int = 32,
         submitit_folder: str = "submitit_logs",
         **kwargs,
     ):
@@ -280,8 +296,7 @@ class SubmititExplorer(ExploreSubmitter):
         self.n_concurrent_jobs = n_concurrent_jobs
         self.slurm_partition = slurm_partition
         self.slurm_timeout_min = slurm_timeout_min
-        self.slurm_cpus_per_task = slurm_cpus_per_task
-        self.slurm_mem_gb = slurm_mem_gb
+        self.slurm_cpus_per_task, self.slurm_mem_gb = _parse_compute_constraint(compute_constraint)
         self.submitit_folder = submitit_folder
 
     def _run_worker_pool(
