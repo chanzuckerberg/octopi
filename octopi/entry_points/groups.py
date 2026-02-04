@@ -103,7 +103,7 @@ click.rich_click.OPTION_GROUPS = {
         },
         {
             "name": "Submitit Arguments",
-            "options": ["--submitit", "--njobs", "--compute-constraint", "--timeout"]
+            "options": ["--submitit", "--njobs", "--cpu-constraint", "--gpu-constraint", "--timeout"]
         }
     ],
     "routines evaluate": [
