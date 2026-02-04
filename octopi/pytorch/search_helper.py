@@ -17,7 +17,7 @@ from typing import Optional
 POLL_S = 5
 MAX_RESTARTS_PER_GPU = 25
 CHECK_DB_EVERY_S = 120 # 2 minutes, to detect external study changes
-PRINT_EVERY_S = 60 # print submitit once per minute
+PRINT_EVERY_S = 120 # print submitit once per minute
 
 @dataclass
 class WorkerSpec:
@@ -205,12 +205,23 @@ def run_one_trial(storage_url: str, study_name: str, submit_kwargs: dict):
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     if torch.cuda.is_available():
         torch.cuda.set_device(0)
-    print(f"[run_one_trial] pid={os.getpid()} device={device}", flush=True)
+
+    # Trial settings - ensure we always grab the correct pruner/warmup
+    nepochs = int(submit_kwargs.get("num_epochs", 1000))
+    val_interval = int(submit_kwargs.get("val_interval", 10))
+    n_warmup_steps = nepochs // 3
 
     storage = make_storage(storage_url)
-    study = optuna.load_study(study_name=study_name, storage=storage)
+    study = get_study(
+        study_name=study_name,
+        storage=storage,
+        val_interval=val_interval,
+        n_warmup_steps=n_warmup_steps
+    )
     trial = _retry_optuna_db(study.ask)
-    print(f"[run_one_trial] START trial={trial.number}", flush=True)
+    trial_num = trial.number
+    print(f"[Trial {trial_num}] START trial", flush=True)
+    print(f"[Trial {trial_num}] pid={os.getpid()} device={device}", flush=True)
 
     verbose = trial.number == 0
     cfg = config.DataGeneratorConfig.from_dict(submit_kwargs)
@@ -218,6 +229,11 @@ def run_one_trial(storage_url: str, study_name: str, submit_kwargs: dict):
     model_search = ModelExplorer(
         data_generator, submit_kwargs["model_type"], submit_kwargs["output"]
     )
+
+    # Debug Statements:
+    pr = study.pruner
+    print(f"[Trial {trial.number}] epochs={nepochs} val_interval={val_interval}", flush=True)
+    print(f"[Trial {trial.number}] pruner={type(pr).__name__} - warmup={getattr(pr,'_n_warmup_steps',None)} - interval={getattr(pr,'_interval_steps',None)}", flush=True)
 
     try:
         value = model_search.objective(
@@ -228,15 +244,15 @@ def run_one_trial(storage_url: str, study_name: str, submit_kwargs: dict):
             best_metric=str(submit_kwargs.get("best_metric", "avg_f1")),
         )
         _retry_optuna_db(study.tell, trial, value)
-        print(f"[run_one_trial] COMPLETE trial={trial.number} value={value}", flush=True)
+        print(f"[Trial {trial_num}] COMPLETE value={value}", flush=True)
         return value
     except optuna.TrialPruned:
         _retry_optuna_db(study.tell, trial, state=TrialState.PRUNED)
-        print(f"[run_one_trial] PRUNED trial={trial.number}", flush=True)
-        raise
+        print(f"[Trial {trial_num}] PRUNED", flush=True)
+        return None
     except torch.cuda.OutOfMemoryError:
         _retry_optuna_db(study.tell, trial, state=TrialState.FAIL)
-        print(f"[run_one_trial] FAILED(OOM) trial={trial.number}", flush=True)
+        print(f"[Trial {trial_num}] FAILED(OOM)", flush=True)
         try:
             torch.cuda.empty_cache()
         except Exception:
@@ -244,7 +260,7 @@ def run_one_trial(storage_url: str, study_name: str, submit_kwargs: dict):
         raise
     except Exception as e:
         _retry_optuna_db(study.tell, trial, state=TrialState.FAIL)
-        print(f"[run_one_trial] FAILED(EXC) trial={trial.number}: {e}", flush=True)
+        print(f"[Trial {trial_num}] FAILED(EXC): {e}", flush=True)
         traceback.print_exc()
         try:
             torch.cuda.empty_cache()

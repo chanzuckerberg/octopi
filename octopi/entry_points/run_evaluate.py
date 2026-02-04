@@ -13,6 +13,7 @@ def my_evaluator(
     distance_threshold_scale: float,
     object_names: List[str] = None,
     runIDs: List[str] = None,
+    fbeta: int = 4,
     verbose: bool = False
     ):
     import octopi.processing.evaluate as evaluate

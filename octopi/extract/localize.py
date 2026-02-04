@@ -22,7 +22,7 @@ def process_localization(run,
                           radius_min_scale: float = 0.5, 
                           radius_max_scale: float = 1.0,
                           pick_session_id: str = '1',
-                          pick_user_id: str = 'monai'): 
+                          pick_user_id: str = 'octopi'): 
 
     # Check if method is valid
     if method not in ['watershed', 'com']:
@@ -48,6 +48,10 @@ def process_localization(run,
     except Exception as e:
         print(f"[ERROR] - Occurred while reading segmentation from {run.name}: {e}")
         return
+
+    # Calculate Margin based on Tomogram Size
+    tomo_size = np.array(seg.shape, dtype=float)
+    margin = tomo_size * 0.005  # 0.5% margin
     
     # Iterate through all user pickable objects
     for obj in objects:
@@ -67,6 +71,14 @@ def process_localization(run,
 
             # Remove Picks that are too close to each other
             points = remove_repeated_picks(points, min_radius)
+
+            # Keep picks away from edges (inclusive on margin, exclusive on far edge is fine either way)
+            keep = (
+                (points[:, 0] >= margin[0]) & (points[:, 0] <= (tomo_size[0] - margin[0])) &
+                (points[:, 1] >= margin[1]) & (points[:, 1] <= (tomo_size[1] - margin[1])) &
+                (points[:, 2] >= margin[2]) & (points[:, 2] <= (tomo_size[2] - margin[2]))
+            )
+            points = points[keep]
 
             # Swap the coordinates to match the expected format
             points = points[:,[2,1,0]] 

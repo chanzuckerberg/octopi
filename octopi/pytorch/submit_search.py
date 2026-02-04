@@ -265,30 +265,30 @@ class ExploreSubmitter:
 
 class SubmititExplorer(ExploreSubmitter):
     """Model architecture search via submitit: submit N concurrent SLURM jobs, refill as they complete."""
-
     def __init__(
         self,
         n_concurrent_jobs: int = 5,
         cpus_per_task: int = 4,
         mem_per_cpu: int = 16,
         slurm_timeout_min: int = 1080,
+        gpu_constraint: str = None,
         submitit_folder: str = "submitit_logs",
         **kwargs,
     ):
         super().__init__(**kwargs)
         self.n_concurrent_jobs = n_concurrent_jobs
-        self.slurm_partition =  "gpu"
         self.slurm_timeout_min = slurm_timeout_min
         self.slurm_cpus_per_task = cpus_per_task
         self.mem_per_cpu_gb = mem_per_cpu
         self.submitit_folder = submitit_folder
+        self.gpu_constraint = gpu_constraint
 
         print('🚀 Using Submitit Explorer for Model Architecture Search with the following settings:')
         print(f"  - Concurrent Jobs: {self.n_concurrent_jobs}")
         print(f"  - Compute Constraint (cpus, mem_per_cpu_gb): {self.slurm_cpus_per_task}, {self.mem_per_cpu_gb}")
-        print(f"  - SLURM Partition: {self.slurm_partition}")
         print(f"  - SLURM Timeout (min): {self.slurm_timeout_min}")
         print(f"  - Submitit Folder: {self.submitit_folder}")
+        print(f"  - GPU Constraint: {self.gpu_constraint}\n")
 
     def _run_worker_pool(
         self,
@@ -296,18 +296,23 @@ class SubmititExplorer(ExploreSubmitter):
         study_name: str,
         submit_kwargs: dict,
     ):
+        """Run the submitit job pool until num_trials are done."""
         log_dir = os.path.join(submit_kwargs["output"], self.submitit_folder)
         os.makedirs(log_dir, exist_ok=True)
         executor = submitit.AutoExecutor(folder=log_dir)
         executor.update_parameters(
+            slurm_partition="gpu",
             timeout_min=self.slurm_timeout_min,
-            slurm_partition=self.slurm_partition,
             cpus_per_task=self.slurm_cpus_per_task,
             slurm_additional_parameters={
                 "mem-per-cpu": f"{self.mem_per_cpu_gb}G",
                 "gpus": "1",
-            }
+            },
         )
+        if self.gpu_constraint: # Optional GPU Constraint
+            executor.update_parameters(
+                slurm_constraint=self.gpu_constraint
+            )
 
         # Printing status every helper.PRINT_EVERY_S seconds
         last_print = 0

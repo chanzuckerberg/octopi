@@ -35,8 +35,10 @@ import rich_click as click
               help="Submit trials via SLURM (submitit) instead of local GPUs")
 @click.option('--njobs', '-nj', type=int, default=5,
               help="Number of concurrent training jobs when using submitit")
-@click.option('--compute-constraint', '-cc', type=str, default='4,16',
-              help='Compute constraint for number of CPUs requested and mem-per-cpu requested. (e.g., "4,16" for 4 CPUs and 16GB per CPU)')
+@click.option('--cpu-constraint', '-cc', type=str, default='4,16',
+              help='Number of CPUs and mem-per-cpu to requested. (e.g., "4,16" for 4 CPUs and 16GB per CPU)')
+@click.option('--gpu-constraint', '-gc', type=str, default=None,
+              help='GPU constraint to use for SLURM jobs (e.g., "a6000" or "l40,a6000")')
 @click.option('--timeout', type=int, default=4,
               help="SLURM job timeout per trial when using submitit (hours)")
 @common.config_parameters(single_config=False)
@@ -44,7 +46,7 @@ def cli(
     config, voxel_size, target_info, tomo_alg, study_name, 
     trainrunids, validaterunids, data_split, model_type, num_epochs, background_ratio,
     val_interval, ncache_tomos, best_metric, num_trials, random_seed, output,
-    submitit, njobs, compute_constraint, timeout):
+    submitit, njobs, cpu_constraint, gpu_constraint, timeout):
     """
     Perform model architecture search with Optuna.
     """
@@ -54,13 +56,13 @@ def cli(
         config, voxel_size, target_info, tomo_alg, study_name, 
         trainrunids, validaterunids, data_split, model_type, background_ratio,
         num_epochs, val_interval, ncache_tomos, best_metric, num_trials, random_seed, output,
-        submitit=submitit, njobs=njobs, compute_constraint=compute_constraint, timeout=timeout,
+        submitit=submitit, njobs=njobs, cpu_constraint=cpu_constraint, gpu_constraint=gpu_constraint, timeout=timeout,
     )
 
 def run_model_explore(config, voxel_size, target_info, tomo_alg, study_name, 
         trainrunids, validaterunids, data_split, model_type, background_ratio,
         num_epochs, val_interval, ncache_tomos, best_metric, num_trials, random_seed, 
-        output, submitit, njobs, compute_constraint, timeout):
+        output, submitit, njobs, cpu_constraint, gpu_constraint, timeout):
     """
     Run the model exploration (local GPUs or SLURM via submitit).
     """
@@ -76,6 +78,7 @@ def run_model_explore(config, voxel_size, target_info, tomo_alg, study_name,
     # Create the model exploration directory
     os.makedirs(output, exist_ok=True)
 
+    # Base keyword arguments for both local and submitit explorers
     base_kwargs = dict(
         copick_config=copick_configs,
         target_name=target_info[0],
@@ -96,14 +99,16 @@ def run_model_explore(config, voxel_size, target_info, tomo_alg, study_name,
         background_ratio=background_ratio,
     )
 
-
+    # Choose between local or submitit explorer
     if submitit:
         timeout = timeout * 60 # convert hours to minutes
-        (ncpus, cpu_mem) = parse_compute_constraint(compute_constraint)
+        (ncpus, cpu_mem) = parse_cpu_constraint(cpu_constraint)
+        gpu_constraint = parse_gpu_constraint(gpu_constraint)
         search = SubmititExplorer(
             n_concurrent_jobs=njobs,
             cpus_per_task=ncpus,
             mem_per_cpu=cpu_mem,
+            gpu_constraint=gpu_constraint,
             slurm_timeout_min=timeout,
             **base_kwargs,
         )
@@ -113,7 +118,7 @@ def run_model_explore(config, voxel_size, target_info, tomo_alg, study_name,
     # Run the model search
     search.run_model_search(study_name, output)
 
-def parse_compute_constraint(compute_constraint: str) -> tuple[int, int]:
+def parse_cpu_constraint(compute_constraint: str) -> tuple[int, int]:
     """Parse 'cpus,mem_per_cpu_gb' (e.g. '4,16') into (cpus_per_task, mem_gb_total)."""
     parts = [p.strip() for p in compute_constraint.split(",")]
     if len(parts) != 2:
@@ -127,6 +132,12 @@ def parse_compute_constraint(compute_constraint: str) -> tuple[int, int]:
             f"compute_constraint cpus and mem_per_cpu_gb must be positive, got: {compute_constraint!r}"
         )
     return cpus, mem_per_cpu_gb
+
+def parse_gpu_constraint(gpu_constraint: str) -> str | None:
+    """Parse GPU constraint string (e.g. 'A100,H100') or return None."""
+    if gpu_constraint: 
+        gpu_constraint = f'{gpu_constraint.replace(",","|")}'
+    return gpu_constraint
 
 if __name__ == "__main__":
     cli()
