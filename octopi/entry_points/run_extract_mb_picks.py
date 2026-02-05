@@ -30,7 +30,7 @@ def extract_membrane_bound_picks(
     if n_procs is None:
         n_procs = min(mp.cpu_count(), n_run_ids)
     print(f"Using {n_procs} processes to parallelize across {n_run_ids} run IDs.")   
-    
+
     # Run Membrane-Protein Isolation - Main Parallelization Loop
     with mp.Pool(processes=n_procs) as pool:
         with tqdm(total=n_run_ids, desc="Membrane-Protein Isolation", unit="run") as pbar:
@@ -87,7 +87,7 @@ def save_parameters(config: str,
     io.save_parameters_yaml(params_dict, output_path)
 
 
-@click.command('membrane-extract')
+@click.command('membrane-extract', no_args_is_help=True)
 # Output Arguments
 @click.option('-ssid','--save-session-id', type=str, required=True,
               help="Session ID to save the new picks")

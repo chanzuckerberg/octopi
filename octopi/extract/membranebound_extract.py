@@ -75,10 +75,10 @@ def process_membrane_bound_extract(
         close_indices = np.where(closest_labels != -1)[0]
         far_indices = np.where(closest_labels == -1)[0]
 
-
         # Get Original Orientations
         orientations = np.zeros([nPoints, 4, 4])
-        picks = run.get_picks(object_name=picks_info[0], user_id=picks_info[1], session_id=picks_info[2])[0]
+        picks = run.get_picks(object_name=picks_info[0], user_id=picks_info[1], session_id=picks_info[2])
+        picks = picks[0].points
         for ii in range(nPoints):
             orientations[ii] = picks[ii].transformation_
         
