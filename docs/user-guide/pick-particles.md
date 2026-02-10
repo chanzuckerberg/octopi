@@ -430,18 +430,18 @@ Use the [Stepper Widget](javascript:void(0); "<img src='https://copick.github.io
     2. Click particles to select them (or ++s+a++ to select all)
     3. Press ++d+s++ to delete selected particles
 
-### Controlling Particle Display
+??? note "Controlling Particle Display"
 
-<div class="center-table" markdown>
+    <div class="center-table" markdown>
 
-| Shortcut | Effect |
-|:--------:|--------|
-| ++w+w++ | Toggle particle list visibility (show/hide all) |
-| ++0+0++ | Set 0% transparency (fully opaque) |
-| ++5+5++ | Set 50% transparency |
-| ++8+8++ | Set 80% transparency |
+    | Shortcut | Effect |
+    |:--------:|--------|
+    | ++w+w++ | Toggle particle list visibility (show/hide all) |
+    | ++0+0++ | Set 0% transparency (fully opaque) |
+    | ++5+5++ | Set 50% transparency |
+    | ++8+8++ | Set 80% transparency |
 
-</div>
+    </div>
 
 ---
 
@@ -463,73 +463,73 @@ The picks are stored in the overlay directory specified in your copick configura
 !!! tip "Show All Shortcuts"
     Press ++question++ to display all shortcuts in the ChimeraX log window.
 
-### Particles
+??? info "Particles"
 
-<div class="center-table" markdown>
+    <div class="center-table" markdown>
 
-| Shortcut | Action |
-|:--------:|--------|
-| ++w+w++ | Toggle particle display |
-| ++a+a++ | Previous particle |
-| ++d+d++ | Next particle |
-| ++s+a++ | Select all particles |
-| ++minus+minus++ | Remove active particle |
+    | Shortcut | Action |
+    |:--------:|--------|
+    | ++w+w++ | Toggle particle display |
+    | ++a+a++ | Previous particle |
+    | ++d+d++ | Next particle |
+    | ++s+a++ | Select all particles |
+    | ++minus+minus++ | Remove active particle |
 
-</div>
+    </div>
 
-### Picking
+??? info "Picking"
 
-<div class="center-table" markdown>
+    <div class="center-table" markdown>
 
-| Shortcut | Action |
-|:--------:|--------|
-| ++a+p++ | Add on plane mode |
-| ++d+p++ | Delete picked mode |
-| ++s+s++ | Select mode |
-| ++d+s++ | Delete selected particles |
+    | Shortcut | Action |
+    |:--------:|--------|
+    | ++a+p++ | Add on plane mode |
+    | ++d+p++ | Delete picked mode |
+    | ++s+s++ | Select mode |
+    | ++d+s++ | Delete selected particles |
 
-</div>
+    </div>
 
-### Visualization
+??? info "Visualization"
 
-<div class="center-table" markdown>
+    <div class="center-table" markdown>
 
-| Shortcut | Action |
-|:--------:|--------|
-| ++q+q++ | Single plane (slab) |
-| ++e+e++ | Orthoplanes |
-| ++x+x++ | XY view |
-| ++y+y++ | YZ view |
-| ++z+z++ | XZ view |
-| ++c+c++ | Toggle clipping |
-| ++f+f++ | Move planes mode |
-| ++r+r++ | Rotate slab mode |
-| ++period+period++ | Invert contrast |
+    | Shortcut | Action |
+    |:--------:|--------|
+    | ++q+q++ | Single plane (slab) |
+    | ++e+e++ | Orthoplanes |
+    | ++x+x++ | XY view |
+    | ++y+y++ | YZ view |
+    | ++z+z++ | XZ view |
+    | ++c+c++ | Toggle clipping |
+    | ++f+f++ | Move planes mode |
+    | ++r+r++ | Rotate slab mode |
+    | ++period+period++ | Invert contrast |
 
-</div>
+    </div>
 
-### Transparency
+??? info "Transparency"
 
-<div class="center-table" markdown>
+    <div class="center-table" markdown>
 
-| Shortcut | Action |
-|:--------:|--------|
-| ++0+0++ | 0% transparency (opaque) |
-| ++5+5++ | 50% transparency |
-| ++8+8++ | 80% transparency |
+    | Shortcut | Action |
+    |:--------:|--------|
+    | ++0+0++ | 0% transparency (opaque) |
+    | ++5+5++ | 50% transparency |
+    | ++8+8++ | 80% transparency |
 
-</div>
+    </div>
 
-### Info
+??? info "Info"
 
-<div class="center-table" markdown>
+    <div class="center-table" markdown>
 
-| Shortcut | Action |
-|:--------:|--------|
-| ++i+l++ | Toggle info label |
-| ++question++ | Show all shortcuts |
+    | Shortcut | Action |
+    |:--------:|--------|
+    | ++i+l++ | Toggle info label |
+    | ++question++ | Show all shortcuts |
 
-</div>
+    </div>
 
 ---
 
