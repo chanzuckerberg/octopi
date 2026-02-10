@@ -12,7 +12,7 @@ For specific use cases or when you have a known good architecture, you can train
 octopi train \
     --config config.json \
     --voxel-size 10 --tomo-alg wbp --Nclass 8 \
-    --tomo-batch-size 50 --num-epochs 100 --val-interval 10 \
+    --tomo-batch-size 50 --val-interval 10 \
     --target-info targets,octopi,1
 ```
 
@@ -25,7 +25,7 @@ octopi train \
 | `--tomo-alg` | Tomographic reconstruction algorithm | `wbp` (weighted back projection) |
 | `--Nclass` | Number of output classes for segmentation | `8` |
 | `--tomo-batch-size` | Batch size for tomographic processing | `50` |
-| `--num-epochs` | Total number of training epochs | `100` |
+| `--num-epochs` | Total number of training epochs | `1000` |
 | `--val-interval` | Validation frequency (every N epochs) | `10` |
 | `--target-info` | Target information in format: name,framework,version | `targets,octopi,1` |
 

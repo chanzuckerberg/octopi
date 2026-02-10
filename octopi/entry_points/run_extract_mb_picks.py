@@ -1,5 +1,5 @@
 from octopi.extract import membranebound_extract as extract
-from octopi import utils, io
+from octopi.utils import parsers
 import argparse, json, pprint, copick, json
 from typing import List, Tuple, Optional
 import multiprocess as mp
@@ -58,12 +58,12 @@ def cli():
     parser.add_argument('--config', type=str, required=True, help='Path to the configuration file.')
     parser.add_argument('--voxel-size', type=float, required=False, default=10, help='Voxel size.')
     parser.add_argument('--distance-threshold', type=float, required=False, default=10, help='Distance threshold.')
-    parser.add_argument('--picks-info', type=utils.parse_target, required=True, help='Query for the picks (e.g., "name" or "name,user_id,session_id".).')
-    parser.add_argument('--membrane-info', type=utils.parse_target, required=False, help='Query for the membrane segmentation (e.g., "name" or "name,user_id,session_id".).')
-    parser.add_argument('--organelle-info', type=utils.parse_target, required=False, help='Query for the organelles segmentations (e.g., "name" or "name,user_id,session_id".).')
+    parser.add_argument('--picks-info', type=parsers.parse_target, required=True, help='Query for the picks (e.g., "name" or "name,user_id,session_id".).')
+    parser.add_argument('--membrane-info', type=parsers.parse_target, required=False, help='Query for the membrane segmentation (e.g., "name" or "name,user_id,session_id".).')
+    parser.add_argument('--organelle-info', type=parsers.parse_target, required=False, help='Query for the organelles segmentations (e.g., "name" or "name,user_id,session_id".).')
     parser.add_argument('--save-user-id', type=str, required=False, default=None, help='User ID to save the new picks.')
     parser.add_argument('--save-session-id', type=str, required=True, help='Session ID to save the new picks.')
-    parser.add_argument('--runIDs', type=utils.parse_list, required=False, help='List of run IDs to process.')
+    parser.add_argument('--runIDs', type=parsers.parse_list, required=False, help='List of run IDs to process.')
     parser.add_argument('--n-procs', type=int, required=False, default=None, help='Number of processes to use.')
 
     args = parser.parse_args()

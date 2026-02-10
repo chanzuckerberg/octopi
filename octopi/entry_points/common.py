@@ -1,4 +1,4 @@
-from octopi import utils
+from octopi.utils import parsers
 import argparse
 
 def add_model_parameters(parser, octopi = False):
@@ -8,8 +8,8 @@ def add_model_parameters(parser, octopi = False):
     
     # Add U-Net model parameters
     parser.add_argument("--Nclass", type=int, required=False, default=3, help="Number of prediction classes in the model")
-    parser.add_argument("--channels", type=utils.parse_int_list, required=False, default='32,64,96,96', help="List of channel sizes")
-    parser.add_argument("--strides", type=utils.parse_int_list, required=False, default='2,2,1', help="List of stride sizes")
+    parser.add_argument("--channels", type=parsers.parse_int_list, required=False, default='32,64,96,96', help="List of channel sizes")
+    parser.add_argument("--strides", type=parsers.parse_int_list, required=False, default='2,2,1', help="List of stride sizes")
     parser.add_argument("--res-units", type=int, required=False, default=1, help="Number of residual units in the UNet")
     parser.add_argument("--dim-in", type=int, required=False, default=96, help="Input dimension for the UNet model")
 
@@ -52,11 +52,11 @@ def add_inference_parameters(parser):
 
     parser.add_argument("--tomo-alg", required=False, default = 'wbp', 
                         help="Tomogram algorithm used for produces segmentation prediction masks.")    
-    parser.add_argument("--seg-info", type=utils.parse_target, required=False, 
+    parser.add_argument("--seg-info", type=parsers.parse_target, required=False, 
                         default='predict,octopi,1', help='Information Query to save Segmentation predictions under, e.g., (e.g., "name" or "name,user_id,session_id" - Default UserID is octopi and SessionID is 1')
     parser.add_argument("--tomo-batch-size", type=int, default=25, required=False, 
                         help="Batch size for tomogram processing.")
-    parser.add_argument("--run-ids", type=utils.parse_list, default=None, required=False, 
+    parser.add_argument("--run-ids", type=parsers.parse_list, default=None, required=False, 
                         help="List of run IDs for prediction, e.g., run1,run2 or [run1,run2]. If not provided, all available runs will be processed.")   
     
 def add_localize_parameters(parser):

@@ -1,13 +1,12 @@
 from octopi.datasets import generators, multi_config_generator
 from monai.losses import DiceLoss, FocalLoss, TverskyLoss
-from octopi.models import common as builder
 from monai.metrics import ConfusionMatrixMetric
-from octopi.entry_points import common 
-from octopi.pytorch import trainer 
-from octopi import io, utils
-import torch, os, argparse
+from octopi.models import common as builder
 from typing import List, Optional, Tuple
-import pprint
+from octopi.entry_points import common 
+from octopi.utils import parsers, io
+from octopi.pytorch import trainer 
+import torch, os, argparse
 
 def train_model(
     copick_config_path: str,
@@ -28,11 +27,15 @@ def train_model(
     best_metric: str = 'avg_f1',
     data_split: str = '0.8'
     ):
+    """
+    Train a 3D U-Net model using the specified CoPick configuration and target information.
+    """
 
     # Initialize the data generator to manage training and validation datasets
     print(f'Training with {copick_config_path}\n')
+
+    # Multi-config training
     if isinstance(copick_config_path, dict):
-        # Multi-config training
         data_generator = multi_config_generator.MultiConfigTrainLoaderManager(
             copick_config_path, 
             target_info[0], 
@@ -42,8 +45,7 @@ def train_model(
             voxel_size = voxel_size,
             Nclasses = model_config['num_classes'],
             tomo_batch_size = tomo_batch_size )
-    else:
-        # Single-config training
+    else:  # Single-config training
         data_generator = generators.TrainLoaderManager(
             copick_config_path, 
             target_info[0], 
@@ -52,16 +54,19 @@ def train_model(
             tomo_algorithm = tomo_algorithm,
             voxel_size = voxel_size,
             Nclasses = model_config['num_classes'],
-            tomo_batch_size = tomo_batch_size ) 
-    
+            tomo_batch_size = tomo_batch_size )
 
     # Get the data splits
-    ratios = utils.parse_data_split(data_split)
+    ratios = parsers.parse_data_split(data_split)
     data_generator.get_data_splits(
         trainRunIDs = trainRunIDs,
         validateRunIDs = validateRunIDs,
         train_ratio = ratios[0], val_ratio = ratios[1], test_ratio = ratios[2],
         create_test_dataset = False)
+
+    # Find the configuration file with labels
+    if data_generator.target_session_id is None:
+        root = copick.from_file(copick_config_path)
     
     # Get the reload frequency
     data_generator.get_reload_frequency(num_epochs)
@@ -89,17 +94,18 @@ def train_model(
     # Create UNet-Trainer
     model_trainer = trainer.ModelTrainer(model, device, loss_function, metrics_function, optimizer)
 
+    # Train the Model 
     results = model_trainer.train(
         data_generator, model_save_path, max_epochs=num_epochs,
         crop_size=model_config['dim_in'], my_num_samples=num_tomo_crops,
         val_interval=val_interval, best_metric=best_metric, verbose=True
     )
-    
+
     # Save parameters and results
     parameters_save_name = os.path.join(model_save_path, "model_config.yaml")
     io.save_parameters_to_yaml(model_builder, model_trainer, data_generator, parameters_save_name)
 
-    # TODO: Write Results to Zarr or Another File Format? 
+    # TODO: Write Results to CSV...
     results_save_name = os.path.join(model_save_path, "results.json")
     io.save_results_to_json(results, results_save_name)
 
@@ -114,11 +120,11 @@ def train_model_parser(parser_description, add_slurm: bool = False):
     # Input Arguments
     input_group = parser.add_argument_group("Input Arguments")
     common.add_config(input_group, single_config=False)
-    input_group.add_argument("--target-info", type=utils.parse_target, default="targets,octopi,1", 
+    input_group.add_argument("--target-info", type=parsers.parse_target, default="targets,octopi,1", 
                              help="Target information, e.g., 'name' or 'name,user_id,session_id'. Default is 'targets,octopi,1'.")
     input_group.add_argument("--tomo-alg", default='wbp', help="Tomogram algorithm used for training")
-    input_group.add_argument("--trainRunIDs", type=utils.parse_list, help="List of training run IDs, e.g., run1,run2,run3")
-    input_group.add_argument("--validateRunIDs", type=utils.parse_list, help="List of validation run IDs, e.g., run4,run5,run6")
+    input_group.add_argument("--trainRunIDs", type=parsers.parse_list, help="List of training run IDs, e.g., run1,run2,run3")
+    input_group.add_argument("--validateRunIDs", type=parsers.parse_list, help="List of validation run IDs, e.g., run4,run5,run6")
     input_group.add_argument('--data-split', type=str, default='0.8', help="Data split ratios. Either a single value (e.g., '0.8' for 80/20/0 split) "
                                 "or two comma-separated values (e.g., '0.7,0.1' for 70/10/20 split)")
     
@@ -153,11 +159,11 @@ def cli():
     args = train_model_parser(parser_description)
 
     # Parse the CoPick configuration paths
-    if len(args.config) > 1:    copick_configs = utils.parse_copick_configs(args.config)
+    if len(args.config) > 1:    copick_configs = parsers.parse_copick_configs(args.config)
     else:                       copick_configs = args.config[0]
 
     if args.model_config:
-        model_config = utils.load_yaml(args.model_config)
+        model_config = io.load_yaml(args.model_config)
     else:
         model_config = get_model_config(args.channels, args.strides, args.res_units, args.Nclass, args.dim_in)
 
@@ -196,6 +202,4 @@ def get_model_config(channels, strides, res_units, Nclass, dim_in):
         'dim_in': dim_in
     }
     return model_config
-
-if __name__ == "__main__":
-    cli()
+    

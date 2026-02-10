@@ -25,7 +25,7 @@ octopi model-explore \
     --config config.json \
     --target-info targets,octopi,1 \
     --voxel-size 10 --tomo-alg denoised --Nclass 8 \
-    --data-split 0.7,0.2,0.1 --model-type Unet \
+    --data-split 0.7 --model-type Unet \
     --num-trials 100 --best-metric fBeta3
 ```
 

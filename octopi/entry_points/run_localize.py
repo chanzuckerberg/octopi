@@ -1,11 +1,10 @@
 from octopi.entry_points import common
+from octopi.utils import parsers, io
 from octopi.extract import localize
-from octopi import utils
-import copick, argparse, pprint
+import copick, argparse, pprint, os
 from typing import List, Tuple
 import multiprocess as mp
 from tqdm import tqdm
-import os
 
 def pick_particles(
     copick_config_path: str,
@@ -59,8 +58,8 @@ def pick_particles(
     print(f"Using {n_procs} processes to parallelize across {n_run_ids} run IDs.")
     with mp.Pool(processes=n_procs) as pool:
         with tqdm(total=n_run_ids, desc="Localization", unit="run") as pbar:
-            worker_func = lambda run_id: localize.processs_localization(
-                root.get_run(run_id),  
+            worker_func = lambda run_id: localize.process_localization(
+                root.get_run(run_id),
                 objects, 
                 seg_info,
                 method, 
@@ -75,6 +74,8 @@ def pick_particles(
             for _ in pool.imap_unordered(worker_func, run_ids, chunksize=1):
                 pbar.update(1)
 
+    
+
     print('Localization Complete!')
 
 def localize_parser(parser_description, add_slurm: bool = False):
@@ -85,20 +86,20 @@ def localize_parser(parser_description, add_slurm: bool = False):
     input_group = parser.add_argument_group("Input Arguments")
     input_group.add_argument("--config", type=str, required=True, help="Path to the CoPick configuration file.")
     input_group.add_argument("--method", type=str, choices=['watershed', 'com'], default='watershed', required=False, help="Localization method to use.")
-    input_group.add_argument('--seg-info', type=utils.parse_target, required=True, help='Query for the organelles segmentations (e.g., "name" or "name,user_id,session_id".).')
+    input_group.add_argument('--seg-info', type=parsers.parse_target, required=False, default='predict,octopi,1', help='Query for the organelles segmentations (e.g., "name" or "name,user_id,session_id".).')
     input_group.add_argument("--voxel-size", type=float, default=10, required=False, help="Voxel size for localization.")
-    input_group.add_argument("--runIDs", type=utils.parse_list, default = None, required=False, help="List of runIDs to run inference on, e.g., run1,run2,run3 or [run1,run2,run3].")
+    input_group.add_argument("--runIDs", type=parsers.parse_list, default = None, required=False, help="List of runIDs to run inference on, e.g., run1,run2,run3 or [run1,run2,run3].")
 
     localize_group = parser.add_argument_group("Localize Arguments")
     localize_group.add_argument("--radius-min-scale", type=float, default=0.5, required=False, help="Minimum radius scale for particles.")
     localize_group.add_argument("--radius-max-scale", type=float, default=1.0, required=False, help="Maximum radius scale for particles.")
     localize_group.add_argument("--filter-size", type=int, default=10, required=False, help="Filter size for localization.")
-    localize_group.add_argument("--pick-objects", type=utils.parse_list, default=None, required=False, help="Specific Objects to Find Picks for.")
+    localize_group.add_argument("--pick-objects", type=parsers.parse_list, default=None, required=False, help="Specific Objects to Find Picks for.")
     localize_group.add_argument("--n-procs", type=int, default=8, required=False, help="Number of CPU processes to parallelize runs across. Defaults to the max number of cores available or available runs.")
 
     output_group = parser.add_argument_group("Output Arguments")
     output_group.add_argument("--pick-session-id", type=str, default='1', required=False, help="Session ID for the particle picks.")
-    output_group.add_argument("--pick-user-id", type=str, default='monai', required=False, help="User ID for the particle picks.")
+    output_group.add_argument("--pick-user-id", type=str, default='octopi', required=False, help="User ID for the particle picks.")
 
     if add_slurm:
         slurm_group = parser.add_argument_group("SLURM Arguments")
@@ -114,8 +115,12 @@ def cli():
     args = localize_parser(parser_description)
 
     # Save JSON with Parameters
-    output_yaml = f'localize_{args.pick_user_id}_{args.pick_session_id}.yaml'    
-    save_parameters(args, output_yaml)    
+    root = copick.from_file(args.config)
+    overlay_root = io.remove_prefix(root.config.overlay_root)
+    basepath = os.path.join(overlay_root, 'logs')
+    os.makedirs(basepath, exist_ok=True)
+    output_path = os.path.join(basepath, f'localize-{args.pick_user_id}_{args.pick_session_id}.yaml')
+    save_parameters(args, output_path)    
 
     # Set multiprocessing start method
     mp.set_start_method("spawn")
@@ -156,7 +161,6 @@ def save_parameters(args: argparse.Namespace,
             "radius_min_scale": args.radius_min_scale,
             "radius_max_scale": args.radius_max_scale,
             "filter_size": args.filter_size,
-            "runIDs": args.runIDs
         }
     }
 
@@ -165,42 +169,8 @@ def save_parameters(args: argparse.Namespace,
     pprint.pprint(params); print()
 
     # Save to YAML file
-    utils.save_parameters_yaml(params, output_path)
+    io.save_parameters_yaml(params, output_path)
 
 if __name__ == "__main__":
     cli()
 
-# def time_pick_particles():
-#     import json, time
-
-#     # Set multiprocessing start method
-#     mp.set_start_method("spawn")
-
-#     copick_config_path = "/mnt/simulations/ml_challenge/ml_config.json"  # Replace with your actual path
-#     n_procs_list = [1, 4, 8, 16, 32]  # Adjust based on your needs
-#     n_procs_list = [32, 16, 8, 4, 1]
-#     timing_results = {}
-
-#     session_id = 1
-#     for n_procs in n_procs_list:
-#         print(f"Testing with {n_procs} processes...")
-#         start_time = time.time()
-#         pick_particles(
-#             copick_config_path=copick_config_path,
-#             pick_session_id=str(session_id),
-#             n_procs=n_procs
-#         )
-#         elapsed_time = time.time() - start_time
-#         timing_results[n_procs] = elapsed_time
-#         print(f"Elapsed time with {n_procs} processes: {elapsed_time:.2f} seconds")
-
-#         session_id +=1 
-
-#     # Save timing results to a JSON file
-#     with open("timing_results.json", "w") as f:
-#         json.dump(timing_results, f, indent=4)
-
-#     print("Timing results saved to 'timing_results.json'")
-
-# if __name__ == "__main__":
-#     time_pick_particles()

@@ -1,58 +1,12 @@
-from monai.networks.nets import UNet, AttentionUnet
+"""
+Argument parsing and configuration utilities.
+"""
+
+import argparse, os, random
+import torch, numpy as np
 from typing import List, Tuple, Union
 from dotenv import load_dotenv
-import argparse, octopi
-import torch, random, os, yaml
-from typing import List
-import numpy as np
-
-##############################################################################################################################
-
-def mlflow_setup():
-
-    module_root = os.path.dirname(octopi.__file__)
-    dotenv_path = module_root.replace('src/octopi','') + '.env'
-    load_dotenv(dotenv_path=dotenv_path)
-
-    # MLflow setup
-    username = os.getenv('MLFLOW_TRACKING_USERNAME')
-    password = os.getenv('MLFLOW_TRACKING_PASSWORD')
-    if not password or not username:
-        print("Password not found in environment, loading from .env file...")
-        load_dotenv()  # Loads environment variables from a .env file
-        username = os.getenv('MLFLOW_TRACKING_USERNAME')
-        password = os.getenv('MLFLOW_TRACKING_PASSWORD')
-    
-    # Check again after loading .env file
-    if not password:
-        raise ValueError("Password is not set in environment variables or .env file!")
-    else:
-        print("Password loaded successfully")
-        os.environ['MLFLOW_TRACKING_USERNAME'] = username
-        os.environ['MLFLOW_TRACKING_PASSWORD'] = password    
-
-    return os.getenv('MLFLOW_TRACKING_URI')
-
-##############################################################################################################################
-
-def set_seed(seed):
-    # Set the seed for Python's random module
-    random.seed(seed)
-
-    # Set the seed for NumPy
-    np.random.seed(seed)
-
-    # Set the seed for PyTorch (both CPU and GPU)
-    torch.manual_seed(seed)
-    if torch.cuda.is_available():
-        torch.cuda.manual_seed(seed)
-        torch.cuda.manual_seed_all(seed)  # If using multi-GPU
-
-    # Ensure reproducibility of operations by disabling certain optimizations
-    torch.backends.cudnn.deterministic = True
-    torch.backends.cudnn.benchmark = False
-    
-###############################################################################################################################
+import octopi
 
 def parse_list(value: str) -> List[str]:
     """
@@ -62,7 +16,6 @@ def parse_list(value: str) -> List[str]:
     value = value.strip("[]")  # Remove brackets if present
     return [x.strip() for x in value.split(",")]
 
-###############################################################################################################################
 
 def parse_int_list(value: str) -> List[int]:
     """
@@ -71,7 +24,6 @@ def parse_int_list(value: str) -> List[int]:
     """
     return [int(x) for x in parse_list(value)]
 
-###############################################################################################################################
 
 def string2bool(value: str):
     """
@@ -86,7 +38,6 @@ def string2bool(value: str):
     else:
         raise argparse.ArgumentTypeError(f"Invalid boolean value: {value}")
 
-###############################################################################################################################
 
 def parse_target(value: str) -> Tuple[str, Union[str, None], Union[str, None]]:
     """
@@ -130,6 +81,7 @@ def parse_seg_target(value: str) -> List[Tuple[str, Union[str, None], Union[str,
             )
     return targets
 
+
 def parse_copick_configs(config_entries: List[str]):
     """
     Parse a string representing a list of CoPick configuration file paths.
@@ -172,6 +124,7 @@ def parse_copick_configs(config_entries: List[str]):
 
     return copick_configs
 
+
 def parse_data_split(value: str) -> Tuple[float, float, float]:
     """
     Parse data split ratios from string input.
@@ -208,31 +161,4 @@ def parse_data_split(value: str) -> Tuple[float, float, float]:
     if abs(train_ratio + val_ratio + test_ratio - 1.0) > 1e-6:
         raise ValueError(f"Ratios must sum to 1.0, got {train_ratio + val_ratio + test_ratio}")
     
-    return round(train_ratio, 2), round(val_ratio, 2), round(test_ratio, 2)
-
-##############################################################################################################################
-
-# Create a custom dumper that uses flow style for lists only.
-class InlineListDumper(yaml.SafeDumper):
-    def represent_list(self, data):
-        node = super().represent_list(data)
-        node.flow_style = True  # Use inline style for lists
-        return node
-
-def save_parameters_yaml(params: dict, output_path: str):
-    """
-    Save parameters to a YAML file.
-    """
-    InlineListDumper.add_representer(list, InlineListDumper.represent_list)
-    with open(output_path, 'w') as f:
-        yaml.dump(params, f, Dumper=InlineListDumper, default_flow_style=False, sort_keys=False)
-
-def load_yaml(path: str) -> dict:
-    """
-    Load a YAML file and return the contents as a dictionary.
-    """
-    if os.path.exists(path):
-        with open(path, 'r') as f:
-            return yaml.safe_load(f)
-    else:
-        raise FileNotFoundError(f"File not found: {path}")
+    return round(train_ratio, 2), round(val_ratio, 2), round(test_ratio, 2) 

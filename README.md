@@ -25,12 +25,15 @@ Our deep learning-based pipeline streamlines the training and execution of 3D au
 
 ### Installation
 
+Octopi is availableon PyPI and can be installed using pip:
 ```bash
 pip install octopi
 ```
-**⚠️ Note:** One of the current dependencies is currently not working with pip 25. To temporarily reduce the pip version, run:
+
+⚠️ **Note**: One of the current dependencies is currently not working with pip 25.1. We recommend using pip 25.2 or higher,
+or [`uv pip`](https://docs.astral.sh/uv/pip/) when installing octopi.
 ```bash
-pip install --upgrade "pip<25"
+pip install --upgrade "pip>=25.2"
 ```
 
 ### Basic Usage
@@ -44,13 +47,18 @@ octopi --help
 # HPC-specific CLI for submitting jobs to SLURM clusters
 octopi-slurm --help
 ```
+
 ## 📚 Documentation
 
 For detailed documentation, tutorials, CLI and API reference, visit our [documentation](https://chanzuckerberg.github.io/octopi/).
 
 ## 🤝 Contributing
 
-This project adheres to the Contributor Covenant code of conduct. By participating, you are expected to uphold this code. Please report unacceptable behavior to opensource@chanzuckerberg.com.
+## Code of Conduct
+
+This project adheres to the Contributor Covenant [code of conduct](https://github.com/chanzuckerberg/.github/blob/master/CODE_OF_CONDUCT.md).
+By participating, you are expected to uphold this code. 
+Please report unacceptable behavior to [opensource@chanzuckerberg.com](mailto:opensource@chanzuckerberg.com).
 
 ## 🔒 Security
 

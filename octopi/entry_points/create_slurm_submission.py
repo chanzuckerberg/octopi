@@ -1,5 +1,5 @@
 from octopi.entry_points import run_train, run_segment_predict, run_localize, run_optuna
-from octopi.submit_slurm import create_shellsubmit, create_multiconfig_shellsubmit
+from octopi.utils.submit_slurm import create_shellsubmit, create_multiconfig_shellsubmit
 from octopi.processing.importers import cli_mrcs_parser, cli_dataportal_parser
 from octopi.entry_points import common 
 from octopi import utils

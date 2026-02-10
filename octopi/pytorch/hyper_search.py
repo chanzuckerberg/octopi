@@ -1,10 +1,9 @@
-from monai.losses import FocalLoss, TverskyLoss
 from monai.metrics import ConfusionMatrixMetric
 from octopi.pytorch import trainer
 from mlflow.tracking import MlflowClient
 from octopi.models import common
-from octopi import io, losses
 import torch, mlflow, optuna, gc
+from octopi.utils import io
 
 class BayesianModelSearch:
 
@@ -207,7 +206,7 @@ class BayesianModelSearch:
         if score > best_score_so_far:
             torch.save(model_trainer.model_weights, f'{self.results_dir}/best_model.pth')
             io.save_parameters_to_yaml(self.model_builder, model_trainer, self.data_generator, 
-                                    f'{self.results_dir}/best_model_config.yaml')
+                                    f'{self.results_dir}/model_config.yaml')
 
     def get_best_score(self, trial):
         """Retrieve the best score from the trial."""
