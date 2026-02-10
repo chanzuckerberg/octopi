@@ -26,12 +26,19 @@ theme:
     - search.highlight
     - search.share
     - search.suggest
+    - content.tooltips
 
 markdown_extensions:
   - pymdownx.highlight:
       anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
   - pymdownx.superfences
   - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.keys
   - admonition
   - pymdownx.details
   - pymdownx.emoji:
@@ -56,6 +63,9 @@ plugins:
   - minify:
       minify_html: true
 
+
+extra_css:
+  - stylesheets/extra.css
 
 extra_javascript:
   - https://polyfill.io/v3/polyfill.min.js?features=es6
