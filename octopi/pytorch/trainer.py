@@ -3,7 +3,7 @@ from monai.inferers import sliding_window_inference
 from octopi.utils import stopping_criteria
 from monai.transforms import AsDiscrete
 from monai.data import decollate_batch
-import torch, os, mlflow, re
+import torch, os, mlflow, re, optuna
 import torch_ema as ema
 from tqdm import tqdm 
 import numpy as np
@@ -14,12 +14,12 @@ warnings.filterwarnings("ignore", category=UserWarning)
 
 class ModelTrainer:
 
-    def __init__(self, 
-                 model, 
+    def __init__(self,
+                 model,
                  device,
-                 loss_function, 
-                 metrics_function, 
-                 optimizer, 
+                 loss_function,
+                 metrics_function,
+                 optimizer,
                  use_ema: bool = True):
 
         self.model = model
@@ -28,31 +28,23 @@ class ModelTrainer:
         self.metrics_function = metrics_function
         self.optimizer = optimizer
 
-        self.parallel_mlflow = False
-        self.client = None
-        self.trial_run_id = None  
-
         # Default F-Beta Value
         self.beta = 2
+        self.overlap = 0.5
+        self.sw_bs = 4
 
         # Initialize EMAHandler for the model
         self.ema_experiment = use_ema
         if self.ema_experiment:
-            self.ema_handler = ema.ExponentialMovingAverage(self.model.parameters(), decay=0.99)
+            self.ema_handler = ema.ExponentialMovingAverage(self.model.parameters(), decay=0.995)
 
         # Initialize Figure and Axes for Plotting
         self.fig = None; self.axs = None
 
-    def set_parallel_mlflow(self, 
-                            client,
-                            trial_run_id):
-        
-        self.parallel_mlflow = True
-        self.client = client
-        self.trial_run_id = trial_run_id
-    
     def train_update(self):
-
+        """
+        Train the model for one epoch.
+        """
         step = 0
         epoch_loss = 0
         self.model.train()
@@ -77,6 +69,7 @@ class ModelTrainer:
         epoch_loss /= step
         return epoch_loss
 
+    @torch.no_grad()
     def validate_update(self):
         """
         Perform validation and compute metrics, including validation loss.
@@ -85,27 +78,27 @@ class ModelTrainer:
         # Set model to evaluation mode
         self.model.eval()
         val_loss = 0
-        with torch.no_grad():
+        with torch.amp.autocast(device_type="cuda", dtype=torch.float16):
             for val_data in self.val_loader:
                 val_inputs = val_data["image"].to(self.device)
-                val_labels = val_data["label"].to(self.device)
+                val_labels = val_data["label"].to(self.device) 
                 
                 # Apply sliding window inference
-                # roi_size=self.input_dim, # try setting a set size of 128, 144 or 160? 
+                roi = max(128, self.crop_size)  # try setting a set size of 128, 144 or 160?
                 val_outputs = sliding_window_inference(
                     inputs=val_inputs, 
-                    roi_size=(144,144,144),
-                    sw_batch_size=4,
+                    roi_size=(roi, roi, roi),
+                    sw_batch_size=self.sw_bs,
                     predictor=self.model, 
-                    overlap=0.5,
+                    overlap=self.overlap,
+                    sw_device=self.device,
                     device=self.device
                 )
 
                 del val_inputs
-                torch.cuda.empty_cache()
 
                 # Compute the loss for this batch
-                loss = self.loss_function(val_outputs, val_labels)  # Assuming self.loss_function is defined
+                loss = self.loss_function(val_outputs.float(), val_labels)  
                 val_loss += loss.item()  # Accumulate the loss                
 
                 # Apply post-processing
@@ -116,7 +109,7 @@ class ModelTrainer:
                 self.metrics_function(y_pred=metric_val_outputs, y=metric_val_labels)             
 
                 del val_labels, val_outputs, metric_val_outputs, metric_val_labels
-                torch.cuda.empty_cache()
+            torch.cuda.empty_cache()
 
         # # Contains recall, precision, and f1 for each class
         metric_values = self.metrics_function.aggregate(reduction='mean_batch')
@@ -137,8 +130,8 @@ class ModelTrainer:
         val_interval: int = 15,
         lr_scheduler_type: str = 'cosine', 
         best_metric: str = 'avg_f1',
-        use_mlflow: bool = False,
-        verbose: bool = False
+        verbose: bool = False,
+        trial: optuna.trial.Trial = None
     ):
 
         # best lr scheduler options are cosine or reduce
@@ -146,17 +139,19 @@ class ModelTrainer:
         self.warmup_lr_factor = 0.1
         self.min_lr = 1e-6
 
+        # Store training parameters
         self.max_epochs = max_epochs
         self.crop_size = crop_size
         self.num_samples = my_num_samples
         self.val_interval = val_interval
-        self.use_mlflow = use_mlflow
+        self.use_mlflow = trial # if model exploration call, use mlflow logging
 
         # Create Save Folder if It Doesn't Exist
-        if model_save_path is not None:
-            os.makedirs(model_save_path, exist_ok=True)  
+        if model_save_path: os.makedirs(model_save_path, exist_ok=True)  
 
+        # Get number of classes and create results dictionary
         Nclass = data_load_gen.Nclasses
+        self.class_names = data_load_gen.class_names
         self.create_results_dictionary(Nclass)  
 
         # Resolve the best metric
@@ -165,93 +160,111 @@ class ModelTrainer:
         # Stopping Criteria
         self.stopping_criteria = stopping_criteria.EarlyStoppingChecker(monitor_metric=best_metric, val_interval=val_interval)            
 
+        # Post-processing transforms
         self.post_pred = AsDiscrete(argmax=True, to_onehot=Nclass)
         self.post_label = AsDiscrete(to_onehot=Nclass)                             
 
         # Produce Dataloaders for the First Training Iteration
-        self.train_loader, self.val_loader = data_load_gen.create_train_dataloaders(crop_size=crop_size, num_samples=my_num_samples)
+        self.train_loader, self.val_loader = data_load_gen.create(
+            crop_size=crop_size, num_samples=my_num_samples
+        )
+        self.train_ds = getattr(data_load_gen, "train_ds", None)
         self.input_dim = data_load_gen.input_dim
 
         # Save the original learning rate
         original_lr = self.optimizer.param_groups[0]['lr']
+        self.lr0 = original_lr
         self.load_learning_rate_scheduler(lr_scheduler_type)
 
+        # Check if the training dataset has smart caching
+        is_smartcache = ( hasattr(self.train_ds, "start") )
+        if is_smartcache: self.train_ds.start()
+
         # Initialize tqdm around the epoch loop
-        for epoch in tqdm(range(max_epochs), desc="Training Progress", unit="epoch"):
+        try:
+            for epoch in tqdm(range(max_epochs), desc=f"Training on GPU: {self.device}", unit="epoch"):
 
-            # Reload dataloaders periodically
-            if data_load_gen.reload_frequency > 0 and (epoch + 1) % data_load_gen.reload_frequency == 0:
-                self.train_loader, self.val_loader = data_load_gen.create_train_dataloaders(num_samples=my_num_samples)
-                # Lower the learning rate for the warm-up period
-                for param_group in self.optimizer.param_groups:
-                    param_group['lr'] = original_lr * self.warmup_lr_factor
+                # Update the cache for the training dataset
+                if is_smartcache: self.train_ds.update_cache()
 
-            # Compute and log average epoch loss           
-            epoch_loss = self.train_update()
+                # Compute and log average epoch loss           
+                epoch_loss = self.train_update()
 
-            # Check for NaN in the loss
-            if self.stopping_criteria.should_stop_training(epoch_loss):
-                tqdm.write(f"Training stopped early due to {self.stopping_criteria.get_stopped_reason()}")
-                break
-
-            current_lr = self.optimizer.param_groups[0]['lr']
-            self.my_log_metrics( metrics_dict={"loss": epoch_loss}, curr_step=epoch + 1 )
-            self.my_log_metrics( metrics_dict={"learning_rate": current_lr}, curr_step=epoch + 1 )                        
-
-            # Validation and metric logging
-            if (epoch + 1) % val_interval == 0 or (epoch + 1) == max_epochs:
-                if verbose:
-                    tqdm.write(f"Epoch {epoch + 1}/{max_epochs}, avg_train_loss: {epoch_loss:.4f}")
-
-                # Validate the Model with or without EMA
-                if self.ema_experiment:
-                    with self.ema_handler.average_parameters():
-                        metric_values = self.validate_update()
-                else:
-                    metric_values = self.validate_update()
-
-                # Log all metrics
-                self.my_log_metrics( metrics_dict=metric_values, curr_step=epoch + 1 )
-
-                # Update tqdm description        
-                if verbose:
-                    (avg_f1, avg_recall, avg_precision) = (self.results['avg_f1'][-1][1], 
-                                                           self.results['avg_recall'][-1][1], 
-                                                           self.results['avg_precision'][-1][1])
-                    tqdm.write(f"Epoch {epoch + 1}/{max_epochs}, avg_f1_score: {avg_f1:.4f}, avg_recall: {avg_recall:.4f}, avg_precision: {avg_precision:.4f}")
-
-                # Reset metrics function
-                self.metrics_function.reset()
-
-                # Save the best model
-                if self.results[best_metric][-1][1] > self.results["best_metric"]:
-                    self.results["best_metric"] = self.results[best_metric][-1][1]
-                    self.results["best_metric_epoch"] = epoch + 1
-
-                    # Read Model Weights and Save
-                    if self.ema_experiment:
-                        with self.ema_handler.average_parameters():
-                            self.save_model(model_save_path)
-                    else:
-                        self.save_model(model_save_path)
-
-                # Save plot if Local Training Call
-                if not self.use_mlflow:
-                    self.fig, self.axs = viz.plot_training_results(
-                        self.results, 
-                        save_plot=os.path.join(model_save_path, "net_train_history.png"), 
-                        fig=self.fig, 
-                        axs=self.axs)
-
-                # After Validation Metrics are Logged, Check for Early Stopping
-                if self.stopping_criteria.should_stop_training(epoch_loss, results=self.results, check_metrics=True):
+                # Check for NaN in the loss
+                if self.stopping_criteria.should_stop_training(epoch_loss):
                     tqdm.write(f"Training stopped early due to {self.stopping_criteria.get_stopped_reason()}")
                     break
 
-            # Run the learning rate scheduler
-            early_stop = self.run_scheduler(data_load_gen, original_lr, epoch, val_interval, lr_scheduler_type)
-            if early_stop:
-                break
+                current_lr = self.optimizer.param_groups[0]['lr']
+                self.my_log_metrics( metrics_dict={"loss": epoch_loss}, curr_step=epoch + 1 )
+                self.my_log_metrics( metrics_dict={"learning_rate": current_lr}, curr_step=epoch + 1 )                        
+
+                # Validation and metric logging
+                if (epoch + 1) % val_interval == 0 or (epoch + 1) == max_epochs:
+                    if verbose:
+                        tqdm.write(f"Epoch {epoch + 1}/{max_epochs}, avg_train_loss: {epoch_loss:.4f}")
+
+                    # Validate the Model with or without EMA
+                    if self.ema_experiment:
+                        with self.ema_handler.average_parameters():
+                            metric_values = self.validate_update()
+                    else:
+                        metric_values = self.validate_update()
+
+                    # Log all metrics
+                    self.my_log_metrics( metrics_dict=metric_values, curr_step=epoch + 1 )
+
+                    # Update tqdm description        
+                    if verbose:
+                        (avg_f1, avg_recall, avg_precision) = (self.results['avg_f1'][-1][1], 
+                                                            self.results['avg_recall'][-1][1], 
+                                                            self.results['avg_precision'][-1][1])
+                        tqdm.write(f"Epoch {epoch + 1}/{max_epochs}, avg_f1_score: {avg_f1:.4f}, "
+                                     f"avg_recall: {avg_recall:.4f}, avg_precision: {avg_precision:.4f}")
+
+                    # Reset metrics function
+                    self.metrics_function.reset()
+
+                    # Save the best model
+                    curr_val = self.results[best_metric][-1][1]
+                    if curr_val > self.results["best_metric"]:
+                        self.results["best_metric"] = curr_val
+                        self.results["best_metric_epoch"] = epoch + 1  
+
+                        # Read Model Weights and (optionally) Save
+                        if self.ema_experiment:
+                            with self.ema_handler.average_parameters():
+                                self.save_model(model_save_path)
+                        else:
+                            self.save_model(model_save_path)
+                        if verbose:
+                            tqdm.write(f'Saving model at Epoch: {epoch + 1} with {best_metric}: {curr_val:.4f}')  
+
+                    # Report/prune right after a validation step
+                    if trial:
+                        trial.report(curr_val, step=epoch + 1)
+                        if trial.should_prune():
+                            raise optuna.TrialPruned()
+                    else: # Local Training Call
+                        # Save convergence plots
+                        self.fig, self.axs = viz.plot_training_results(
+                            self.results, 
+                            self.class_names,
+                            save_plot=os.path.join(model_save_path, "net_train_history.png"), 
+                            fig=self.fig, 
+                            axs=self.axs)                
+
+                    # After Validation Metrics are Logged, Check for Early Stopping
+                    if self.stopping_criteria.should_stop_training(epoch_loss, results=self.results, check_metrics=True):
+                        tqdm.write(f"Training stopped early due to {self.stopping_criteria.get_stopped_reason()}")
+                        break
+
+                # Run the learning rate scheduler
+                early_stop = self.run_scheduler(epoch, lr_scheduler_type, best_metric)
+                if early_stop:
+                    break
+        finally:
+            if is_smartcache: self.train_ds.shutdown()
 
         return self.results
 
@@ -264,7 +277,7 @@ class ModelTrainer:
             self.lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
                 self.optimizer, T_max=self.max_epochs, eta_min=self.min_lr )
         elif type == "onecyle":
-            max_lr = 1e-3
+            max_lr = self.lr0
             steps_per_epoch = len(self.train_loader)
             self.lr_scheduler = torch.optim.lr_scheduler.OneCycleLR(
                 self.optimizer, max_lr=max_lr, epochs=self.max_epochs, steps_per_epoch=steps_per_epoch )
@@ -283,29 +296,30 @@ class ModelTrainer:
 
     def run_scheduler(
         self, 
-        data_load_gen, 
-        original_lr: float,
         epoch: int,
-        val_interval: int,
-        type: str
+        type: str,
+        best_metric: str
         ):
         """
         Manage the learning rate scheduler, including warm-up and normal scheduling.
         """
         # Apply warm-up logic
         if (epoch + 1) <= self.warmup_epochs:
+            scale = (epoch + 1) / self.warmup_epochs
             for param_group in self.optimizer.param_groups:
-                param_group['lr'] = original_lr * self.warmup_lr_factor
-            return False  # Continue training
+                param_group['lr'] = self.lr0 * (0.1 + 0.9 * scale)  # 10% -> 100% over warmup
+            return False # Continue training
+            # for param_group in self.optimizer.param_groups:
+            #     param_group['lr'] = original_lr * self.warmup_lr_factor
+            # return False  # Continue training
 
         # Step the scheduler
-        if isinstance(self.lr_scheduler, torch.optim.lr_scheduler.CosineAnnealingLR):
-            self.lr_scheduler.step()
-        elif isinstance(self.lr_scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau) and (epoch + 1) % val_interval == 0:
+        eval_epoch = (epoch + 1) % self.val_interval == 0
+        if isinstance(self.lr_scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau) and eval_epoch:
             metric_value = self.results['val_loss'][-1][1]
             self.lr_scheduler.step(metric_value)
-        else:
-            self.lr_scheduler.step()  # Step for other schedulers
+        else: # Step for other schedulers
+            self.lr_scheduler.step() 
 
         # Check learning rate for early stopping
         current_lr = self.optimizer.param_groups[0]['lr']
@@ -315,17 +329,20 @@ class ModelTrainer:
 
         return False  # Continue training
         
-    def save_model(self, model_save_path: str):
-
+    def save_model(self, output: str):
+        """
+        Save Model to output path
+        """
         # Store Model Weights as Member Variable
         self.model_weights = self.model.state_dict()
 
         # Save Model Weights to *.pth file
-        if model_save_path is not None:
-            torch.save(self.model_weights, os.path.join(model_save_path, "best_model.pth"))
+        if output: torch.save(self.model_weights, os.path.join(output, "best_model.pth"))
 
     def create_results_dictionary(self, Nclass: int):
-
+        """
+        Create the Dictionary that stores all the intermediate results.
+        """
         self.results = {
             'loss': [],
             'val_loss': [],
@@ -345,11 +362,34 @@ class ModelTrainer:
 
         self.metric_names = self.results.keys()
 
+    def _map_class_to_name(self, metric_name: str) -> str:
+        """
+        Replace class indices in metric names with class names for logging.
+        Example: f1_class2 -> f1_ribosome (if class_names[1] == 'ribosome')
+        """
+        m = re.search(r"_class(\d+)", metric_name)
+        if not m:
+            return metric_name
+
+        class_idx_1based = int(m.group(1))
+        class_idx_0based = class_idx_1based - 1
+
+        if 0 <= class_idx_0based < len(self.class_names):
+            class_name = self.class_names[class_idx_0based]
+
+            # replace only the "classN" token (not the whole metric)
+            return metric_name.replace(f"class{class_idx_1based}", class_name)
+
+        return metric_name          
+
     def my_log_metrics(
         self,
         metrics_dict: dict,
         curr_step: int,
         ):
+        """
+        Log metrics to the results dictionary and (optionally) MLflow/client.
+        """
 
         # If metrics_dict contains multiple elements (e.g., recall, precision, f1), process them
         if len(metrics_dict) > 1:
@@ -380,22 +420,18 @@ class ModelTrainer:
         for metric_name, value in metrics_dict.items():
             if metric_name not in self.results:
                 self.results[metric_name] = []
-            self.results[metric_name].append((curr_step, value))
+            self.results[metric_name].append((curr_step, value))          
 
         # Log to MLflow or client
-        if self.client is not None and self.trial_run_id is not None:
+        if self.use_mlflow:
             for metric_name, value in metrics_dict.items():
-                self.client.log_metric(
-                    run_id=self.trial_run_id,
-                    key=metric_name,
-                    value=value,
-                    step=curr_step,
-                )
-        elif self.use_mlflow:
-            for metric_name, value in metrics_dict.items():
+                metric_name = self._map_class_to_name(metric_name)
                 mlflow.log_metric(metric_name, value, step=curr_step)
 
     def fbeta(self, precision, recall):
+        """
+        Calculate the F-Beta score given precision and recall.
+        """
 
         # Handle division by zero
         numerator = (1 + self.beta**2) * (precision * recall)
@@ -407,21 +443,14 @@ class ModelTrainer:
             numerator / denominator,
             torch.zeros_like(precision)
         )
-        return result
-
-    def my_log_params(
-        self,
-        params_dict: dict, 
-        ):
-
-        if self.client is not None and self.trial_run_id is not None:
-            for key, value in params_dict.items():
-                self.client.log_param(run_id=self.trial_run_id, key=key, value=value)
-        else:
-            mlflow.log_params(params_dict)  
+        return result 
 
     # Example input: best_metric = 'fBeta2_class3' or 'fBeta1' or 'f1_class2'
     def resolve_best_metric(self, best_metric):
+        """
+        Resolve the best metric string to match the keys in the results dictionary.
+        """
+
         fbeta_pattern = r"^fBeta(\d+)(?:_class(\d+))?$"  # Matches fBetaX or fBetaX_classY
         match = re.match(fbeta_pattern, best_metric)
 

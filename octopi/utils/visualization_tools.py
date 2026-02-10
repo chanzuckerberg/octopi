@@ -1,11 +1,42 @@
+from ipywidgets import interact, IntSlider, fixed
 from copick_utils.io import readers
 import matplotlib.colors as mcolors
 from typing import Optional, List
 import matplotlib.pyplot as plt
 import numpy as np
+import copick
+
+# Define the interactive function
+def interact_3d_seg(vol, seg):
+    """
+    Interactively show the segmentation on a tomogram.
+    
+    Args:
+        vol (numpy.ndarray): The tomogram to show the segmentation on.
+        seg (numpy.ndarray): The segmentation to show on the tomogram.
+    """
+
+    # Get the number of slices for the slider range
+    max_slices = vol.shape[0] - 1
+    middle_slice = int(max_slices // 2)
+
+    # Launch the Interactive Widget
+    interact(
+        show_tomo_segmentation,
+        tomo=fixed(vol), seg=fixed(seg),
+        vol_slice=IntSlider(min=0, max=max_slices, step=1, value=middle_slice)
+    )
 
 # Define the plotting function
 def show_tomo_segmentation(tomo, seg, vol_slice):
+    """
+    Show Segmentation on a Tomogram Slice.
+
+    Args:
+        tomo (numpy.ndarray): The tomogram to show the segmentation on.
+        seg (numpy.ndarray): The segmentation to show on the tomogram.
+        vol_slice (int): The slice index to show.
+    """
     
     plt.figure(figsize=(20, 10))
     
@@ -67,8 +98,63 @@ def show_labeled_tomo_segmentation(tomo, seg, seg_labels, unique_values, vol_sli
     plt.tight_layout()
     plt.show()    
 
+def interact_points(
+    tomo, config, run_id, user_id='octopi', 
+    session_id = None, pt_size = 15,
+    slice_proximity_threshold = 3
+    ):
+    """
+    Interactively show the points on a tomogram.
 
-def show_tomo_points(tomo, run, objects, user_id, vol_slice, session_id = None, slice_proximity_threshold = 3):
+    Args:
+        tomo (numpy.ndarray): The tomogram to show the points on.
+        run_id (str): The ID of the run to show the points on.
+        user_id (str): The ID of the user to show the points on.
+        session_id (str): The ID of the session to show the points on.
+        slice_proximity_threshold (int): The threshold for the proximity of the points to the slice.
+        pt_size (int): The size of the points to show.
+    """
+
+    # Load Copick Project and Run
+    root = copick.from_file(config)
+    run = root.get_run(run_id)
+
+    # Get objects that can be Picked
+    objects = [(obj.name, obj.label, obj.radius) for obj in root.pickable_objects if obj.is_particle]
+
+    # Get the number of slices for the slider range
+    max_slices = tomo.shape[0] - 1
+    middle_slice = int(max_slices // 2)
+
+    # Launch the Interactive Widget
+    interact(
+        show_tomo_points,
+        tomo=fixed(tomo), run=fixed(run), objects=fixed(objects), 
+        user_id=fixed(user_id), session_id=fixed(session_id), 
+        slice_proximity_threshold=fixed(slice_proximity_threshold),
+        pt_size=fixed(pt_size),
+        vol_slice=IntSlider(min=0, max=max_slices, step=1, value=middle_slice)
+    )
+
+def show_tomo_points(
+        tomo, run, objects, user_id, 
+        vol_slice, session_id = None, 
+        slice_proximity_threshold = 3, pt_size = 15
+    ):
+    """
+    Show Coordinates on a Tomogram Slice.
+
+    Args:
+        tomo (numpy.ndarray): The tomogram to show the points on.
+        run (copick.Run): The Copick Run to show the points from.
+        objects (list): List of pickable objects.
+        user_id (str): The ID of the user to show the points from.
+        vol_slice (int): The slice index to show.
+        session_id (str): The ID of the session to show the points from.
+        slice_proximity_threshold (int): The threshold for the proximity of the points to the slice
+    """
+
+
     plt.figure(figsize=(20, 10))
 
     plt.imshow(tomo[vol_slice],cmap='gray')
@@ -78,7 +164,7 @@ def show_tomo_points(tomo, run, objects, user_id, vol_slice, session_id = None, 
         try:    
             coordinates = readers.coordinates(run, name=name, user_id=user_id, session_id=session_id)
             close_points = coordinates[np.abs(coordinates[:, 0] - vol_slice) <= slice_proximity_threshold]
-            plt.scatter(close_points[:, 2], close_points[:, 1], label=name, s=15)
+            plt.scatter(close_points[:, 2], close_points[:, 1], label=name, s=pt_size)
         except:
             pass
 
@@ -120,6 +206,16 @@ def plot_training_results(
     class_names: Optional[List[str]] = None,
     save_plot: str = None,
     fig = None, axs = None):
+    """
+    Plot Training Results including Loss, Recall, Precision, and F1 Score.
+
+    Args:
+        results (dict): A dictionary containing training metrics.
+        class_names (list, optional): List of class names for labeling. Defaults to None.
+        save_plot (str): Path to save the plot image.
+        fig (matplotlib.figure.Figure, optional): Existing figure to plot on. Defaults to None.
+        axs (numpy.ndarray, optional): Existing axes to plot on. Defaults to None.
+    """
 
     # Create a 2x2 subplot layout
     if fig is None:
@@ -152,7 +248,7 @@ def plot_training_results(
     # Determine the number of classes and names
     num_classes = len([key for key in results.keys() if key.startswith('recall_class')])
 
-    if class_names is None or len(class_names) != num_classes - 1:
+    if class_names is None or len(class_names) != num_classes:
         class_names = [f"Class {i+1}" for i in range(num_classes)]
 
     # Plot Recall in the top-right
@@ -192,10 +288,3 @@ def plot_training_results(
     fig.canvas.draw()
 
     return fig, axs
-
-    # if save_plot: 
-    #     fig.savefig(save_plot)
-    # else:
-    #     plt.show()
-    #     # # Just draw the plot without displaying
-    #     # fig.canvas.draw()

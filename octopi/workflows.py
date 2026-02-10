@@ -3,16 +3,18 @@ import octopi.processing.evaluate as octopi_evaluate
 from monai.metrics import ConfusionMatrixMetric
 from octopi.models import common as builder
 from octopi.pytorch import segmentation
-from octopi.datasets import generators
 from octopi.pytorch import trainer 
-import multiprocess as mp
-import copick, torch, os
 from octopi.utils import io
+import multiprocess as mp
+from pprint import pprint
+import copick, torch, os
 from tqdm import tqdm
     
-def train(config, target_info, tomo_algorithm, voxel_size, loss_function,
-          model_config = None, model_weights = None, trainRunIDs = None, validateRunIDs = None,
-          model_save_path = 'results', best_metric = 'fBeta2', num_epochs = 1000, use_ema = True):
+def train(data_generator, loss_function, batch_size = 16,
+          model_config = None, model_weights = None, lr0 = 1e-3,
+          model_save_path = 'results', best_metric = 'fBeta2', 
+          num_epochs = 1000, use_ema = True, val_interval = 10,
+          sw_bs = 4, overlap = 0.5, ):
     """
     Train a UNet Model for Segmentation
 
@@ -29,80 +31,78 @@ def train(config, target_info, tomo_algorithm, voxel_size, loss_function,
         model_save_path (str): The path to save the model
         best_metric (str): The metric to use for early stopping
         num_epochs (int): The number of epochs to train for
+        val_interval (int): The number of epoch intervals for validation during training
+        sw_bs (int): The sliding window batch size for validation
+        overlap (float): The overlap for sliding window inference during validation
     """
 
-    # If No Model Configuration is Provided, Use the Default Configuration
-    if model_config is None:
-        root = copick.from_file(config)
-        model_config = {
-            'architecture': 'Unet',
-            'num_classes': root.pickable_objects[-1].label + 1,
-            'dim_in': 80,
-            'strides': [2, 2, 1],
-            'channels': [48, 64, 80, 80],
-            'dropout': 0.0, 'num_res_units': 1,
-        }
+    # extract the model config from full config dict
+    if isinstance(model_config, dict) and 'model' in model_config: 
+        model_config = model_config['model']
+    elif model_config is None: 
         print('No Model Configuration Provided, Using Default Configuration')
+        model_config = builder.get_default_unet_params()
+        model_config['num_classes'] = data_generator.Nclasses
         print(model_config)
-    
-    data_generator = generators.TrainLoaderManager(
-            config, 
-            target_info[0], 
-            target_session_id = target_info[2],
-            target_user_id = target_info[1],
-            tomo_algorithm = tomo_algorithm,
-            voxel_size = voxel_size,
-            Nclasses = model_config['num_classes'],
-            tomo_batch_size = 15 ) 
-
-    data_generator.get_data_splits(
-        trainRunIDs = trainRunIDs,
-        validateRunIDs = validateRunIDs,
-        train_ratio = 0.9, val_ratio = 0.1, test_ratio = 0.0,
-        create_test_dataset = False)
-
-    # Get the reload frequency
-    data_generator.get_reload_frequency(num_epochs)
 
     # Monai Functions
     metrics_function = ConfusionMatrixMetric(include_background=False, metric_name=["recall",'precision','f1 score'], reduction="none")
-    
+
     # Build the Model
     model_builder = builder.get_model(model_config['architecture'])
     model = model_builder.build_model(model_config)
-    
+
     # Load the Model Weights if Provided 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     if model_weights: 
+        print(f'Loading Model Weights from: {model_weights}\n')
         state_dict = torch.load(model_weights, map_location=device, weights_only=True)
         model.load_state_dict(state_dict)     
     model.to(device) 
 
     # Optimizer
-    optimizer = torch.optim.Adam(model.parameters(), 1e-3)
+    optimizer = torch.optim.AdamW(
+        model.parameters(), lr=lr0, weight_decay=1e-3
+    )
 
     # Create UNet-Trainer
     model_trainer = trainer.ModelTrainer(
-        model, device, loss_function, metrics_function, optimizer,
-        use_ema = use_ema
+        model, device, loss_function, metrics_function, 
+        optimizer, use_ema = use_ema
     )
+    model_trainer.sw_bs = sw_bs
+    model_trainer.overlap = overlap
 
+    # Pretty Print all the Training Parameters
+    print('🔍 Training Parameters:')
+    parameters = {
+        'labels': io.check_target_config_path(data_generator)['input']['labels'],
+        'dataloader': data_generator.get_dataloader_parameters()
+    }
+    pprint(parameters, indent=2)
+    print()
+
+    # Train the Model
+    print(f'🔃 Starting Training...\nSaving Training Results to: {model_save_path}/\n')
     results = model_trainer.train(
         data_generator, model_save_path, max_epochs=num_epochs,
-        crop_size=model_config['dim_in'], my_num_samples=16,
-        val_interval=10, best_metric=best_metric, verbose=True
+        crop_size=model_config['dim_in'], my_num_samples=batch_size,
+        val_interval=val_interval, best_metric=best_metric, verbose=True
     )
-    
+    print('✅ Training Complete!')
+
     # Save parameters and results
+    print(f'💾 Saving Training Parameters and Results to: {model_save_path}/\n')
     parameters_save_name = os.path.join(model_save_path, "model_config.yaml")
     io.save_parameters_to_yaml(model_builder, model_trainer, data_generator, parameters_save_name)
 
-    # TODO: Write Results to Zarr or Another File Format? 
-    results_save_name = os.path.join(model_save_path, "results.json")
-    io.save_results_to_json(results, results_save_name)
+    # TODO: Write Results to CSV...
+    results_save_name = os.path.join(model_save_path, "results.csv")
+    io.save_results_to_csv(results, results_save_name)
 
 def segment(config, tomo_algorithm, voxel_size, model_weights, model_config, 
-            seg_info = ['predict', 'octopi', '1'], use_tta = False, run_ids = None):
+            seg_info = ['predict', 'octopi', '1'], run_ids = None, batch_size = 1,
+            swbs = 4, overlap = 0.5):
     """
     Segment a Dataset using a Trained Model or Ensemble of Models
 
@@ -113,32 +113,42 @@ def segment(config, tomo_algorithm, voxel_size, model_weights, model_config,
         model_weights (str, list): The path to the model weights or a list of paths to the model weights
         model_config (str, list): The model configuration or a list of model configurations
         seg_info (list): The segmentation information
-        use_tta (bool): Whether to use test time augmentation
+        swbs (int): The sliding window batch size for inference
+        overlap (float): The overlap between sliding windows for inference
         run_ids (list): The list of run IDs to use for segmentation
     """
 
     # Initialize the Predictor
-    predict = segmentation.Predictor(
-        config,
-        model_config,
-        model_weights,
-        apply_tta = use_tta
-    )
+    gpu_count = torch.cuda.device_count()
+    if gpu_count > 1:
+        print(f"# of GPUs Available: {gpu_count} -- Using Multi-GPU Predictor.")
+        predict = segmentation.MultiGpuPredictor(
+            config,
+            model_config,
+            model_weights
+        )
+    else:
+        print(f"# of GPUs Available: {gpu_count} -- Using Single-GPU Predictor.")
+        predict = segmentation.Predictor(
+            config,
+            model_config,
+            model_weights,
+        )
 
-    # Run batch prediction
+    # Run batch prediction and Save Processing Parameters
     predict.batch_predict(
         runIDs=run_ids,
-        num_tomos_per_batch=15,
+        num_tomos_per_batch=batch_size,
         tomo_algorithm=tomo_algorithm,
         voxel_spacing=voxel_size,
-        segmentation_name=seg_info[0],
-        segmentation_user_id=seg_info[1],
-        segmentation_session_id=seg_info[2]
+        name=seg_info[0],
+        userid=seg_info[1],
+        sessionid=seg_info[2]
     )
 
 def localize(config, voxel_size, seg_info, pick_user_id, pick_session_id, n_procs = 16,
             method = 'watershed', filter_size = 10, radius_min_scale = 0.4, radius_max_scale = 1.0,
-            run_ids = None):
+            run_ids = None, pick_objects = None):
     """
     Extract 3D Coordinates from the Segmentation Maps
 
@@ -155,17 +165,50 @@ def localize(config, voxel_size, seg_info, pick_user_id, pick_session_id, n_proc
         radius_max_scale (float): The maximum radius scale to use for localization
         run_ids (list): The list of run IDs to use for localization
     """
-
+    
     # Load the Copick Config
     root = copick.from_file(config) 
 
-    # Get objects that can be Picked
-    objects = [(obj.name, obj.label, obj.radius) for obj in root.pickable_objects if obj.is_particle]    
+    # Get objects that can be Picked build into mutable rows
+    objects = [[obj.name, int(obj.label), float(obj.radius)]
+            for obj in root.pickable_objects if obj.is_particle]
+
+    # Verify each object has the required attributes
+    for obj in objects:
+        if len(obj) < 3 or not isinstance(obj[2], (float, int)):
+            raise ValueError(f"Invalid object format: {obj}. Expected a tuple with (name, label, radius).")
+  
+    # Load the Model Output Configuration
+    seg_config = io.get_config(config, seg_info[0], 'segment', seg_info[1], seg_info[2])
+
+    # sync labels from the model config and remove objects not in model labels
+    label_map = seg_config.get('labels', {})
+    for row in objects.copy():  # avoid modifying the list while iterating
+        name, label, radius = row
+        if name in label_map and label != label_map[name]:
+            row[1] = int(label_map[name])  # mutate in place
+        elif name not in label_map: # remove this entry from objects 
+            objects.remove(row)
+
+    # Filter objects based on the provided list
+    if pick_objects is not None:
+        objects0 = objects.copy()  # avoid modifying the list while iterating for error tracking
+        objects = [obj for obj in objects if obj[0] in pick_objects]
+        if len(objects) == 0:
+            raise ValueError(f"No valid objects found for localization after filtering. Mismatched names: {pick_objects} and {[obj[0] for obj in objects0]}")
+
+    # Print the objects that will be localized 
+    print(f'Objects to be localized:\n{objects}\n')
 
     # Get all RunIDs
     if run_ids is None:
         run_ids = [run.name for run in root.runs]
     n_run_ids = len(run_ids)
+
+    # Exit if No Runs are Available
+    if n_run_ids == 0:
+        print(f"No runs available for localization with the specified voxel size - {voxel_size}.\nExiting...")
+        return
 
      # Run Localization - Main Parallelization Loop
     print(f"Using {n_procs} processes to parallelize across {n_run_ids} run IDs.")
@@ -187,7 +230,7 @@ def localize(config, voxel_size, seg_info, pick_user_id, pick_session_id, n_proc
             for _ in pool.imap_unordered(worker_func, run_ids, chunksize=1):
                 pbar.update(1)
 
-    print('Localization Complete!')
+    print('✅ Localization Complete!')
     
 
 def evaluate(config, 
@@ -234,3 +277,4 @@ def evaluate(config,
         distance_threshold_scale=distance_threshold, 
         runIDs=run_ids, save_path=save_path
     )
+

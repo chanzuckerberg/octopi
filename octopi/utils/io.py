@@ -3,24 +3,42 @@ File I/O utilities for YAML and JSON operations.
 """
 
 import os, json, yaml, copick, glob
+import pandas as pd
 
+class SmartDumper(yaml.SafeDumper):
+    """
+    - Inline lists like [1, 2, 3] when the list is "simple" (scalars only).
+    - Use block style for lists of dicts / lists / complex items (e.g., configs).
+    """
+    pass
 
-# Create a custom dumper that uses flow style for lists only.
-class InlineListDumper(yaml.SafeDumper):
-    def represent_list(self, data):
-        node = super().represent_list(data)
-        node.flow_style = True  # Use inline style for lists
-        return node
+def _is_simple_scalar(x) -> bool:
+    return x is None or isinstance(x, (str, int, float, bool))
 
+def _represent_list(dumper: yaml.Dumper, data: list):
+    # Inline only if every element is a simple scalar (no dicts/lists)
+    flow = all(_is_simple_scalar(item) for item in data)
+    return dumper.represent_sequence("tag:yaml.org,2002:seq", data, flow_style=flow)
 
+SmartDumper.add_representer(list, _represent_list)
 def save_parameters_yaml(params: dict, output_path: str):
     """
-    Save parameters to a YAML file.
-    """
-    InlineListDumper.add_representer(list, InlineListDumper.represent_list)
-    with open(output_path, 'w') as f:
-        yaml.dump(params, f, Dumper=InlineListDumper, default_flow_style=False, sort_keys=False)
+    Save Parameters to a YAML file.
 
+    Args:
+        params (dict): The parameters to save.
+        output_path (str): The path to save the parameters to.
+    """
+    with open(output_path, "w") as f:
+        yaml.dump(
+            params,
+            f,
+            Dumper=SmartDumper,
+            default_flow_style=False,  # block style by default
+            sort_keys=False,
+            width=100,                 # helps prevent aggressive wrapping
+            indent=2,
+        )
 
 def load_yaml(path: str) -> dict:
     """
@@ -31,17 +49,31 @@ def load_yaml(path: str) -> dict:
             return yaml.safe_load(f)
     else:
         raise FileNotFoundError(f"File not found: {path}")
+
+def save_results_to_csv(results, filename: str):
+    """Save training results to a CSV file (aligned to validation steps)."""
+    data = {}
     
-
-def save_results_to_json(results, filename: str):
-    """
-    Save training results to a JSON file.
-    """
-    results = prepare_inline_results_json(results)
-    with open(os.path.join(filename), "w") as json_file:
-        json.dump( results, json_file, indent=4 )
+    # Get validation steps (these are the steps we want to keep)
+    val_steps = set()
+    for key, value in results.items():
+        if isinstance(value, list) and value and isinstance(value[0], tuple):
+            if key.startswith(('val_', 'avg_', 'f1_', 'recall_', 'precision_', 'fbeta_')):
+                val_steps.update([item[0] for item in value])
+                break
+    
+    val_steps = sorted(val_steps)
+    data['step'] = val_steps
+    
+    # Extract all metrics, filtering to validation steps only
+    for key, value in results.items():
+        if isinstance(value, list) and value and isinstance(value[0], tuple):
+            step_to_value = {item[0]: item[1] for item in value}
+            data[key] = [step_to_value.get(step, None) for step in val_steps]
+    
+    df = pd.DataFrame(data)
+    df.to_csv(filename, index=False)
     print(f"📊 Training Results saved to {filename}")
-
 
 def prepare_inline_results_json(results):
     """
@@ -62,7 +94,7 @@ def get_optimizer_parameters(trainer):
     optimizer_parameters = {
         'my_num_samples': trainer.num_samples,  
         'val_interval': trainer.val_interval,
-        'lr': trainer.optimizer.param_groups[0]['lr'],
+        'lr': trainer.lr0,
         'optimizer': trainer.optimizer.__class__.__name__,
         'metrics_function': trainer.metrics_function.__class__.__name__,
         'loss_function': trainer.loss_function.__class__.__name__,
@@ -145,21 +177,35 @@ def check_target_config_path(data_generator):
     else:
         config_path = data_generator.config
 
+    # Get the Target Config File
+    return get_config(
+        config_path, data_generator.target_name, 'targets',
+        data_generator.target_user_id, data_generator.target_session_id
+    )
+
+def get_config(config_path, name, process, user_id=None, session_id=None):
+    """
+    Get the configuration for a specific process and target name.
+    """
+
     # Get the Overlay and Static Roots
     root = copick.from_file(config_path)
 
     # Remove the local:// prefix from static_root if it exists  
-    overlay_root = remove_prefix(root.config.overlay_root)   
-    static_root = remove_prefix(root.config.static_root)
+    overlay_root = remove_prefix(root.config.overlay_root)
+    try:  # Check if static_root is available
+        static_root = remove_prefix(root.config.static_root)
+    except: # If not, set it to None
+        static_root = None
     
     # Two Search Patterns, Either only a name provided or name, user_id, session_id
-    if data_generator.target_session_id is None:
-        pattern = glob.glob(os.path.join(overlay_root, 'logs', f"create-targets_*{data_generator.target_name}.yaml"))
+    if session_id is None:
+        pattern = glob.glob(os.path.join(overlay_root, 'logs', f"{process}_*{name}.yaml"))
         if len(pattern) == 0 and static_root is not None:
-            pattern = glob.glob(os.path.join(static_root, 'logs', f"create-targets_*{data_generator.target_name}.yaml"))
+            pattern = glob.glob(os.path.join(static_root, 'logs', f"{process}_*{name}.yaml"))
         fname = pattern[-1]
     else:
-        fname = f"create-targets_{data_generator.target_user_id}_{data_generator.target_session_id}_{data_generator.target_name}.yaml"
+        fname = f"{process}-{user_id}_{session_id}_{name}.yaml"
 
     # The Target Config File Should Either in be the Overlay or Static Root
     if os.path.exists(os.path.join(overlay_root, 'logs', fname)):

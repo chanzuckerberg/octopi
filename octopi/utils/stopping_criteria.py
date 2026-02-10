@@ -7,7 +7,7 @@ class EarlyStoppingChecker:
     
     def __init__(self, 
                  max_nan_epochs=15, 
-                 plateau_patience=10, 
+                 plateau_patience=20, 
                  plateau_min_delta=0.005,
                  stagnation_patience=30, 
                  convergence_window=5, 

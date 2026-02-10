@@ -1,5 +1,63 @@
 # Changelog
 
+## [1.4.0](https://github.com/chanzuckerberg/octopi/compare/octopi-v1.3.3...octopi-v1.4.0) (2025-12-23)
+
+
+### ✨ Features
+
+* Download and Import cli ([#51](https://github.com/chanzuckerberg/octopi/issues/51)) ([07861f2](https://github.com/chanzuckerberg/octopi/commit/07861f2ba439acfbeba26b7ef59e5b0728b97fd1))
+* lazy-loading and rich-click cli ([#48](https://github.com/chanzuckerberg/octopi/issues/48)) ([dd4d459](https://github.com/chanzuckerberg/octopi/commit/dd4d4597e5283dbfa22b719bab92e7ef9132c41e))
+
+
+### 🐞 Bug Fixes
+
+* ensure we properly load the model config when fine-tuning the model ([#50](https://github.com/chanzuckerberg/octopi/issues/50)) ([d72f411](https://github.com/chanzuckerberg/octopi/commit/d72f411e1648425aa0c444f6d8b860012236cd4f))
+
+## [1.3.3](https://github.com/chanzuckerberg/octopi/compare/octopi-v1.3.2...octopi-v1.3.3) (2025-11-18)
+
+
+### 🐞 Bug Fixes
+
+* avoid modifying original objects while iterating ([#46](https://github.com/chanzuckerberg/octopi/issues/46)) ([c1586de](https://github.com/chanzuckerberg/octopi/commit/c1586de2c7f833aea57c74952980ca77686b8bab))
+
+## [1.3.2](https://github.com/chanzuckerberg/octopi/compare/octopi-v1.3.1...octopi-v1.3.2) (2025-11-16)
+
+
+### 🐞 Bug Fixes
+
+* ensure filtering of picks is correct ([#44](https://github.com/chanzuckerberg/octopi/issues/44)) ([8a70056](https://github.com/chanzuckerberg/octopi/commit/8a700566fba5104b4d16acd98cabced6f07db624))
+
+## [1.3.1](https://github.com/chanzuckerberg/octopi/compare/octopi-v1.3.0...octopi-v1.3.1) (2025-11-15)
+
+
+### 🐞 Bug Fixes
+
+* keep sw parameter for vcp ([#42](https://github.com/chanzuckerberg/octopi/issues/42)) ([41f5080](https://github.com/chanzuckerberg/octopi/commit/41f50800b32d96abaf1ff64bcaad99c7cb179f15))
+
+## [1.3.0](https://github.com/chanzuckerberg/octopi/compare/octopi-v1.2.0...octopi-v1.3.0) (2025-11-13)
+
+
+### ✨ Features
+
+* logging ([#26](https://github.com/chanzuckerberg/octopi/issues/26)) ([7ff5e72](https://github.com/chanzuckerberg/octopi/commit/7ff5e723796d8a8ef3fdb46f8f07fa7f527b6a11))
+* Optimized inference ([#39](https://github.com/chanzuckerberg/octopi/issues/39)) ([c53a3aa](https://github.com/chanzuckerberg/octopi/commit/c53a3aaf08d5197395d7c6e1fb01bc447c4a9b76))
+* remove repeating picks ([#37](https://github.com/chanzuckerberg/octopi/issues/37)) ([aea7d4e](https://github.com/chanzuckerberg/octopi/commit/aea7d4eb2572bce679584cbbab8310de46622163))
+
+
+### 🐞 Bug Fixes
+
+* allow users to write multiple segmentation targets ([#25](https://github.com/chanzuckerberg/octopi/issues/25)) ([e19509f](https://github.com/chanzuckerberg/octopi/commit/e19509f322f53fde23c8e597ee00b549f7034874))
+* beta test feedback ([#27](https://github.com/chanzuckerberg/octopi/issues/27)) ([fab47b8](https://github.com/chanzuckerberg/octopi/commit/fab47b89c31971f246c82ca6d92acd89429bf438))
+* minor fixes to writing of new picks and generating segmentation targets ([#24](https://github.com/chanzuckerberg/octopi/issues/24)) ([7a9b7af](https://github.com/chanzuckerberg/octopi/commit/7a9b7af535f620d636319f30428b3edd838f1195))
+* nas optimization ([#36](https://github.com/chanzuckerberg/octopi/issues/36)) ([29e18a1](https://github.com/chanzuckerberg/octopi/commit/29e18a15137b6acce899d72f6c8f96fe3a0552d9))
+* standard output for log files ([#38](https://github.com/chanzuckerberg/octopi/issues/38)) ([c867efc](https://github.com/chanzuckerberg/octopi/commit/c867efcb46d5f0425fad0136e9d79e9b7d76025b))
+* visualization ([#40](https://github.com/chanzuckerberg/octopi/issues/40)) ([812c103](https://github.com/chanzuckerberg/octopi/commit/812c1039bcf9d9cd551592de344adac97f81aa6b))
+
+
+### 📝 Documentation
+
+* Update README to reflect pip 25.2 updates ([#22](https://github.com/chanzuckerberg/octopi/issues/22)) ([3cd6b4c](https://github.com/chanzuckerberg/octopi/commit/3cd6b4ce1b2145b5c474eee9e3f1fcabb384df3e))
+
 ## [1.2.0](https://github.com/chanzuckerberg/octopi/compare/octopi-v1.1.0...octopi-v1.2.0) (2025-08-07)
 
 

@@ -1,154 +1,199 @@
-# Data Import Guide
+# Importing Tomograms to Copick
 
-octopi leverages [copick](https://github.com/copick/copick) to provide a flexible and unified interface for accessing tomographic data, whether it's stored locally or remotely on a HPC server or on our [CryoET Data Portal](https://cryoetdataportal.czscience.com). This guide explains how to work with both data sources. If you need help creating these configuration files, detailed tutorials are available:
+octopi leverages [copick](https://github.com/copick/copick) to provide a flexible and unified interface for accessing tomographic data, whether it's stored locally or remotely on a HPC server or on our [CryoET Data Portal](https://cryoetdataportal.czscience.com). 
 
-## Data Resolution Recommendation
+This page covers:
 
-Before importing data, it's important to consider the resolution. We recommend working with tomograms at a voxel size of **10 Å (1 nm)** or larger for optimal performance in deep learning workflows. This resolution provides the best balance between:
+- How copick configuration files define a project
+- Creating configurations for local filesystems and the Data Portal
+- Importing volumes via the CLI or Python API
 
-- **Computational efficiency** - Manageable file sizes for training
-- **Feature preservation** - Sufficient detail for accurate particle detection
-- **Memory usage** - Fits within typical GPU memory constraints
+If you’re new to copick itself, the following upstream tutorials are excellent references:
 
-You can downsample higher-resolution tomograms during import using the built-in downsampling options.
+- [Copick Quickstart](https://copick.github.io/copick/quickstart/) — Basic configuration and setup
+- [Data Portal Tutorial](https://copick.github.io/copick/examples/tutorials/data_portal/) — Working with CryoET Data Portal data
 
-## Starting a New Copick Project
+## Configuration File
 
-The copick configuration file points to a directory that stores all tomograms, coordinates, and segmentations in an overlay root. Generate a config file using the command line, you can define biological objects during project creation:
+A **copick configuration file** defines how data are discovered, stored, and annotated within a project. In cryo-ET, this typically corresponds to a collection of tilt-series and their reconstructed tomograms.
 
-```bash
-copick config filesystem \
-    --overlay-root /path/to/overlay \
-    --objects ribosome,True,130,6QZP \
-    --objects apoferritin,True,65 \
-    --objects membrane,False
-```
+Each configuration specifies:
 
-### Understanding the `--objects` Flag
+- **Pickable objects** — proteins or structures that can be annotated or predicted
+- **Static storage** — read-only data such as raw volumes and reference annotations
+- **Overlay storage** — writable data such as predictions, labels, and derived results
 
-The `--objects` flag accepts 2-4 elements separated by commas:
+The static path is never modified, while the overlay path is where octopi and copick write outputs through either the CLI or Python API.
 
-1. **Particle name** (required): e.g., `ribosome`
-2. **Is pickable** (required): `True` for particles, `False` for continuous segmentations
-3. **Particle radius** (optional): in Ångströms, e.g., `130`
-4. **PDB ID** (optional): reference structure, e.g., `6QZP`
+??? example "Copick Config File (`config.json`)"
 
-This structure supports both particle picking for sub-tomogram averaging and broader 3D segmentation tasks. Octopi is designed to train models from copick projects for:
+    The configuration file points copick to the project storage and defines the objects that octopi will segment or localize.
 
-- Object 3D localization and particle picking
-- Volumetric segmentation of cellular structures
-- General 3D dataset annotation and analysis
+    ```json
+    {
+        "name": "test",
+        "description": "A test project description.",
+        "version": "1.0.0",
 
-<details markdown="1">
-<summary><strong>💡 Example Copick Config File (config.json) </strong></summary>
+        "pickable_objects": [
+            {
+                "name": "ribosome",
+                "is_particle": true,
+                "pdb_id": "7P6Z",
+                "label": 1,
+                "color": [0, 255, 0, 255],
+                "radius": 150,
+                "map_threshold": 0.037
 
-The resulting `config.json` file would look like this: 
+            },
+            {
+                "name": "membrane",
+                "is_particle": false,
+                "label": 2,
+                "color": [0, 0, 0, 255]
+            }
+        ],
 
-```bash
-{
-    "name": "test",
-    "description": "A test project description.",
-    "version": "1.0.0",
-
-    "pickable_objects": [
-        {
-            "name": "ribosome",
-            "is_particle": true,
-            "pdb_id": "7P6Z",
-            "label": 1,
-            "color": [0, 255, 0, 255],
-            "radius": 150,
-            "map_threshold": 0.037
-
-        },
-        {
-            "name": "membrane",
-            "is_particle": false,
-            "label": 2,
-            "color": [0, 0, 0, 255]
+        // Change this path to the location of sample_project
+        "overlay_root": "local:///PATH/TO/EXTRACTED/PROJECT/",
+        "overlay_fs_args": {
+            "auto_mkdir": true
         }
-    ],
+    }
+    ```
 
-    "overlay_root": "local:///path/to/overlay",
-    "overlay_fs_args": {
-        "auto_mkdir": true
-    },
+Copick provides a CLI for generating configuration files that mount either local filesystems or remote data sources such as the CryoET Data Portal.
 
-    "static_root": "local:///path/to/static",
-    "static_fs_args": {
-        "auto_mkdir": true
-    }   
-}
-```
+=== "Local File System"
 
-**Directory Structure:**
+    Use this mode when your tomograms are already available on disk (e.g. HPC scratch or shared storage).
 
-- **Overlay root:** Writable directory where new results can be added, modified, or deleted
-- **Static root:** Read-only directory that never gets manipulated (frozen data)
+    ```bash
+    copick config filesystem \
+        --config config.json
+        --overlay-root /mnt/24sep24a/run002 \
+        --objects membrane,False \
+        --objects apoferritin,True,60,4V1W \
+        --proj-name 24sep24a \
+        --proj-description "Synaptic Vesicles collected on 24sep24"
+    ```
 
-**Path Types:**
+    We can define either objects that are continuous segmentations (e.g., organelles or memebranes) or coordinates. For pickable objects, we can store meta-data including the particle radius and a corresponding PDB-ID:
+        
+        - `--objects name,is_particle,radius,pdb_id`.
 
-- **Local paths:** `local:///path/to/directory`
-- **Remote paths:** `ssh://server/path/to/directory`
+    ??? info "`copick config filesystem` parameters"
 
-The `copick config filesystem` command assumes local paths, but you can edit the config file to specify remote locations.
+        | Parameter | Description |
+        |----------|-------------|
+        | `--overlay-root` | Writable overlay directory for predictions and annotations |
+        | `--objects` | Object definition: `name,is_particle[,radius,pdb_id]` (repeatable) |
+        | `--config` | Output path for the generated config file |
+        | `--proj-name` | Human-readable project name |
+        | `--proj-description` | Description stored in config metadata |
 
-</details>
+=== "Data Portal"
 
-## Starting a Data Portal Copick Project 
+    When working with portal-hosted datasets, copick automatically populates pickable objects based on known annotations. Only the dataset ID and overlay location are required.
 
-Create a copick project that automatically syncs with the [CryoET Data Portal](https://cryoetdataportal.czscience.com): 
+    ```bash
+    copick config dataportal \
+        -ds 10403 --overlay /mnt/10403/overlay \
+        --output /mnt/10403/config.json
+    ```
 
-```bash
-copick config dataportal --dataset-id DATASET_ID --overlay-root /path/to/overlay
-```
+    ??? info "`copick config dataportal` parameters"
 
-This command generates a config file that syncs data from the portal with local or remote repositories. You only need to specify the dataset ID and the overlay or static path - pickable objects will automatically be populated from the dataset.
+        | Parameter | Description |
+        |----------|-------------|
+        | `--dataset-id, -ds` | CryoET Data Portal dataset ID |
+        | `--overlay` | Local overlay directory for writable outputs |
+        | `--output` | Path to save the generated configuration file |
 
-**Benefits:**
+## Importing Volumes
 
-- Automatically populates pickable objects from the dataset
-- Seamless integration with portal data
-- Combines remote portal data with local overlay storage
+### Recommended Resolution
 
-## Importing Local MRC Volumes
+For most workflows, we recommend working at a voxel size of **10 Å (1 nm)**. Higher-resolution tomograms can be downsampled during import to reduce memory usage and improve training and inference performance.
 
-### Prerequisites
+If you have tomograms stored locally in `*.mrc` format (e.g., from Warp, IMOD, or AreTomo), you can import them into a copick project using either copick directly or via octopi, which adds optional resampling and convenience features.
 
-This workflow assumes:
+=== "Copick Import CLI"
 
-- **All tomogram files are in a flat directory structure (single folder)**
-- Files are in **MRC format** (`*.mrc`)
+    Use copick when volumes are already organized and no resampling is required.
 
-### Import Command
+    ```bash 
+    copick add tomogram \
+        -c /path/to/config.json \
+        --tomo-type sart \
+    ```
 
-If you have tomograms stored locally in `*.mrc` format (e.g., from Warp, IMOD, or AreTomo), you can import them into a copick project:
+    ??? info "`copick add tomogram` parameters"
 
-```bash
-copick add tomogram \
-    --config config.json \
-    --tomo-type denoised \
-    --voxel-size 10 \
-    --no-create-pyramid \
-    'path/to/volumes/*.mrc'
-```
+        | Parameter | Description |
+        |----------|-------------|
+        | `PATH` | Path to a tomogram file (`.mrc` or `.zarr`) or glob pattern. |
+        | `--config, -c` | Path to the configuration file (or `COPICK_CONFIG`). |
+        | `--run` | Name of the run; defaults to filename. |
+        | `--run-regex` | Regex for extracting run names from filenames. |
+        | `--tomo-type` | Logical tomogram type (e.g. `wbp`, `sart`). |
+        | `--file-type` | Explicit file type (`mrc` or `zarr`). |
+        | `--voxel-size` | Override voxel size stored in the header (Å). |
+        | `--create-pyramid` | Build multiscale pyramid for visualization. |
+        | `--pyramid-levels` | Number of pyramid levels. |
+        | `--chunk-size` | Chunk size for Zarr storage. |
+        | `--overwrite` | Overwrite existing tomograms. |
+        | `--create` | Create tomogram entry if missing. |
 
-<details markdown="1">
-<summary><strong>💡 Import Parameters Description </strong></summary>
+=== "Octopi Import CLI"
 
-### Parameter Descriptions
+    Octopi extends the import process with optional voxel-size conversion.
 
-| Parameter | Description | Example |
-|-----------|-------------|---------|
-| `--config` | Path to copick config file | `config.json` |
-| `--tomo-type` | Name for the tomogram type in your copick project | `denoised`, `wbp`, `raw` |
-| `--voxel-size` | Voxel size of the tomograms (in Ångströms) | `10` (for 10Å data) |
-| `--no-create-pyramid` | Skip pyramid generation for faster import | (flag, no value) |
-| `'path/to/volumes/*.mrc'` | Path to your MRC file(s) - supports wildcards | `'data/*.mrc'` |
+    ```bash
+    octopi import \
+        -p /path/to/mrc/files \
+        -c /path/to/config.json \
+        -alg denoised \
+        --input-voxel-size 5 \
+        --output-voxel-size 10
+    ```
 
-</details>
+    When downsampling is unnecessary, simply omit the `--output-voxel-size` argument.
 
-In the case the imported volumes are less than 10 Å, we can downsample then with Fourier cropping with the following CLI command (will be available soon).
+    ??? info "`octopi import` parameters"
+
+        | Parameter | Description | Notes |
+        |----------|-------------|-------|
+        | `--path, -p` | Directory containing MRC tomograms | Required |
+        | `--config, -c` | Copick configuration file | Alternative to datasetID |
+        | `--tomo-alg, -alg` | Tomogram type name | e.g. `denoised` |
+        | `--input-voxel-size, -ivs` | Input voxel size (Å) | Default: 10 |
+        | `--output-voxel-size, -ovs` | Target voxel size (Å) | Optional |
+
+
+=== "Import with the API"
+
+    For non-standard layouts or programmatic workflows, volumes can be added directly through the Python API.
+
+    ```python
+    from copick.utils.io import writers
+    import copick, mrcfile
+
+    # Open Copick Project
+    root = copick.from_file('/path/to/config.json')
+
+    # Load the Volume
+    vol = mrcfile.read('path/to/volume.mrc')
+
+    # Write a New Run if not present
+    run = copick.get_run('Run001')
+    if run is None: run = copick.new-run('Run001')
+
+    # Write the Volume into the Run
+    voxel_size = 10
+    tomo_alg = 'wbp'
+    writers.tomogram(run, vol,voxel_size,tomo_alg)
+    ```
 
 ## Downloading from the CryoET Data-Portal
 
@@ -161,42 +206,42 @@ You can train models directly using data from the portal without downloading:
 ```bash
 octopi train-model \
     --config portal_config.json \
-    --voxel-size 10 --tomo-alg denoised \
-    --trainRunIDs 17040,17055,17079,17098,10435 \
-    --validateRunIDs 17149
+    --datasetID 10445 \
+    --voxel-size 10
 ```
 
-**Recommendation:** Use 6-10 tomograms for training and validation (more if your target is sparse). Refer to the [training tutorial](../user-guide/training-basics.md) for more details.
+### 2. Local Download and Processing
 
-To find available tomogram names for a dataset available on the portal, use:
+For larger datasets or when running multiple experiments, it is recommended to download the data first:
+
+```bash
+octopi download \
+    -c /path/to/config.json \
+    --datasetID 10445 \
+    --overlay-path /path/to/saved/zarrs \
+    --input-voxel-size 5 --output-voxel-size 10 \
+    --target-type wbp --source-type wbp-denoised-denoiset-ctfdeconv 
+```
+
+??? info "`octopi download` parameters"
+
+    | Parameter | Description |
+    |----------|-------------|
+    | `--config, -c` | Existing copick configuration file |
+    | `--datasetID, -ds` | CryoET Data Portal dataset ID |
+    | `--overlay-path` | Overlay directory when creating a new project |
+    | `--input-voxel-size` | Original voxel size of portal tomograms (Å) |
+    | `--output-voxel-size` | Target voxel size after downsampling (Å) |
+    | `--target-type` | Local tomogram type name in copick |
+    | `--source-type` | Portal tomogram type label |
+
+Similar to local MRC import, you can downsample portal data by specifying both `--input-voxel-size` and `--output-voxel-size` parameters.  To find available tomogram names for a dataset available on the portal, use:
 
 ```bash
 copick browse -ds <datasetID>
 ```
 
-### 2. Local Download and Processing (Recommended)
-
-For larger datasets or when running multiple experiments, it is recommended to download the data first:
-
-```bash
-octopi download-dataportal \
-    --config /path/to/config.json \
-    --datasetID 10445 \
-    --overlay-path /path/to/overlay \
-    --input-voxel-size 8.627 --output-voxel-size 10 \
-    --dataportal-name sirt-raw --target-tomo-type sirt
-```
-**Notes:**
-
-- `--target-tomo-type` is the tomogram name that is saved locally to our project.
-- The `--output-voxel-size` flag is optional, if this is ommit we'll simply save the tomograms at the original resolution.
-
-## Advanced Import Options
-
-If your data doesn't meet the standard requirements (flat directory structure + MRC format), please refer to our [API Import Documentation](../api/importing-volumes.md), which covers:
-
-- Different file formats (TIFF, HDF5, etc.)
-- Custom import scripts
+This will save these tomograms locally under the `--target-tomo-type` flag.
 
 ## Next Steps
 

@@ -25,8 +25,6 @@ def print_target_summary(train_targets: dict, target_segmentation_name: str, max
         radius_info = f", radius={info['radius']:.1f}Å" if info['radius'] else ""
         print(f"  {info['label']:3d} → {name} ({obj_type}{radius_info})")
     
-    print("="*60)
-    print(f"💡 Use --num-classes {maxval + 1} when training with this target")
     print("="*60 + "\n")
 
 def generate_targets(
@@ -111,7 +109,7 @@ def generate_targets(
 
         # Add Segmentations to Target
         for seg in query_seg:
-            classLabel = root.get_object(seg.name).label
+            classLabel = train_targets[seg.name]['label']
             segvol = seg.numpy()
             # Set all non-zero values to the class label
             segvol[segvol > 0] = classLabel
@@ -168,7 +166,7 @@ def generate_targets(
         "labels": labels,
     }
     target_query = f'{target_user_name}_{target_session_id}_{target_segmentation_name}'
-    print(f'💾 Saving parameters to {basepath}/create-targets_{target_query}.yaml')
+    print(f'💾 Saving parameters to {basepath}/targets-{target_query}.yaml')
     save_parameters(args, basepath, target_query)
 
     # Print Target Summary
@@ -205,7 +203,7 @@ def save_parameters(args, basepath: str, target_query: str):
     # Check if the YAML file already exists
     output_path = os.path.join(
         basepath, 
-        f'create-targets_{args["target_user_name"]}_{args["target_session_id"]}_{args["target_name"]}.yaml')
+        f'targets-{args["target_user_name"]}_{args["target_session_id"]}_{args["target_name"]}.yaml')
     if os.path.exists(output_path):
         # Load the existing content
         with open(output_path, 'r') as f:
