@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 from sqlalchemy.exc import OperationalError as SA_OperationalError
+import os, time, traceback, sqlite3, random, subprocess
 from octopi.pytorch.search import ModelExplorer
-import os, time, traceback, sqlite3, random
 from optuna.trial import TrialState
 from sqlite3 import OperationalError
 import torch.multiprocessing as mp
@@ -278,3 +278,23 @@ def run_one_trial(storage_url: str, study_name: str, submit_kwargs: dict):
         except Exception:
             pass
         raise
+
+def validate_gpu_constraints(gpu_constraint):
+    cmd = [
+        "sinfo",
+        "-p", "gpu",
+        "-o", "%f",
+        "-h",
+    ]
+    out = subprocess.check_output(cmd, text=True)
+    features = set()
+    for line in out.splitlines():
+        for feat in line.split(","):
+            feat = feat.strip()
+            if feat:
+                features.add(feat)
+
+    if gpu_constraint not in features:
+        raise ValueError(f"GPU constraint '{gpu_constraint}' not found in available options: {features}")
+
+    return gpu_constraint 
