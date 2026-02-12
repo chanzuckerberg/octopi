@@ -1,9 +1,9 @@
 from octopi.utils import visualization_tools as viz
 from monai.inferers import sliding_window_inference
 from octopi.utils import stopping_criteria
+import torch, os, mlflow, re, optuna, time
 from monai.transforms import AsDiscrete
 from monai.data import decollate_batch
-import torch, os, mlflow, re, optuna, time
 import torch_ema as ema
 from tqdm import tqdm 
 import numpy as np
@@ -40,6 +40,16 @@ class ModelTrainer:
 
         # Initialize Figure and Axes for Plotting
         self.fig = None; self.axs = None
+
+        # Initialize Best Weights and Trial for Model Exploration
+        self.best_weights, self.best_trial = None, None
+        self.walltime_event = None 
+
+    def stop_requested(self):
+        """
+        Check if a stop has been requested via walltime event.
+        """
+        return self.walltime_event is not None and self.walltime_event.is_set()
 
     def train_update(self):
         """
@@ -155,10 +165,10 @@ class ModelTrainer:
         self.create_results_dictionary(Nclass)  
 
         # Resolve the best metric
-        best_metric = self.resolve_best_metric(best_metric)
+        self.best_metric = self.resolve_best_metric(best_metric)
 
         # Stopping Criteria
-        self.stopping_criteria = stopping_criteria.EarlyStoppingChecker(monitor_metric=best_metric, val_interval=val_interval)            
+        self.stopping_criteria = stopping_criteria.EarlyStoppingChecker(monitor_metric=self.best_metric, val_interval=val_interval)            
 
         # Post-processing transforms
         self.post_pred = AsDiscrete(argmax=True, to_onehot=Nclass)
@@ -187,6 +197,11 @@ class ModelTrainer:
                 # Update the cache for the training dataset
                 if is_smartcache: self.train_ds.update_cache()
 
+                # Check for external stop request (e.g., walltime)
+                if self.stop_requested():
+                    tqdm.write("Stop requested via walltime event. Ending training loop.")
+                    break
+
                 # Compute and log average epoch loss           
                 epoch_loss = self.train_update()
 
@@ -203,6 +218,11 @@ class ModelTrainer:
                 if (epoch + 1) % val_interval == 0 or (epoch + 1) == max_epochs:
                     if verbose:
                         tqdm.write(f"Epoch {epoch + 1}/{max_epochs}, avg_train_loss: {epoch_loss:.4f}")
+
+                    # Check for external stop request (e.g., walltime)
+                    if self.stop_requested():
+                        tqdm.write("Stop requested via walltime event. Ending training loop.")
+                        break
 
                     # Validate the Model with or without EMA
                     if self.ema_experiment:
@@ -226,7 +246,7 @@ class ModelTrainer:
                     self.metrics_function.reset()
 
                     # Save the best model
-                    curr_val = self.results[best_metric][-1][1]
+                    curr_val = self.results[self.best_metric][-1][1]
                     if curr_val > self.results["best_metric"]:
                         self.results["best_metric"] = curr_val
                         self.results["best_metric_epoch"] = epoch + 1  
@@ -238,7 +258,7 @@ class ModelTrainer:
                         else:
                             self.save_model(model_save_path)
                         if verbose:
-                            tqdm.write(f'Saving model at Epoch: {epoch + 1} with {best_metric}: {curr_val:.4f}')  
+                            tqdm.write(f'Saving model at Epoch: {epoch + 1} with {self.best_metric}: {curr_val:.4f}')  
 
                     # Report/prune right after a validation step
                     if trial:
@@ -259,8 +279,13 @@ class ModelTrainer:
                         tqdm.write(f"Training stopped early due to {self.stopping_criteria.get_stopped_reason()}")
                         break
 
+                    # Check for external stop request (e.g., walltime)
+                    if self.stop_requested():
+                        tqdm.write("Stop requested via walltime event. Ending training loop.")
+                        break
+
                 # Run the learning rate scheduler
-                early_stop = self.run_scheduler(epoch, lr_scheduler_type, best_metric)
+                early_stop = self.run_scheduler(epoch, lr_scheduler_type, self.best_metric)
                 if early_stop:
                     break
         finally:
@@ -333,11 +358,12 @@ class ModelTrainer:
         """
         Save Model to output path
         """
-        # Store Model Weights as Member Variable
-        self.model_weights = self.model.state_dict()
+        # Grab weights, deep copy to CPU
+        sd = self.model.state_dict()
+        self.best_weights = {k: v.detach().cpu().clone() for k, v in sd.items()}
 
-        # Save Model Weights to *.pth file
-        if output: torch.save(self.model_weights, os.path.join(output, "best_model.pth"))
+        # Write to disk if Single Model Training Job
+        if output: torch.save(self.best_weights, os.path.join(output, "best_model.pth"))
 
     def create_results_dictionary(self, Nclass: int):
         """

@@ -10,6 +10,7 @@ from octopi.datasets import config
 from dataclasses import dataclass
 import torch, mlflow, optuna
 from typing import Optional
+import signal, threading
 
 # -----------------------------
 # Supervisor / worker settings
@@ -202,6 +203,15 @@ def run_one_trial(storage_url: str, study_name: str, submit_kwargs: dict):
     Run a single Optuna trial. Used as the submitit job target.
     Connects to the study, asks for a trial, runs ModelExplorer.objective, tells the result.
     """
+
+    # Setup walltime event for graceful stopping
+    walltime_event = threading.Event()
+
+    # Define signal handler and register it
+    def _on_sigusr2(signum, frame):
+        walltime_event.set()
+    signal.signal(signal.SIGUSR2, _on_sigusr2)
+
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     if torch.cuda.is_available():
         torch.cuda.set_device(0)
@@ -229,6 +239,7 @@ def run_one_trial(storage_url: str, study_name: str, submit_kwargs: dict):
     model_search = ModelExplorer(
         data_generator, submit_kwargs["model_type"], submit_kwargs["output"]
     )
+    model_search.walltime_event = walltime_event
 
     # Debug Statements:
     pr = study.pruner

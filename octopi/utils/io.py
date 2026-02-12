@@ -98,6 +98,7 @@ def get_optimizer_parameters(trainer):
         'optimizer': trainer.optimizer.__class__.__name__,
         'metrics_function': trainer.metrics_function.__class__.__name__,
         'loss_function': trainer.loss_function.__class__.__name__,
+        'metric': trainer.best_metric
     }
 
     # Log Tversky Loss Parameters
@@ -112,6 +113,10 @@ def get_optimizer_parameters(trainer):
     elif trainer.loss_function.__class__.__name__ == 'FocalTverskyLoss':
         optimizer_parameters['alpha'] = trainer.loss_function.alpha
         optimizer_parameters['gamma'] = trainer.loss_function.gamma
+
+    # Include best trial information if available
+    if trainer.best_trial:
+        optimizer_parameters['best_trial'] = trainer.best_trial
 
     return optimizer_parameters
 
