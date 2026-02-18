@@ -108,18 +108,20 @@ def process_membrane_bound_extract(
         
         # Save the close points in CoPick project
         if len(close_indices) > 0:
-            try:
-                close_picks = run.new_picks(object_name=picks_info[0], user_id=save_user_id, session_id=save_session_id)
-            except:
-                close_picks = run.get_picks(object_name=picks_info[0], user_id=save_user_id, session_id=save_session_id)[0]
+            close_picks = run.new_picks(
+                object_name=picks_info[0], user_id=save_user_id, 
+                session_id=save_session_id, exist_ok=True
+            )
             close_picks.from_numpy(coordinates[close_indices], orientations[close_indices])
 
         # Save the far points Coordinates in another CoPick pick
-        if len(far_indices) > 0:                       
-            try:
-                far_picks = run.new_picks(object_name=picks_info[0], user_id=save_user_id, session_id=new_session_id)
-            except:
-                far_picks = run.get_picks(object_name=picks_info[0], user_id=save_user_id, session_id=new_session_id)[0]
+        if len(far_indices) > 0:  
+            far_picks = run.new_picks(
+                object_name=picks_info[0], user_id=save_user_id, 
+                session_id=new_session_id, exist_ok=True
+            )                     
+            # Ensure if orientations are empty, replace with identity
+            if np.all(orientations[far_indices,:3,:3] == 0): orientations[far_indices,:3,:3] = np.eye(3)                
             far_picks.from_numpy(coordinates[far_indices], orientations[far_indices])
 
 
