@@ -10,7 +10,7 @@ def process_membrane_bound_extract(
     picks_info: Tuple[str, str, str],
     seg_info: Tuple[str, str, str],
     save_user_id: str, save_session_id: str,
-    distance_threshold: float
+    distance_threshold: Tuple[float, float]
     ):
     """
     Process membrane-bound particles and extract their coordinates and orientations.
@@ -22,7 +22,7 @@ def process_membrane_bound_extract(
         picks_info: Tuple containing picks name, user ID, and session ID.
         save_user_id: User ID for saving processed picks.
         save_session_id: Session ID for saving close picks.
-        distance_threshold: Maximum distance to consider a particle close to the membrane.
+        distance_threshold: Tuple containing minimum and maximum distances to consider a particle close to the membrane.
     """  
 
     # Increment session ID for the second class
@@ -67,7 +67,8 @@ def process_membrane_bound_extract(
         points, closest_labels = closest_organelle_points(
             seg, 
             coordinates, 
-            max_distance=distance_threshold, 
+            min_distance=distance_threshold[0],
+            max_distance=distance_threshold[1], 
             return_labels_array=True
         )
 

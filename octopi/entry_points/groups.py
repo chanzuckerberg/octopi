@@ -124,12 +124,12 @@ click.rich_click.OPTION_GROUPS = {
     "routines membrane-extract": [
         {
             "name": "Input Arguments",
-            "options": ["--config", "--voxel-size", "--picks-info", "--membrane-info",
-                       "--organelle-info", "--runIDs"]
+            "options": ["--config", "--voxel-size", "--picks-info", 
+                        "--seg-info", "--runIDs"]
         },
         {
             "name": "Parameters",
-            "options": ["--distance-threshold", "--n-procs"]
+            "options": ["--threshold", "--n-procs"]
         },
         {
             "name": "Output Arguments",

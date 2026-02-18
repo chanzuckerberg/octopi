@@ -50,34 +50,9 @@ def extract_membrane_bound_picks(
     print('Extraction of Membrane-Bound Proteins Complete!')
 
 
-def save_parameters(config: str,
-                    voxel_size: float,
-                    picks_info: tuple,
-                    seg_info: tuple,
-                    save_user_id: str,
-                    save_session_id: str,
-                    distance_threshold: float,
-                    runIDs: list,
-                    output_path: str):
+def save_parameters( params_dict: dict, output_path: str ):
     import octopi.utils.io as io
     import pprint
-
-    params_dict = {
-        "input": {
-            "config": config,
-            "voxel_size": voxel_size,
-            "picks_info": picks_info,
-            "seg_info": seg_info
-        },
-        "output": {
-            "save_user_id": save_user_id,
-            "save_session_id": save_session_id
-        },
-        "parameters": {
-            "distance_threshold": distance_threshold,
-            "runIDs": runIDs
-        }
-    }
 
     # Print the parameters
     print(f"\nParameters for Extraction of Membrane-Bound Picks:")
@@ -96,8 +71,8 @@ def save_parameters(config: str,
 # Parameters
 @click.option('-np', '--n-procs', type=int, default=None,
               help="Number of processes to use (defaults to CPU count)")
-@click.option('-dt', '--distance-threshold', type=float, default=10,
-              help="Distance threshold for membrane proximity")
+@click.option('-t', '--threshold', type=str, default="1,10",
+              help="Distance threshold for membrane proximity in Voxels (provide the min and max as 'min,max' if only one value is provided, it is used as max with min=1)",)
 # Input Arguments
 @click.option('-rids','--runIDs', type=str, default=None,
               callback=lambda ctx, param, value: parsers.parse_list(value) if value else None,
@@ -113,41 +88,70 @@ def save_parameters(config: str,
 @click.option('-c', '--config', type=click.Path(exists=True), required=True,
               help="Path to the configuration file")
 def cli(config, voxel_size, picks_info, seg_info, runids,
-        distance_threshold, n_procs,
+        threshold, n_procs,
         save_user_id, save_session_id):
     """
     Extract membrane-bound picks based on proximity to organelle or membrane segmentation.
     
-    This command isolates membrane-bound proteins from segmented volumes by finding 
-    particles that are within a specified distance threshold of the membrane segmentation. 
-    The resulting picks are saved as zarr arrays in your copick project, organized by 
-    segmentation name, user ID, and session ID for easy tracking and comparison.
-    
+    This command separates particle picks into membrane-proximal and membrane-distal 
+    classes by computing the minimum Euclidean distance (in voxel units) between 
+    each particle coordinate and the provided segmentation mask. Picks whose 
+    distance falls within the specified threshold range are classified as 
+    membrane-bound; all others are classified as non-membrane-bound.
+
+    If the original picks contain identity rotations, orientations for 
+    membrane-bound particles are automatically estimated based on the vector 
+    from the segmented organelle center of mass to the particle coordinate.
+
+    The resulting picks are written back to the CoPick project:
+
+    • Membrane-bound picks → saved under the provided session ID  
+
+    • Non-membrane-bound picks → saved under (session ID + 1)
+
+    All distances are interpreted in voxel units. Coordinates are converted 
+    to physical units using the provided voxel size before saving.
+
     \b
     Examples:
-      # Extract membrane-bound picks with default distance threshold
-      octopi membrane-extract -c config.json \\
+
+    # Extract membrane-bound picks with default distance threshold (1–10 voxels)
+    octopi membrane-extract -c config.json \\
         --picks-info predictions,octopi,1 \\
         --seg-info membrane,membrain-seg,1 \\
         --save-user-id octopi \\
         --save-session-id 1
+
+    # Use a custom distance range (2–6 voxels)
+    octopi membrane-extract -c config.json \\
+        --picks-info predictions,octopi,1 \\
+        --seg-info membrane,membrain-seg,1 \\
+        --threshold 2,6 \\
+        --save-user-id octopi \\
+        --save-session-id 3
     """
 
     run_mb_extract(
         config, voxel_size,
         picks_info, seg_info,
-        runids, distance_threshold, n_procs,
+        runids, threshold, n_procs,
         save_user_id, save_session_id
     )
 
 
 def run_mb_extract(
     config, voxel_size, picks_info, seg_info, 
-    runIDs, distance_threshold, n_procs,
+    runIDs, threshold, n_procs,
     save_user_id, save_session_id):
-
     import octopi.utils.io as io
     import copick, os
+
+    # Parse threshold into tuple
+    vals = threshold.split(',')
+    if len(vals) == 1:
+        threshold = (1.0, float(vals[0]))
+    elif len(vals) == 2:
+        threshold = (float(vals[0]), float(vals[1]))
     
     # Default save_user_id to picks_info user_id if not specified
     if save_user_id is None: 
@@ -162,22 +166,29 @@ def run_mb_extract(
     output_path = os.path.join(basepath, output_yaml)        
 
     # Save parameters
-    save_parameters(
-        config=config,
-        voxel_size=voxel_size,
-        picks_info=picks_info,
-        seg_info=seg_info,
-        save_user_id=save_user_id,
-        save_session_id=save_session_id,
-        distance_threshold=distance_threshold,
-        runIDs=runIDs,
-        output_path=output_path
-    )
+    params_dict = {
+        "input": {
+            "config": config,
+            "voxel_size": voxel_size,
+            "picks_info": picks_info,
+            "seg_info": seg_info
+        },
+        "output": {
+            "save_user_id": save_user_id,
+            "save_session_id": save_session_id
+        },
+        "parameters": {
+            "min_distance": threshold[0],
+            "max_distance": threshold[1],
+            "runIDs": runIDs
+        }
+    }
+    save_parameters(params_dict, output_path=output_path)
 
     extract_membrane_bound_picks(
         config=config,
         voxel_size=voxel_size,
-        distance_threshold=distance_threshold,
+        distance_threshold=threshold,
         picks_info=picks_info,
         seg_info=seg_info,
         save_user_id=save_user_id,
