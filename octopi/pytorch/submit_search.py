@@ -284,7 +284,7 @@ class SubmititExplorer(ExploreSubmitter):
         self.gpu_constraint = gpu_constraint
 
         # Check to Make sure GPU Constraint is Valid
-        gpu_constraint = helper.validate_gpu_constraints(gpu_constraint)
+        gpu_constraint = helper.check_gpus(gpu_constraint)
 
         print('🚀 Using Submitit Explorer for Model Architecture Search with the following settings:')
         print(f"  - Concurrent Jobs: {self.n_concurrent_jobs}")
@@ -307,14 +307,14 @@ class SubmititExplorer(ExploreSubmitter):
             slurm_partition="gpu",
             timeout_min=self.slurm_timeout_min,
             cpus_per_task=self.slurm_cpus_per_task,
+            mem_per_cpu=f"{self.mem_per_cpu_gb}G",
             slurm_additional_parameters={
-                "mem": f"{self.mem_per_cpu_gb * self.slurm_cpus_per_task}G",
                 "gpus": "1",
             },
         )
         if self.gpu_constraint: # Optional GPU Constraint
             executor.update_parameters(
-                slurm_constraint=self.gpu_constraint
+                slurm_constraint=f"{self.gpu_constraint}"
             )
 
         # Printing status every helper.PRINT_EVERY_S seconds
