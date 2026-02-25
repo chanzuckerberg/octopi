@@ -4,7 +4,7 @@ from sqlalchemy.exc import OperationalError as SA_OperationalError
 import os, time, traceback, sqlite3, random, subprocess
 from octopi.pytorch.search import ModelExplorer
 import signal, threading, warnings, time
-import torch, mlflow, optuna, loggins
+import torch, mlflow, optuna, logging
 from sqlite3 import OperationalError
 from optuna.trial import TrialState
 from typing import Set, Tuple, List
