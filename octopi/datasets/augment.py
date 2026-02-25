@@ -92,9 +92,17 @@ def get_random_transforms( input_dim, num_samples, Nclasses, bg_ratio: float = 0
             num_samples=num_samples
         )
 
+    # Random Affine Transform
+    rot = RandAffined(
+        keys=["image", "label"],
+        prob=0.3,
+        rotate_range=(0.1, 0.1, 0.1),
+        scale_range=(0.1, 0.1, 0.1),
+    )
+
     return Compose([
         # Geometric augmentations
-        crop,
+        crop, rot,
         RandRotate90d(keys=["image", "label"], prob=0.5, spatial_axes=[1, 2], max_k=3),
         RandFlipd(keys=["image", "label"], prob=0.5, spatial_axis=0),
         RandFlipd(keys=["image", "label"], prob=0.5, spatial_axis=1),
