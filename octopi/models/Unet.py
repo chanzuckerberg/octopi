@@ -27,10 +27,10 @@ class myUNet:
         """Defines the Bayesian optimization search space and builds the model with suggested parameters."""
         
         # Define the search space
-        num_layers = trial.suggest_int("num_layers", 3, 5)
-        hidden_layers = trial.suggest_int("hidden_layers", 1, 3)
+        num_layers = trial.suggest_int("num_layers", 3, 4)
+        hidden_layers = trial.suggest_int("hidden_layers", 1, 2)
         base_channel = trial.suggest_categorical("base_channel", [8, 16, 32])
-        num_res_units = trial.suggest_int("num_res_units", 1, 3)
+        num_res_units = trial.suggest_int("num_res_units", 1, 2)
         dropout = trial.suggest_float("dropout", 0.0, 0.3)
         
         # Create channel sizes and strides
