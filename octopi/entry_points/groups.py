@@ -63,7 +63,7 @@ click.rich_click.OPTION_GROUPS = {
     "routines segment": [
         {
             "name": "Input Arguments",
-            "options": ["--config", "--voxel-size", "--tomo-alg"]
+            "options": ["--config", "--voxel-size", "--tomo-alg", "--run-ids"]
         },
         {
             "name": "Model Arguments",
@@ -71,7 +71,7 @@ click.rich_click.OPTION_GROUPS = {
         },
         {
             "name": "Inference Arguments",
-            "options": ["--seg-info", "--sliding-window-batch-size", "--overlap", "--run-ids"]
+            "options": ["--seg-info", "--sliding-window-batch-size", "--overlap", "--ntta"]
         }
     ],
     "routines localize": [
@@ -100,6 +100,10 @@ click.rich_click.OPTION_GROUPS = {
             "options": ["--model-type", "--num-epochs", "--val-interval", 
                        "--ncache-tomos", "--best-metric", "--background-ratio",
                        "--num-trials", "--random-seed"]
+        },
+        {
+            "name": "Submitit Arguments",
+            "options": ["--submitit", "--njobs", "--cpu-constraint", "--gpu-constraint", "--timeout"]
         }
     ],
     "routines evaluate": [
@@ -120,12 +124,12 @@ click.rich_click.OPTION_GROUPS = {
     "routines membrane-extract": [
         {
             "name": "Input Arguments",
-            "options": ["--config", "--voxel-size", "--picks-info", "--membrane-info",
-                       "--organelle-info", "--runIDs"]
+            "options": ["--config", "--voxel-size", "--picks-info", 
+                        "--seg-info", "--runIDs"]
         },
         {
             "name": "Parameters",
-            "options": ["--distance-threshold", "--n-procs"]
+            "options": ["--threshold", "--n-procs"]
         },
         {
             "name": "Output Arguments",

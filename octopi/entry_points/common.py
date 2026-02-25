@@ -21,9 +21,9 @@ def model_parameters(octopi: bool = False):
 def inference_model_parameters():
     """Decorator for adding inference model parameters"""
     def decorator(f):
-        f = click.option("-mw", "--model-weights", type=click.Path(exists=True), required=True,
+        f = click.option("-mw", "--model-weights", type=str, required=True,
                         help="Path to the model weights file")(f)
-        f = click.option("-mc", "--model-config", type=click.Path(exists=True), required=True,
+        f = click.option("-mc", "--model-config", type=str, required=True,
                         help="Path to the model configuration file")(f)
         return f
     return decorator
@@ -91,6 +91,8 @@ def inference_parameters():
                         help="Batch size for sliding window inference")(f)
         f = click.option('--overlap', '-o', default=0.5, type=FloatRange(0.0, 1.0),
                         help="Overlap fraction for sliding window inference")(f)
+        f = click.option('-ntta', '--ntta', default=4, type=IntRange(min=1),
+                        help="Number of test-time augmentations for inference")(f)
         return f
     return decorator
 

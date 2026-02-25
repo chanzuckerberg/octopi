@@ -12,7 +12,9 @@ def my_evaluator(
     save_path: str,
     distance_threshold_scale: float,
     object_names: List[str] = None,
-    runIDs: List[str] = None
+    runIDs: List[str] = None,
+    fbeta: int = 4,
+    verbose: bool = False
     ):
     import octopi.processing.evaluate as evaluate
 
@@ -22,13 +24,15 @@ def my_evaluator(
         ground_truth_session_id,
         predict_user_id,
         predict_session_id, 
-        object_names=object_names
+        object_names=object_names,
+        verbose=verbose,
+        beta=fbeta
     )
 
     eval.run(save_path=save_path, distance_threshold_scale=distance_threshold_scale, runIDs=runIDs)
 
 
-@click.command('evaluate', context_settings=cli_context)
+@click.command('evaluate', context_settings=cli_context, no_args_is_help=True)
 # Output Arguments
 @click.option('-o','--output', type=click.Path(), default='scores',
               help="Path to save evaluation results")
@@ -36,6 +40,8 @@ def my_evaluator(
 @click.option('-names','--object-names', type=str, default=None,
               callback=lambda ctx, param, value: parsers.parse_list(value) if value else None,
               help="Optional list of object names to evaluate, e.g., ribosome,apoferritin")
+@click.option('--fbeta', '-fb', type=int, default=4, 
+              help="F-beta score to compute Default is from the Kaggle ML Challenge")
 @click.option('-dts','--distance-threshold-scale', type=float, default=0.8,
               help="Compute Distance Threshold Based on Particle Radius")
 # Input Arguments
@@ -52,10 +58,12 @@ def my_evaluator(
               help="User ID for ground truth data")
 @click.option('-c', '--config', type=click.Path(exists=True), required=True,
               help="Path to the copick configuration file")
+@click.option('-v', '--verbose', type=bool, default=False,
+              help='Enable verbose output to inform users if a pick is missing, what available alternatives are present.')
 def cli(config, ground_truth_user_id, ground_truth_session_id,
         predict_user_id, predict_session_id, run_ids,
         distance_threshold_scale, object_names,
-        output):
+        output, verbose, fbeta):
     """
     Evaluate particle localization performance against ground truth annotations.
     
@@ -92,7 +100,9 @@ def cli(config, ground_truth_user_id, ground_truth_session_id,
         save_path=output,
         distance_threshold_scale=distance_threshold_scale,
         object_names=object_names,
-        runIDs=run_ids
+        runIDs=run_ids,
+        verbose=verbose,
+        fbeta=fbeta
     )
 
 

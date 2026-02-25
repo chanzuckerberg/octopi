@@ -101,10 +101,10 @@ def get_random_transforms( input_dim, num_samples, Nclasses, bg_ratio: float = 0
         RandFlipd(keys=["image", "label"], prob=0.5, spatial_axis=2),        
         # Intensity augmentations
         RandomOrder([
-            RandScaleIntensityd(keys="image", prob=0.5, factors=(0.85, 1.15)),
-            RandShiftIntensityd(keys="image", prob=0.5, offsets=(-0.15, 0.15)),
-            RandAdjustContrastd(keys="image", prob=0.5, gamma=(0.85, 1.15)),
-            RandGaussianNoised(keys="image", prob=0.5, mean=0.0, std=0.5),  # Reduced noise std
+            RandScaleIntensityd(keys="image", prob=0.3, factors=(0.85, 1.15)),
+            RandShiftIntensityd(keys="image", prob=0.3, offsets=(-0.15, 0.15)),
+            RandAdjustContrastd(keys="image", prob=0.3, gamma=(0.85, 1.15)),
+            RandGaussianNoised(keys="image", prob=0.3, mean=0.0, std=0.5),
         ]),
     ]) 
 

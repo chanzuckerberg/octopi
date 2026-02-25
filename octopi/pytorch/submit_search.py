@@ -1,162 +1,12 @@
 from __future__ import annotations
 
-import torch, mlflow, optuna, os, time, traceback, pprint
-from octopi.pytorch.search import ModelExplorer
-from octopi.utils import parsers, io
-from optuna.trial import TrialState
+import torch, mlflow, optuna, os, time, pprint, submitit
+import octopi.pytorch.search_helper as helper
 import torch.multiprocessing as mp
 from octopi.datasets import config
-from dataclasses import dataclass
-from typing import List, Optional
+from octopi.utils import io
+from typing import List
 import pandas as pd
-
-# -----------------------------
-# Supervisor / worker settings
-# -----------------------------
-POLL_S = 5
-MAX_RESTARTS_PER_GPU = 25
-CHECK_DB_EVERY_S = 120 # 2 minutes, to detect external study changes
-
-@dataclass
-class WorkerSpec:
-    gpu_id: int
-    proc: Optional[mp.Process] = None
-    restarts: int = 0
-
-# -----------------------------
-# Optuna utilities
-# -----------------------------
-
-TERMINAL_STATES = (TrialState.COMPLETE, TrialState.PRUNED, TrialState.FAIL)
-
-def count_terminal_trials(study) -> int:
-    return len(study.get_trials(states=TERMINAL_STATES))
-
-def make_storage(storage_url: str):
-    # For multi-worker: prefer Postgres/MySQL. SQLite can lock.
-    return optuna.storages.RDBStorage(
-        url=storage_url,
-        heartbeat_interval=60,
-        grace_period=600,
-        failed_trial_callback=optuna.storages.RetryFailedTrialCallback(max_retry=1),
-        engine_kwargs={
-            "connect_args": {
-                "timeout": 300,  # 5 minutes timeout for lock acquisition
-                "check_same_thread": False  # Allow multi-threaded access
-            },
-            "pool_pre_ping": True  # Verify connections before using
-        }
-    )
-
-def get_sampler():
-    """Returns Optuna's TPE sampler with default settings."""
-    return optuna.samplers.TPESampler(
-        n_startup_trials=10,
-        n_ei_candidates=24,
-        multivariate=True
-    )
-
-def get_pruner(val_interval: int, n_warmup_steps: int = 300):
-    """Returns Optuna's pruning strategy."""
-    return optuna.pruners.MedianPruner(
-        n_startup_trials=10,    # let at least 10 full trials run before pruning
-        n_warmup_steps=n_warmup_steps,     # dont prune before (nepochs / 3) epochs
-        interval_steps=val_interval       # check each interval
-    )    
-
-def get_study(study_name: str, storage: str, val_interval: int, n_warmup_steps: int = 300):
-    """Returns the Optuna study object."""
-    return optuna.create_study(
-            study_name=study_name,
-            storage=storage,
-            direction="maximize",
-            sampler=get_sampler(),
-            pruner=get_pruner(val_interval, n_warmup_steps),
-            load_if_exists=True,
-        )
-
-# -----------------------------
-# Worker Process: one GPU, loop trials
-# -----------------------------
-def gpu_worker_loop(
-    gpu_id: int,
-    storage_url: str,
-    study_name: str,
-    submit_kwargs: dict,
-    stop_event: mp.Event,
-    ):
-    """
-    Runs forever (until stop_event set). Handles prunes/fails without exiting.
-    If the *process* crashes, supervisor restarts it.
-    """
-    # Pin to GPU
-    if torch.cuda.is_available():
-        torch.cuda.set_device(gpu_id)
-        device = torch.device(f"cuda:{gpu_id}")
-    else:
-        device = torch.device("cpu")
-
-    # Log worker information
-    print(f"[worker {gpu_id}] pid={os.getpid()} device={device}", flush=True)
-
-    # Each worker creates its own storage/study handle to avoid SQLite locking issues
-    storage = make_storage(storage_url)
-    study = optuna.load_study(study_name=study_name, storage=storage)
-
-    # Main loop: keep asking for new trials until enough trials have been completed or something breaks
-    while not stop_event.is_set():
-        try:
-            # Ask for a new trial
-            trial = study.ask()
-
-            # Verbose to show data splits (# runs / tomograms) for only the first trial
-            if trial.number == 0: verbose = True
-            else: verbose = False
-
-            # Build datamodule per-worker
-            cfg = config.DataGeneratorConfig.from_dict(submit_kwargs)
-            data_generator = cfg.create_data_generator(verbose=verbose)
-            model_search = ModelExplorer(data_generator, submit_kwargs["model_type"], submit_kwargs["output"])            
-
-            try:
-                value = model_search.objective(
-                    trial=trial,
-                    epochs=int(submit_kwargs.get("num_epochs", 100)),
-                    device=device,
-                    val_interval=int(submit_kwargs.get("val_interval", 10)),
-                    best_metric=str(submit_kwargs.get("best_metric", "avg_f1")),
-                )
-                study.tell(trial, value)
-                print(f"[worker {gpu_id}] COMPLETE trial={trial.number} value={value}", flush=True)
-
-            except optuna.TrialPruned:
-                study.tell(trial, state=TrialState.PRUNED)
-                print(f"[worker {gpu_id}] PRUNED trial={trial.number}", flush=True)
-
-            except torch.cuda.OutOfMemoryError:
-                study.tell(trial, state=TrialState.FAIL)
-                print(f"[worker {gpu_id}] FAILED(OOM) trial={trial.number}", flush=True)
-                try:
-                    torch.cuda.empty_cache()
-                except Exception:
-                    pass
-                time.sleep(2)
-
-            except Exception as e:
-                study.tell(trial, state=TrialState.FAIL)
-                print(f"[worker {gpu_id}] FAILED(EXC) trial={trial.number}: {e}", flush=True)
-                traceback.print_exc()
-                try:
-                    torch.cuda.empty_cache()
-                except Exception:
-                    pass
-                time.sleep(2)
-
-        except Exception as e:
-            # This catches Optuna/DB-level issues (e.g. sqlite lock)
-            print(f"[worker {gpu_id}] LOOP ERROR: {e}", flush=True)
-            traceback.print_exc()
-            time.sleep(5)
 
 # -------------------------
 # Model Search Submitter
@@ -221,45 +71,38 @@ class ExploreSubmitter:
         self.data_split = data_split
         self.background_ratio = background_ratio
 
-    def run_model_search(self, study_name='octopi_nas', output='explore_results'):
-        """Performs model architecture search using Optuna and MLflow.
-
-        Parent process keeps one child per GPU alive.
-        If a child exits unexpectedly, restart it.
-        """
-
-        # Set random seed for reproducibility
+    def _setup_study_and_storage(self, study_name: str, output: str):
+        """Create output dir, Optuna study, and save parameters. Returns (storage_url, storage, study, submit_kwargs)."""
         config.set_seed(self.random_seed)
+        submit_kwargs = self.get_parameters(study_name)
+        submit_kwargs["output"] = output
+        self.save_parameters(submit_kwargs, output)
+        os.makedirs(output, exist_ok=True)
+        storage_url = f"sqlite:///{output}/trials.db"
+        storage = helper.make_storage(storage_url)
+        study = helper.get_study(study_name, storage, self.val_interval, self.n_warmup_steps)
+        mlflow.set_experiment(study_name)
+        return storage_url, storage, study, submit_kwargs
 
-        # Get list of available GPU IDs
+    def _run_worker_pool(
+        self,
+        storage_url: str,
+        study_name: str,
+        submit_kwargs: dict,
+    ):
+        """Run the worker pool until num_trials are done. Override in subclasses (e.g. submitit)."""
         gpu_ids = list(range(torch.cuda.device_count()))
         if not gpu_ids:
             raise RuntimeError("No GPUs visible. If you expect GPUs, check CUDA setup.")
 
-        # Get the parameters
-        submit_kwargs = self.get_parameters(study_name)
-        submit_kwargs["output"] = output
-        self.save_parameters(submit_kwargs, output)
-
-        # Create Output Directory and Optuna Study
-        os.makedirs(output, exist_ok=True)
-        storage_url = f"sqlite:///{output}/trials.db"
-        storage = make_storage(storage_url)
-        study = get_study(study_name, storage, self.val_interval, self.n_warmup_steps)
-
-        # Set the MLflow experiment 
-        mlflow.set_experiment(study_name)
-
-        # Supervisor process: start one worker process per GPU
         mp.set_start_method("spawn", force=True)
         stop_event = mp.Event()
-        specs = {gid: WorkerSpec(gpu_id=gid) for gid in gpu_ids}
+        specs = {gid: helper.WorkerSpec(gpu_id=gid) for gid in gpu_ids}
 
-        # Function to start a worker process
         def start_worker(gid: int):
             spec = specs[gid]
             p = mp.Process(
-                target=gpu_worker_loop,
+                target=helper.gpu_worker_loop,
                 args=(gid, storage_url, study_name, submit_kwargs, stop_event),
                 daemon=False,
             )
@@ -267,16 +110,13 @@ class ExploreSubmitter:
             spec.proc = p
             print(f"[supervisor] started worker gpu={gid} pid={p.pid}", flush=True)
 
-        # Start all GPU workers
         for gid in gpu_ids:
             start_worker(gid)
 
-        # Monitor the workers and manage the study
         last_db_check = 0.0
+        storage = helper.make_storage(storage_url)
         try:
             while True:
-
-                # --- cheap: monitor + restart dead workers ---
                 for gid, spec in specs.items():
                     p = spec.proc
                     if p is None:
@@ -285,49 +125,59 @@ class ExploreSubmitter:
                         code = p.exitcode
                         print(f"[supervisor] worker gpu={gid} died exitcode={code}", flush=True)
                         spec.restarts += 1
-                        if spec.restarts > MAX_RESTARTS_PER_GPU:
-                            raise RuntimeError(f"worker on gpu {gid} exceeded restart limit ({MAX_RESTARTS_PER_GPU})")
+                        if spec.restarts > helper.MAX_RESTARTS_PER_GPU:
+                            raise RuntimeError(
+                                f"worker on gpu {gid} exceeded restart limit ({helper.MAX_RESTARTS_PER_GPU})"
+                            )
                         start_worker(gid)
 
-                # --- expensive: touch DB occasionally ---
                 now = time.time()
-                if now - last_db_check >= CHECK_DB_EVERY_S:
+                if now - last_db_check >= helper.CHECK_DB_EVERY_S:
                     last_db_check = now
                     try:
-                        # reload study view (optional but good)
                         study = optuna.load_study(study_name=study_name, storage=storage)
-                        done = count_terminal_trials(study)
+                        done = helper.count_terminal_trials(study)
                         print(f"[supervisor] done={done}/{self.num_trials}", flush=True)
-
                         if done >= self.num_trials:
-                            print(f"[supervisor] reached {done} trials >= target {self.num_trials}. stopping.", flush=True)
+                            print(
+                                f"[supervisor] reached {done} trials >= target {self.num_trials}. stopping.",
+                                flush=True,
+                            )
                             break
-
                     except Exception as e:
-                        # handle db locked, transient net fs weirdness, etc.
                         if "database is locked" in str(e).lower():
                             print("[supervisor] DB locked; will retry later.", flush=True)
                         else:
                             raise
 
-                # Sleep for a short interval before checking again
-                time.sleep(POLL_S)
+                time.sleep(helper.POLL_S)
         except KeyboardInterrupt:
             print("[supervisor] Ctrl-C received. stopping.", flush=True)
         finally:
             stop_event.set()
-            # Give workers a moment to exit gracefully
             time.sleep(2)
             for gid, spec in specs.items():
                 if spec.proc and spec.proc.is_alive():
-                    print(f"[supervisor] terminating worker gpu={gid} pid={spec.proc.pid}", flush=True)
+                    print(
+                        f"[supervisor] terminating worker gpu={gid} pid={spec.proc.pid}",
+                        flush=True,
+                    )
                     spec.proc.terminate()
             for gid, spec in specs.items():
                 if spec.proc:
                     spec.proc.join(timeout=30)
             print("[supervisor] done.", flush=True)
 
-        # Save the contour plot and results
+    def run_model_search(self, study_name: str = 'octopi_nas', output: str = 'explore_results'):
+        """Performs model architecture search using Optuna and MLflow.
+
+        Sets up study/storage, runs worker pool (local or submitit via override), then saves contour plot.
+        """
+        storage_url, storage, _study, submit_kwargs = self._setup_study_and_storage(
+            study_name, output
+        )
+        self._run_worker_pool(storage_url, study_name, submit_kwargs)
+        study = optuna.load_study(study_name=study_name, storage=storage)
         self.save_contour_plot_as_png(study, output)
 
     def save_contour_plot_as_png(self, study, output):
@@ -407,3 +257,125 @@ class ExploreSubmitter:
 
         # Save to YAML File
         io.save_parameters_yaml(output_params, f'{output}/model-search.yaml')
+
+
+# -------------------------
+# Submitit-backed Model Search (SLURM jobs; refill pool as jobs complete)
+# -------------------------
+
+class SubmititExplorer(ExploreSubmitter):
+    """Model architecture search via submitit: submit N concurrent SLURM jobs, refill as they complete."""
+    def __init__(
+        self,
+        n_concurrent_jobs: int = 5,
+        cpus_per_task: int = 4,
+        mem_per_cpu: int = 16,
+        slurm_timeout_min: int = 1080,
+        gpu_constraint: str = None,
+        submitit_folder: str = "submitit_logs",
+        **kwargs,
+    ):
+        super().__init__(**kwargs)
+        self.n_concurrent_jobs = n_concurrent_jobs
+        self.slurm_timeout_min = slurm_timeout_min
+        self.slurm_cpus_per_task = cpus_per_task
+        self.mem_per_cpu_gb = mem_per_cpu
+        self.submitit_folder = submitit_folder
+        self.gpu_constraint = gpu_constraint
+
+        # Check to Make sure GPU Constraint is Valid
+        gpu_constraint = helper.check_gpus(gpu_constraint)
+
+        print('🚀 Using Submitit Explorer for Model Architecture Search with the following settings:')
+        print(f"  - Concurrent Jobs: {self.n_concurrent_jobs}")
+        print(f"  - Compute Constraint (cpus, mem_per_cpu_gb): {self.slurm_cpus_per_task}, {self.mem_per_cpu_gb}")
+        print(f"  - SLURM Timeout (min): {self.slurm_timeout_min}")
+        print(f"  - Submitit Folder: {self.submitit_folder}")
+        print(f"  - GPU Constraint: {self.gpu_constraint}\n")
+
+    def _run_worker_pool(
+        self,
+        storage_url: str,
+        study_name: str,
+        submit_kwargs: dict,
+    ):
+        """Run the submitit job pool until num_trials are done."""
+        log_dir = os.path.join(submit_kwargs["output"], self.submitit_folder)
+        os.makedirs(log_dir, exist_ok=True)
+        executor = submitit.AutoExecutor(folder=log_dir)
+        executor.update_parameters(
+            slurm_partition="gpu",
+            timeout_min=self.slurm_timeout_min,
+            cpus_per_task=self.slurm_cpus_per_task,
+            mem_per_cpu=f"{self.mem_per_cpu_gb}G",
+            slurm_additional_parameters={
+                "gpus": "1",
+            },
+        )
+        if self.gpu_constraint: # Optional GPU Constraint
+            executor.update_parameters(
+                slurm_constraint=f"{self.gpu_constraint}"
+            )
+
+        # Printing status every helper.PRINT_EVERY_S seconds
+        last_print = 0
+
+        # Start the submitit job pool
+        storage = helper.make_storage(storage_url)
+        running = []
+        num_trials = self.num_trials
+
+        def submit_one():
+            return executor.submit(helper.run_one_trial, storage_url, study_name, submit_kwargs)
+
+        # Submit initial batch (up to n_concurrent_jobs)
+        for _ in range(min(self.n_concurrent_jobs, num_trials)):
+            job = submit_one()
+            running.append(job)
+            print(f"[submitit] submitted job {job.job_id}", flush=True)
+
+        # Refill as jobs complete until we have enough trials
+        while True:
+            done = [j for j in running if j.done()]
+            for j in done:
+                try:
+                    j.result()
+                except Exception as e:
+                    print(f"[submitit] job {j.job_id} finished with error: {e}", flush=True)
+                running.remove(j)
+
+            # Check study progress
+            study = optuna.load_study(study_name=study_name, storage=storage)
+            done_count = helper.count_terminal_trials(study)
+
+            # Print status periodically
+            now = time.time()
+            if now - last_print >= helper.PRINT_EVERY_S:
+                print(
+                    f"[submitit] done={done_count}/{num_trials} running={len(running)}",
+                    flush=True,
+                )
+                last_print = now
+
+            if done_count >= num_trials and not running:
+                break
+
+            if done_count >= num_trials:
+                break
+
+            while len(running) < self.n_concurrent_jobs and done_count < num_trials:
+                job = submit_one()
+                running.append(job)
+                print(f"[submitit] submitted job {job.job_id}", flush=True)
+
+            if not running:
+                break
+            time.sleep(helper.POLL_S)
+
+        # Wait for remaining jobs
+        for j in running:
+            try:
+                j.result()
+            except Exception as e:
+                print(f"[submitit] job {j.job_id} finished with error: {e}", flush=True)
+        print("[submitit] all jobs finished.", flush=True)

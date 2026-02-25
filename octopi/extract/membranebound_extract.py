@@ -10,7 +10,7 @@ def process_membrane_bound_extract(
     picks_info: Tuple[str, str, str],
     seg_info: Tuple[str, str, str],
     save_user_id: str, save_session_id: str,
-    distance_threshold: float
+    distance_threshold: Tuple[float, float]
     ):
     """
     Process membrane-bound particles and extract their coordinates and orientations.
@@ -22,7 +22,7 @@ def process_membrane_bound_extract(
         picks_info: Tuple containing picks name, user ID, and session ID.
         save_user_id: User ID for saving processed picks.
         save_session_id: Session ID for saving close picks.
-        distance_threshold: Maximum distance to consider a particle close to the membrane.
+        distance_threshold: Tuple containing minimum and maximum distances to consider a particle close to the membrane.
     """  
 
     # Increment session ID for the second class
@@ -67,7 +67,8 @@ def process_membrane_bound_extract(
         points, closest_labels = closest_organelle_points(
             seg, 
             coordinates, 
-            max_distance=distance_threshold, 
+            min_distance=distance_threshold[0],
+            max_distance=distance_threshold[1], 
             return_labels_array=True
         )
 
@@ -75,9 +76,15 @@ def process_membrane_bound_extract(
         close_indices = np.where(closest_labels != -1)[0]
         far_indices = np.where(closest_labels == -1)[0]
 
-        # Initialize orientations array
+        # Get Original Orientations
         orientations = np.zeros([nPoints, 4, 4])
-        orientations[:,3,3] = 1 
+        picks = run.get_picks(object_name=picks_info[0], user_id=picks_info[1], session_id=picks_info[2])
+        picks = picks[0].points
+        for ii in range(nPoints):
+            orientations[ii] = picks[ii].transformation_
+        
+        # If all the orientations contain identity matrices, assume they need to be aligned
+        align = np.all([np.array_equal(orientations[i,:3,:3], np.eye(3)) for i in range(nPoints)])
 
         # Step 2: Get Organelle Centers (Optional if an organelle segmentation is provided)
         organelle_centers = organelle_points(seg)
@@ -90,10 +97,11 @@ def process_membrane_bound_extract(
             close_centers = np.array([organelle_centers[str(int(label))] for label in close_labels])
 
             # Calculate orientations
-            for i, idx in enumerate(close_indices):
-                rot = mCalcAngles(coordinates[idx], close_centers[i])
-                r = R.from_euler('ZYZ', rot, degrees=True)
-                orientations[idx,:3,:3] = r.inv().as_matrix()  
+            if align:
+                for i, idx in enumerate(close_indices):
+                    rot = mCalcAngles(coordinates[idx], close_centers[i])
+                    r = R.from_euler('ZYZ', rot, degrees=True)
+                    orientations[idx,:3,:3] = r.inv().as_matrix()  
 
         # Swap z and x coordinates (0 and 2) before scaling Back to Angstroms
         coordinates[:, [0, 2]] = coordinates[:, [2, 0]]
@@ -101,23 +109,21 @@ def process_membrane_bound_extract(
         
         # Save the close points in CoPick project
         if len(close_indices) > 0:
-            try:
-                close_picks = run.new_picks(object_name=picks_info[0], user_id=save_user_id, session_id=save_session_id)
-            except:
-                close_picks = run.get_picks(object_name=picks_info[0], user_id=save_user_id, session_id=save_session_id)[0]
+            close_picks = run.new_picks(
+                object_name=picks_info[0], user_id=save_user_id, 
+                session_id=save_session_id, exist_ok=True
+            )
             close_picks.from_numpy(coordinates[close_indices], orientations[close_indices])
 
         # Save the far points Coordinates in another CoPick pick
-        if len(far_indices) > 0:                       
-            try:
-                far_picks = run.new_picks(object_name=picks_info[0], user_id=save_user_id, session_id=new_session_id)
-            except:
-                far_picks = run.get_picks(object_name=picks_info[0], user_id=save_user_id, session_id=new_session_id)[0]
-
-            # Assume We Don't Know The Orientation for Anything Far From Membranes
-            empty_orientations =  np.zeros(orientations[far_indices].shape)
-            empty_orientations[:,-1,-1] = 1
-            far_picks.from_numpy(coordinates[far_indices], empty_orientations)
+        if len(far_indices) > 0:  
+            far_picks = run.new_picks(
+                object_name=picks_info[0], user_id=save_user_id, 
+                session_id=new_session_id, exist_ok=True
+            )                     
+            # Ensure if orientations are empty, replace with identity
+            if np.all(orientations[far_indices,:3,:3] == 0): orientations[far_indices,:3,:3] = np.eye(3)                
+            far_picks.from_numpy(coordinates[far_indices], orientations[far_indices])
 
 
 def organelle_points(mask, xyz_order=False): 
@@ -134,7 +140,7 @@ def organelle_points(mask, xyz_order=False):
         # coordinates[str(label)] = ndimage.center_of_mass(mask == label)
     return coordinates     
 
-def closest_organelle_points(mask, coords, min_distance = 0, max_distance=float('inf'), return_labels_array=False):
+def closest_organelle_points(mask, coords, min_distance = 1, max_distance=float('inf'), return_labels_array=False):
     """
     Filter points in `coords` based on their proximity to the lysosome membrane.
 

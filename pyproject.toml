@@ -28,7 +28,6 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Image Recognition",
 ]
 dependencies = [
-    "matplotlib",
     "tqdm",
     "copick",
     "nibabel",
@@ -36,10 +35,13 @@ dependencies = [
     "optuna",
     "monai",
     "pandas",
+    "plotly",
     "mrcfile",
     "kaleido",
     "requests",
+    "submitit",
     "torch-ema",
+    "matplotlib",
     "ipywidgets",
     "rich-click",
     "copick-utils",

@@ -30,6 +30,7 @@ class ModelExplorer:
         self.loss_function = None
         self.metrics_function = None
         self.sampling = None
+        self.walltime_event = None
 
     def my_build_model(self, trial):
         """Builds and initializes a model based on Optuna-suggested parameters."""
@@ -81,15 +82,19 @@ class ModelExplorer:
             )
             return results['best_metric']
 
+        except optuna.TrialPruned:
+            # Re-raise so run_one_trial / gpu_worker_loop can tell(trial, state=PRUNED)
+            raise
         except torch.cuda.OutOfMemoryError:
             print(f"[Trial Failed] OOM Error for model={model_trainer.model}, crop_size={crop_size}, num_samples={num_samples}")
             trial.set_user_attr("out_of_memory", True)
-            raise optuna.TrialPruned()
-
+            raise
         except Exception as e:
+            # Re-raise so run_one_trial / gpu_worker_loop can tell(trial, state=FAIL).
+            # Do not convert to TrialPruned (e.g. MLflow "database is locked" should be FAIL).
             print(f"[Trial Failed] Unexpected error: {e}")
             trial.set_user_attr("error", str(e))
-            raise optuna.TrialPruned()        
+            raise        
 
     def objective(self, trial, epochs, device, val_interval=15, best_metric="avg_f1"):
         """Runs the full training process for a given trial."""
@@ -112,6 +117,7 @@ class ModelExplorer:
                 self.model, self.device, self.loss_function, 
                 self.metrics_function, self.optimizer
             )
+            model_trainer.walltime_event = self.walltime_event
 
             # Train model and evaluate score
             score = self._train_model(
@@ -138,7 +144,8 @@ class ModelExplorer:
         """Saves the best model if it improves upon previous scores."""
         best_score_so_far = self.get_best_score(trial)
         if score > best_score_so_far:
-            torch.save(model_trainer.model_weights, f'{self.output}/best_model.pth')
+            model_trainer.best_trial = trial.number
+            torch.save(model_trainer.best_weights, f'{self.output}/best_model.pth')
             io.save_parameters_to_yaml(self.model_builder, model_trainer, self.data_generator, 
                                     f'{self.output}/model_config.yaml')            
 

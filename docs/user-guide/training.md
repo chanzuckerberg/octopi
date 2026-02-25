@@ -174,6 +174,30 @@ Octopi supports two complementary workflows:
             | `--num-trials` | Number of Optuna trials (models) to evaluate. | `100` | Use 50-200 for sufficient exploration of the parameter landscape. |
             | `--random-seed` | Random seed for reproducibility. | `42` | Fix this when comparing changes |
 
+        === "Submitit / SLURM Execution"
+
+            | Parameter | Description | Default | Notes |
+            |----------|-------------|---------|------|
+            | `--submitit` | Submit trials as independent SLURM jobs using submitit instead of running locally. | `False` | Enables HPC / multi-node execution |
+            | `--njobs` | Maximum number of concurrent SLURM jobs (trials) to run at once. | `5` | Each job runs exactly one Optuna trial |
+            | `--compute-constraint` | CPU and memory request per SLURM job in the form `cpus,mem_gb`. | `4,16` | Example: `8,32` requests 8 CPUs and 32 GB RAM |
+            | `--timeout` | Walltime limit (hours) per SLURM job. | `4` | Jobs exceeding this limit are terminated by the scheduler |
+
+            !!! example "What changes when `--submitit` is enabled?"
+                By default, `octopi model-explore` runs **locally**, launching one worker per available GPU and executing multiple trials within a single process.
+
+                When `--submitit` is enabled, Octopi switches to a **job-based execution model** designed for SLURM-HPC clusters:
+
+                - Each Optuna trial is executed as a **separate SLURM job**
+                - Jobs may run on different nodes and start at different times
+                - Resource limits (CPUs, memory, walltime) are enforced per trial
+                - Failed jobs affect only the corresponding trial, not the entire study
+
+                This mode provides better scalability and fault isolation for large model exploration runs, especially on shared HPC systems.
+
+                Because multiple jobs may write to the same Optuna and MLflow tracking databases, Octopi uses **best-effort retries** for database operations to safely handle temporary contention.
+
+
     !!! question "What Gets Optimized?"
 
         Model exploration uses **fixed architectures** with two available options:

@@ -77,7 +77,7 @@ def get_model_config(channels, strides, res_units, dim_in):
     }
     return model_config
 
-@click.command('train')
+@click.command('train', no_args_is_help=True)
 # Training Arguments (applied in reverse order)
 @common.train_parameters(octopi=False)
 # UNet-Model Arguments

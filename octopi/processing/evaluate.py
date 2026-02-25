@@ -14,7 +14,8 @@ class evaluator:
                  predict_session_id: str,
                  voxel_size: float = 10,
                  beta: float = 4,
-                 object_names: List[str] = None):
+                 object_names: List[str] = None,
+                 verbose: bool = False):
         
         self.root = copick.from_file(copick_config)
         print('Running Evaluation on the Following Copick Project: ', copick_config)
@@ -25,6 +26,8 @@ class evaluator:
         self.predict_session_id = predict_session_id
         self.voxel_size = voxel_size
         self.beta = beta
+        self.verbose = verbose
+        
         print(f'\nGround Truth Query: \nUserID: {ground_truth_user_id}, SessionID: {ground_truth_session_id}')
         print(f'\nSubmitted Picks: \nUserID: {prediction_user_id}, SessionID: {predict_session_id}\n')
 
@@ -98,12 +101,12 @@ class evaluator:
                 gt_coordinates = readers.coordinates(
                     run, name, 
                     self.ground_truth_user_id, self.ground_truth_session_id, 
-                    self.voxel_size, raise_error=False
+                    self.voxel_size, raise_error=False, verbose=self.verbose
                 )
                 pred_coordinates = readers.coordinates(
                     run, name,
                     self.prediction_user_id, self.predict_session_id, 
-                    self.voxel_size, raise_error=False
+                    self.voxel_size, raise_error=False, verbose=self.verbose
                 )
                 
                 # If no reference (GT) points, all candidate points are false positives

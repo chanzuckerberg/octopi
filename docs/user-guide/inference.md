@@ -67,7 +67,7 @@ octopi segment \
 
 ### Model Ensembles
 
-`octopi segment` supports **model ensembles** (commonly referred to as *model soups*) by providing multiple model configurations and weights as comma-separated lists.
+`octopi segment` supports **model ensembles** by providing multiple model configurations and weights as comma-separated lists.
 
 ```bash
 octopi segment \
@@ -76,6 +76,8 @@ octopi segment \
     --model-weights model1.pth,model2.pth \
     --seg-info ensemble,octopi,1
 ```
+
+---
 
 ## Localization 
 
@@ -119,7 +121,87 @@ The localization algorithm uses **particle size information** from your copick c
         | `--pick-session-id` | Session ID for particle picks. | `1` | Used for result grouping |
         | `--pick-user-id` | User ID for particle picks. | `octopi` | Used for result grouping |
 
-## Evaluate Results
+## Context-Aware Particle Extraction
+
+This optional post-processing step splits an existing set of particle picks into two groups:
+
+- **Membrane-close picks**: particles within a configurable distance threshold of a membrane/organelle segmentation.
+- **Membrane-far picks**: particles outside that threshold.
+
+For membrane-close particles, we can also **align orientations** so that each particle’s rotation is consistent with the local membrane normal (estimated from the vector between the particle and the closest organelle center).
+
+??? tip "What this is useful for"
+    - Separate membrane-associated particles from cytosolic/other particles for downstream analysis.
+    - Generate a membrane-consistent orientation initialization for subtomogram averaging.
+    - Keep the original picks intact while writing new split picks into new `user_id` / `session_id` slots.
+
+=== "Inputs"
+
+    This workflow requires two existing data products inside the same CoPick `run`:
+
+    1. **Picks** (`picks_info = (object_name, user_id, session_id)`): 
+        * the particle coordinates (and optionally orientations) you want to split.
+    2. **Segmentation** (`seg_info = (seg_name, user_id, session_id)`): 
+        * a membrane/organelle segmentation used to compute proximity.
+
+    You also provide:
+
+    - `distance_threshold` (in **voxels**, since distances are computed in the segmentation grid before scaling)
+    - `voxel_size` (Å) for writing coordinates back in physical units
+
+    **How proximity is computed**
+
+    For each pick coordinate, we compute the closest voxel in the segmentation mask and measure the Euclidean distance.
+    A pick is considered **membrane-close** if:
+
+    `min_distance <= distance_to_seg <= distance_threshold`
+
+    All other points are considered **membrane-far**.
+
+=== "Output"
+
+    The function writes **two new pick sets** back into the CoPick project:
+
+    - **Close →** `(save_user_id, save_session_id)`
+    - **Far →** `(save_user_id, save_session_id + 1)`
+
+    !!! example "Example Output"
+
+        1. **Membrane-close picks** are written to:
+            - `object_name = picks_info[0]`
+            - `user_id = save_user_id`
+            - `session_id = save_session_id`
+
+        2. **Membrane-far picks** are written to a *new* session ID:
+            - `object_name = picks_info[0]`
+            - `user_id = save_user_id`
+            - `session_id = int(save_session_id) + 1`
+
+        If your original picks were:
+        - `(ribosome, data-portal, 0)`
+
+        and you run extraction with:
+        - `save_user_id = octopi`
+        - `save_session_id = 10`
+
+        then outputs will be:
+
+        - membrane-close ribosomes → `(ribosome, octopi, 10)`
+        - membrane-far ribosomes   → `(ribosome, octopi, 11)`
+
+    ??? question "How are orienations handled?"
+
+        - The routine reads the original pick orientations (4×4 transforms).
+        - If **all rotations are identity**, it assumes the picks are unaligned and will compute an orientation for **membrane-close** points.
+
+    ??? warning "Existing picks may be overwritten"
+        If picks already exist at `(object_name, save_user_id, save_session_id)` or `(object_name, save_user_id, save_session_id+1)`,
+        the routine will load them and overwrite their contents via `from_numpy(...)`.
+        Use a fresh `save_session_id` if you want to preserve previous outputs.        
+
+---
+
+## Evaluation
 
 Evaluate the particle coordinates against the coordinates that were used to generate the segmentation masks. 
 
@@ -140,6 +222,8 @@ octopi evaluate
     - **True Positives (TP)**: Correctly detected particles within distance threshold
     - **False Positives (FP)**: Predicted particles with no nearby ground truth
     - **False Negatives (FN)**: Ground truth particles with no nearby predictions
+
+---
 
 ## Visualization
 

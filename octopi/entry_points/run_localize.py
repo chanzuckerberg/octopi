@@ -69,7 +69,7 @@ def save_parameters(seg_info: Tuple[str, str, str],
     io.save_parameters_yaml(params, output_path)
 
 
-@click.command('localize')
+@click.command('localize', no_args_is_help=True)
 # Output Arguments
 @click.option('-pui', '--pick-user-id', type=str, default='octopi',
               help="User ID for the particle picks")

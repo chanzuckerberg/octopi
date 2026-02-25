@@ -1,0 +1,389 @@
+from __future__ import annotations
+
+from sqlalchemy.exc import OperationalError as SA_OperationalError
+import os, time, traceback, sqlite3, random, subprocess
+from octopi.pytorch.search import ModelExplorer
+import signal, threading, warnings, time
+import torch, mlflow, optuna, loggins
+from sqlite3 import OperationalError
+from optuna.trial import TrialState
+from typing import Set, Tuple, List
+import torch.multiprocessing as mp
+from octopi.datasets import config
+from dataclasses import dataclass
+from typing import Optional
+
+# -----------------------------
+# Supervisor / worker settings
+# -----------------------------
+POLL_S = 5
+MAX_RESTARTS_PER_GPU = 25
+CHECK_DB_EVERY_S = 120 # 2 minutes, to detect external study changes
+PRINT_EVERY_S = 120 # print submitit once per minute
+
+@dataclass
+class WorkerSpec:
+    gpu_id: int
+    proc: Optional[mp.Process] = None
+    restarts: int = 0
+
+# -----------------------------
+# Optuna DB retry (SQLite lock in multi-job)
+# -----------------------------
+OPTUNA_DB_MAX_ATTEMPTS = 15
+OPTUNA_DB_WAIT_S = 5 # seconds
+
+def _is_sqlite_lock(e: Exception) -> bool:
+    msg = str(e).lower()
+    is_sqlite_op = isinstance(e, sqlite3.OperationalError)
+    is_sa_op = isinstance(e, SA_OperationalError)
+    # look for lock/busy/timeouts which indicate transient contention
+    return (is_sqlite_op or is_sa_op) and (
+        "database is locked" in msg
+        or "database is busy" in msg
+        or "locked" in msg
+        or "timeout" in msg
+    )
+
+
+def _retry_optuna_db(callable_fn, *args, **kwargs):
+    """Run an Optuna DB operation with retries and wait on failure (e.g. database is locked)."""
+    last_err = None
+    for attempt in range(OPTUNA_DB_MAX_ATTEMPTS):
+        try:
+            return callable_fn(*args, **kwargs)
+        except Exception as e:
+            if not _is_sqlite_lock(e):
+                raise
+            last_err = e
+            if attempt < OPTUNA_DB_MAX_ATTEMPTS - 1:
+                time.sleep(OPTUNA_DB_WAIT_S * random.uniform(0.8, 1.2))
+    raise last_err
+
+# -----------------------------
+# Optuna utilities
+# -----------------------------
+
+TERMINAL_STATES = (TrialState.COMPLETE, TrialState.PRUNED, TrialState.FAIL)
+
+def count_terminal_trials(study) -> int:
+    return len(study.get_trials(states=TERMINAL_STATES))
+
+def make_storage(storage_url: str):
+    # For multi-worker: prefer Postgres/MySQL. SQLite can lock.
+    return optuna.storages.RDBStorage(
+        url=storage_url,
+        heartbeat_interval=60,
+        grace_period=600,
+        failed_trial_callback=optuna.storages.RetryFailedTrialCallback(max_retry=1),
+        engine_kwargs={
+            "connect_args": {
+                "timeout": 300,  # 5 minutes timeout for lock acquisition
+                "check_same_thread": False  # Allow multi-threaded access
+            },
+            "pool_pre_ping": True  # Verify connections before using
+        }
+    )
+
+def get_sampler():
+    """Returns Optuna's TPE sampler with default settings."""
+    return optuna.samplers.TPESampler(
+        n_startup_trials=10,
+        n_ei_candidates=24,
+        multivariate=True
+    )
+
+def get_pruner(val_interval: int, n_warmup_steps: int = 300):
+    """Returns Optuna's pruning strategy."""
+    return optuna.pruners.MedianPruner(
+        n_startup_trials=10,    # let at least 10 full trials run before pruning
+        n_warmup_steps=n_warmup_steps,     # dont prune before (nepochs / 3) epochs
+        interval_steps=val_interval       # check each interval
+    )    
+
+def get_study(study_name: str, storage: str, val_interval: int, n_warmup_steps: int = 300):
+    """Returns the Optuna study object."""
+    return optuna.create_study(
+            study_name=study_name,
+            storage=storage,
+            direction="maximize",
+            sampler=get_sampler(),
+            pruner=get_pruner(val_interval, n_warmup_steps),
+            load_if_exists=True,
+        )
+
+# -----------------------------
+# Worker Process: one GPU, loop trials
+# -----------------------------
+def gpu_worker_loop(
+    gpu_id: int,
+    storage_url: str,
+    study_name: str,
+    submit_kwargs: dict,
+    stop_event: mp.Event,
+    ):
+    """
+    Runs forever (until stop_event set). Handles prunes/fails without exiting.
+    If the *process* crashes, supervisor restarts it.
+    """
+    # Pin to GPU
+    if torch.cuda.is_available():
+        torch.cuda.set_device(gpu_id)
+        device = torch.device(f"cuda:{gpu_id}")
+    else:
+        device = torch.device("cpu")
+
+    # Log worker information
+    print(f"[worker {gpu_id}] pid={os.getpid()} device={device}", flush=True)
+
+    # Each worker creates its own storage/study handle to avoid SQLite locking issues
+    storage = make_storage(storage_url)
+    study = optuna.load_study(study_name=study_name, storage=storage)
+
+    # Main loop: keep asking for new trials until enough trials have been completed or something breaks
+    while not stop_event.is_set():
+        try:
+            # Ask for a new trial (retry on DB lock)
+            trial = _retry_optuna_db(study.ask)
+
+            # Verbose to show data splits (# runs / tomograms) for only the first trial
+            if trial.number == 0: verbose = True
+            else: verbose = False
+
+            # Build datamodule per-worker
+            cfg = config.DataGeneratorConfig.from_dict(submit_kwargs)
+            data_generator = cfg.create_data_generator(verbose=verbose)
+            model_search = ModelExplorer(data_generator, submit_kwargs["model_type"], submit_kwargs["output"])            
+
+            try:
+                value = model_search.objective(
+                    trial=trial,
+                    epochs=int(submit_kwargs.get("num_epochs", 100)),
+                    device=device,
+                    val_interval=int(submit_kwargs.get("val_interval", 10)),
+                    best_metric=str(submit_kwargs.get("best_metric", "avg_f1")),
+                )
+                _retry_optuna_db(study.tell, trial, value)
+                print(f"[worker {gpu_id}] COMPLETE trial={trial.number} value={value}", flush=True)
+
+            except optuna.TrialPruned:
+                _retry_optuna_db(study.tell, trial, state=TrialState.PRUNED)
+                print(f"[worker {gpu_id}] PRUNED trial={trial.number}", flush=True)
+
+            except torch.cuda.OutOfMemoryError:
+                _retry_optuna_db(study.tell, trial, state=TrialState.FAIL)
+                print(f"[worker {gpu_id}] FAILED(OOM) trial={trial.number}", flush=True)
+                try:
+                    torch.cuda.empty_cache()
+                except Exception:
+                    pass
+                time.sleep(2)
+
+            except Exception as e:
+                _retry_optuna_db(study.tell, trial, state=TrialState.FAIL)
+                print(f"[worker {gpu_id}] FAILED(EXC) trial={trial.number}: {e}", flush=True)
+                traceback.print_exc()
+                try:
+                    torch.cuda.empty_cache()
+                except Exception:
+                    pass
+                time.sleep(2)
+
+        except Exception as e:
+            # This catches Optuna/DB-level issues (e.g. sqlite lock)
+            print(f"[worker {gpu_id}] LOOP ERROR: {e}", flush=True)
+            traceback.print_exc()
+            time.sleep(5)
+
+
+# -----------------------------
+# One-trial job (for submitit; must be top-level for pickling)
+# -----------------------------
+def run_one_trial(storage_url: str, study_name: str, submit_kwargs: dict):
+    """
+    Run a single Optuna trial. Used as the submitit job target.
+    Connects to the study, asks for a trial, runs ModelExplorer.objective, tells the result.
+    """
+
+    # Setup walltime event for graceful stopping
+    walltime_event = threading.Event()
+
+    # Define signal handler and register it
+    def _on_sigusr2(signum, frame):
+        walltime_event.set()
+    signal.signal(signal.SIGUSR2, _on_sigusr2)
+
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    if torch.cuda.is_available():
+        torch.cuda.set_device(0)
+
+    # Trial settings - ensure we always grab the correct pruner/warmup
+    nepochs = int(submit_kwargs.get("num_epochs", 1000))
+    val_interval = int(submit_kwargs.get("val_interval", 10))
+    n_warmup_steps = nepochs // 3
+
+    storage = make_storage(storage_url)
+    study = get_study(
+        study_name=study_name,
+        storage=storage,
+        val_interval=val_interval,
+        n_warmup_steps=n_warmup_steps
+    )
+    trial = _retry_optuna_db(study.ask)
+    trial_num = trial.number
+    print(f"[Trial {trial_num}] START trial", flush=True)
+    print(f"[Trial {trial_num}] pid={os.getpid()} device={device}", flush=True)
+
+    verbose = trial.number == 0
+    cfg = config.DataGeneratorConfig.from_dict(submit_kwargs)
+    data_generator = cfg.create_data_generator(verbose=verbose)
+    model_search = ModelExplorer(
+        data_generator, submit_kwargs["model_type"], submit_kwargs["output"]
+    )
+    model_search.walltime_event = walltime_event
+
+    # Debug Statements:
+    pr = study.pruner
+    print(f"[Trial {trial.number}] epochs={nepochs} val_interval={val_interval}", flush=True)
+    print(f"[Trial {trial.number}] pruner={type(pr).__name__} - warmup={getattr(pr,'_n_warmup_steps',None)} - interval={getattr(pr,'_interval_steps',None)}", flush=True)
+
+    try:
+        value = model_search.objective(
+            trial=trial,
+            epochs=int(submit_kwargs.get("num_epochs", 100)),
+            device=device,
+            val_interval=int(submit_kwargs.get("val_interval", 10)),
+            best_metric=str(submit_kwargs.get("best_metric", "avg_f1")),
+        )
+        _retry_optuna_db(study.tell, trial, value)
+        print(f"[Trial {trial_num}] COMPLETE value={value}", flush=True)
+        return value
+    except optuna.TrialPruned:
+        _retry_optuna_db(study.tell, trial, state=TrialState.PRUNED)
+        print(f"[Trial {trial_num}] PRUNED", flush=True)
+        return None
+    except torch.cuda.OutOfMemoryError:
+        _retry_optuna_db(study.tell, trial, state=TrialState.FAIL)
+        print(f"[Trial {trial_num}] FAILED(OOM)", flush=True)
+        try:
+            torch.cuda.empty_cache()
+        except Exception:
+            pass
+        raise
+    except Exception as e:
+        _retry_optuna_db(study.tell, trial, state=TrialState.FAIL)
+        print(f"[Trial {trial_num}] FAILED(EXC): {e}", flush=True)
+        traceback.print_exc()
+        try:
+            torch.cuda.empty_cache()
+        except Exception:
+            pass
+        raise
+
+#--------------------------------
+# SLURM GPU Query Verification 
+#--------------------------------
+
+def _slurm_gpu_features(partition: str = "gpu") -> Set[str]:
+    """
+    Return the set of Slurm node feature flags available in the given partition.
+    Uses `sinfo -o %f` which prints the feature string for nodes/partitions.
+    """
+    cmd = ["sinfo", "-p", partition, "-o", "%f", "-h"]
+    out = subprocess.check_output(cmd, text=True)
+
+    features: Set[str] = set()
+    for line in out.splitlines():
+        for feat in line.split(","):
+            feat = feat.strip()
+            if feat:
+                features.add(feat)
+    return features
+
+
+def _parse_constraint(expr: str) -> Tuple[List[str], Optional[str]]:
+    """
+    Parse a constraint expression.
+    - If it contains '|', treat that as the joiner (OR-style).
+    - Else if it contains ',', treat that as the joiner.
+    - Else single token.
+    Returns (tokens, joiner) where joiner is '|' or ',' or None.
+    """
+    expr = (expr or "").strip()
+    if not expr:
+        return ([], None)
+
+    if "|" in expr:
+        joiner = "|"
+        tokens = [t.strip() for t in expr.split("|")]
+    elif "," in expr:
+        joiner = ","
+        tokens = [t.strip() for t in expr.split(",")]
+    else:
+        joiner = None
+        tokens = [expr]
+
+    # normalize: drop empties, preserve order, de-dupe while preserving order
+    seen = set()
+    cleaned = []
+    for t in tokens:
+        if not t:
+            continue
+        if t not in seen:
+            seen.add(t)
+            cleaned.append(t)
+
+    return cleaned, joiner
+
+def check_gpus(
+    gpu_constraint: Optional[str],
+    *,
+    partition: str = "gpu",
+    warn: bool = True,
+) -> Optional[str]:
+    """
+    Validate / filter a GPU constraint expression against Slurm feature flags.
+
+    Examples:
+      - None                    -> None
+      - "a100"                  -> "a100" (if valid)
+      - "h100|a100|h200"        -> "h100|a100" (filters invalid)
+      - "h100,a100,h200"        -> "h100,a100" (filters invalid)
+
+    Behavior:
+      - If at least one token is valid: returns filtered expression.
+      - If zero tokens are valid: raises ValueError.
+      - Warns (optional) about invalid tokens that were dropped.
+    """
+    # Ignore if no constraint is provided.
+    if gpu_constraint is None:
+        return None
+
+    # Parse the constraint expression
+    tokens, joiner = _parse_constraint(gpu_constraint)
+    if not tokens:
+        return None  # treat empty/whitespace like None
+
+    # Check available GPU features from Slurm
+    available = _slurm_gpu_features(partition=partition)
+    valid = [t for t in tokens if t in available]
+    invalid = [t for t in tokens if t not in available]
+
+    # Warn about invalid tokens
+    if invalid and warn:
+        logging.warning(
+            f"\nIgnoring unknown GPU constraint(s): {invalid}.\n"
+            f"Available feature flags include: {sorted(available)}\n"
+        )
+
+    # Raise error if no valid tokens
+    if not valid:
+        raise ValueError(
+            f"\nNo valid GPU constraints found in '{gpu_constraint}'\n. "
+            f"Available feature flags include: {sorted(available)}"
+        )
+
+    # Recompose with the same joiner style the user provided
+    if joiner is None:
+        return valid[0]  # single entry
+    return joiner.join(valid)

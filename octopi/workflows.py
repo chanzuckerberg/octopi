@@ -102,7 +102,7 @@ def train(data_generator, loss_function, batch_size = 16,
 
 def segment(config, tomo_algorithm, voxel_size, model_weights, model_config, 
             seg_info = ['predict', 'octopi', '1'], run_ids = None, batch_size = 1,
-            swbs = 4, overlap = 0.5):
+            swbs = 4, overlap = 0.5, ntta = 4):
     """
     Segment a Dataset using a Trained Model or Ensemble of Models
 
@@ -115,6 +115,7 @@ def segment(config, tomo_algorithm, voxel_size, model_weights, model_config,
         seg_info (list): The segmentation information
         swbs (int): The sliding window batch size for inference
         overlap (float): The overlap between sliding windows for inference
+        ntta (int): The number of test-time augmentations for inference
         run_ids (list): The list of run IDs to use for segmentation
     """
 
@@ -125,7 +126,8 @@ def segment(config, tomo_algorithm, voxel_size, model_weights, model_config,
         predict = segmentation.MultiGpuPredictor(
             config,
             model_config,
-            model_weights
+            model_weights,
+            ntta=ntta
         )
     else:
         print(f"# of GPUs Available: {gpu_count} -- Using Single-GPU Predictor.")
@@ -133,6 +135,7 @@ def segment(config, tomo_algorithm, voxel_size, model_weights, model_config,
             config,
             model_config,
             model_weights,
+            ntta=ntta
         )
 
     # Run batch prediction and Save Processing Parameters
