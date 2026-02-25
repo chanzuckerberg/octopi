@@ -34,7 +34,7 @@ class Predictor:
                  model_weights: Union[str, List[str]],
                  sw_bs: int = 4,
                  overlap: float = 0.5,
-                 apply_tta: bool = True,
+                 ntta: int = 4,
                  device: Optional[str] = None,
                  rank: int = 0
         ):
@@ -45,7 +45,7 @@ class Predictor:
             config (str): Path to the Copick project configuration file.
             model_config (Union[str, List[str]]): Path(s) to the model configuration file(s).
             model_weights (Union[str, List[str]]): Path(s) to the model weight file(s).
-            apply_tta (bool, optional): Whether to apply test-time augmentation. Defaults to True.
+            ntta (int, optional): Number of test-time augmentations. Defaults to 4.
             device (Optional[str], optional): Device to run inference on. Defaults to None, which selects 'cuda' if available.
             rank (int, optional): Rank of the current process for distributed inference. Defaults to 0.
         """
@@ -60,7 +60,13 @@ class Predictor:
             raise RuntimeError("No GPUs available.")
 
         # Initialize TTA if enabled
-        self.apply_tta = apply_tta
+        max_ntta = 8
+        self.ntta = ntta
+        if self.ntta < 2: 
+            self.ntta = 1
+        elif self.ntta > max_ntta:
+            print(f'[WARNING] ntta={ntta} is greater than max supported {max_ntta}. Setting ntta={max_ntta}.')
+            self.ntta = max_ntta
         self.create_tta_augmentations() 
 
         # Determine if Model Soup is Enabled
@@ -138,7 +144,8 @@ class Predictor:
             model = model_builder.model
             
             # Load weights
-            state_dict = torch.load(weights_path, map_location=self.device, weights_only=True)
+            # state_dict = torch.load(weights_path, map_location=self.device, weights_only=True)
+            state_dict = torch.load(weights_path, map_location=self.device)
             model.load_state_dict(state_dict)
             model.to(self.device)
             model.eval()
@@ -200,92 +207,95 @@ class Predictor:
 
     @torch.inference_mode()
     def _apply_tta_single_model(self, model, single_sample):
-        """Apply TTA to a single model and single sample."""
-        
-        # Initialize probability accumulator, move to device if using CUDA
-        acc_probs = torch.zeros(
-            (1, self.Nclass, *single_sample.shape[2:]), 
-            dtype=torch.float32, device=self.acc_device )
-        
-        # Process each augmentation
+        """Apply TTA to a single model and single sample.
+        Returns averaged *logits* (NOT probabilities) on acc_device.
+        """
+        # Accumulate logits (not probs). Use float32 accumulator for stability.
+        acc_logits = torch.zeros(
+            (1, self.Nclass, *single_sample.shape[2:]),
+            dtype=torch.float32,
+            device=self.acc_device,
+        )
+
         for tta_transform, inverse_transform in zip(self.tta_transforms, self.inverse_tta_transforms):
             # Apply transform
             aug_sample = tta_transform(single_sample)
-            
-            # Run inference
-            predictions = self._infer_adaptive(model, aug_sample)
-            
-            # Get softmax probabilities
-            probs = torch.softmax(predictions[0], dim=0)
-            
-            # If we're in CPU fallback mode, do the inverse rotation on CPU (avoid rot90 GPU alloc)
-            if self.acc_device.type == "cpu" and probs.device.type == "cuda":
-                probs = probs.cpu()
 
-            # Apply inverse transform
-            inv_probs = inverse_transform(probs)
-            
-            # Accumulate probabilities
-            acc_probs[0] += inv_probs.to(self.acc_device, non_blocking=True)
-            
-            # Clear memory
-            del predictions, probs, inv_probs, aug_sample
+            # Run inference; returns tensor of logits in same dtype as model outputs
+            predictions = self._infer_adaptive(model, aug_sample)
+
+            logits = predictions[0]  # shape [C, Z, Y, X] if model returns batch dim first
+            # Move to acc_device if needed (keep float32 for accumulation)
+            if logits.device.type == "cuda" and self.acc_device.type == "cpu":
+                logits = logits.cpu()
+            logits = logits.to(self.acc_device, dtype=torch.float32)
+
+            # inverse-transform logits to original orientation
+            inv_logits = inverse_transform(logits)
+
+            # accumulate
+            acc_logits[0] += inv_logits
+
+            # cleanup
+            del predictions, logits, inv_logits, aug_sample
             torch.cuda.empty_cache()
-        
-        # Average accumulated probabilities
-        acc_probs = acc_probs / len(self.tta_transforms)
-        return acc_probs[0]  # Return shape [Nclass, Z, Y, X]
+
+        # average logits across TTA variants
+        acc_logits = acc_logits / len(self.tta_transforms)
+
+        return acc_logits[0]  # shape [Nclass, Z, Y, X]
+
 
     def _run_inference(self, input_data):
         """
         Main inference function that handles all combinations - Model Soup and/or TTA
+        Now does LOGIT-LEVEL averaging across TTA and models, then softmax once.
         """
-        # Overwrite sw_bs with sw if provided
         if self.sw is not None:
             self.sw_bs = self.sw
-        
-        # Get the batch size (# of tomograms)
+
         batch_size = input_data.shape[0]
         results = []
-        
-        # Process one sample at a time for memory efficiency
+
         for sample_idx in range(batch_size):
             single_sample = input_data[sample_idx:sample_idx+1]
-            
-            # Initialize probability accumulator for this sample
-            acc_probs = torch.zeros(
-                (self.Nclass, *single_sample.shape[2:]), 
-                dtype=torch.float32, device=self.acc_device )
-            
-            # Process each model
+
+            # accumulate logits on acc_device, float32 for numeric stability
+            acc_logits = torch.zeros(
+                (self.Nclass, *single_sample.shape[2:]),
+                dtype=torch.float32,
+                device=self.acc_device,
+            )
+
+            # For each model: get averaged logits (over TTA) then add to accumulator
             for model in self.models:
-                # Apply TTA with this model
-                if self.apply_tta:
-                    model_probs = self._apply_tta_single_model(model, single_sample)
-                # Run inference without TTA
+                if self.ntta > 1:
+                    model_logits = self._apply_tta_single_model(model, single_sample)
                 else:
-                    # predictions = self._run_single_model_inference(model, single_sample)
                     predictions = self._infer_adaptive(model, single_sample)
-                    model_probs = torch.softmax(predictions[0], dim=0)
+                    model_logits = predictions[0].to(self.acc_device, dtype=torch.float32)
                     del predictions
-                
-                # Accumulate probabilities from this model
-                acc_probs += model_probs
-                del model_probs
+
+                # accumulate logits from this model
+                acc_logits += model_logits
+                del model_logits
                 torch.cuda.empty_cache()
-            
-            # Average probabilities across models (and TTA augmentations if applied)
-            acc_probs = acc_probs / len(self.models)
-            
-            # Convert to discrete prediction
-            discrete_pred = torch.argmax(acc_probs, dim=0)
+
+            # average logits across models
+            acc_logits = acc_logits / len(self.models)
+
+            # convert averaged logits -> probabilities once
+            probs = torch.softmax(acc_logits, dim=0)
+
+            # discrete prediction
+            discrete_pred = torch.argmax(probs, dim=0)
             results.append(discrete_pred)
-            
-            # Clear memory
-            del acc_probs, discrete_pred
+
+            # cleanup
+            del acc_logits, probs, discrete_pred
             torch.cuda.empty_cache()
-        
-        return results                        
+
+        return results                  
 
     def predict(self, input_data):
         """Run Prediction from an Input Tomogram.
@@ -395,22 +405,39 @@ class Predictor:
         if self.rank == 0: print('✅ Predictions Complete!')
 
     def create_tta_augmentations(self):
-        """Define TTA augmentations and inverse transforms."""
-        # Rotate around the YZ plane (dims 3,4 for input, dims 2,3 for output)
+        """7TTA: identity + rot90/180/270 in (Y,X) plane + flip X/Y/Z.
+        Assumes:
+        input  is 5D  [B,C,Z,Y,X]
+        logits is 4D  [C,Z,Y,X]  (after predictions[0])
+        """
+
+        # Forward transforms on 5D input [B,C,Z,Y,X]
         self.tta_transforms = [
-            lambda x: x,                                    # Identity (no augmentation)
-            lambda x: torch.rot90(x, k=1, dims=(3, 4)),   # 90° rotation
-            lambda x: torch.rot90(x, k=2, dims=(3, 4)),   # 180° rotation
-            lambda x: torch.rot90(x, k=3, dims=(3, 4)),   # 270° rotation
+            lambda x: x,                                         # 1. Identity
+            lambda x: torch.rot90(x, k=2, dims=(3, 4)),        # 2. 180° XY  (most distinct rotation)
+            lambda x: torch.flip(x, dims=(2,)),                 # 3. Flip Z   (new transform type)
+            lambda x: torch.flip(x, dims=(4,)),                 # 4. Flip X
+            lambda x: torch.flip(x, dims=(3,)),                 # 5. Flip Y
+            lambda x: torch.rot90(x, k=1, dims=(3, 4)),        # 6. 90° XY
+            lambda x: torch.rot90(x, k=3, dims=(3, 4)),        # 7. 270° XY
+            lambda x: torch.flip(x, dims=(2, 3, 4)),           # 8. Flip X+Y+Z
         ]
 
-        # Define inverse transformations (flip back to original orientation)
+        # Inverse transforms on 4D logits [C,Z,Y,X]
         self.inverse_tta_transforms = [
-            lambda x: x,                                    # Identity (no transformation needed)
-            lambda x: torch.rot90(x, k=-1, dims=(2, 3)),  # Inverse of 90° (i.e. -90°)
-            lambda x: torch.rot90(x, k=-2, dims=(2, 3)),  # Inverse of 180° (i.e. -180°)
-            lambda x: torch.rot90(x, k=-3, dims=(2, 3)),  # Inverse of 270° (i.e. -270°)
+            lambda x: x,                                         # 1. Identity
+            lambda x: torch.rot90(x, k=-2, dims=(2, 3)),       # 2. Inverse 180° XY
+            lambda x: torch.flip(x, dims=(1,)),                 # 3. Inverse flip Z
+            lambda x: torch.flip(x, dims=(3,)),                 # 4. Inverse flip X
+            lambda x: torch.flip(x, dims=(2,)),                 # 5. Inverse flip Y
+            lambda x: torch.rot90(x, k=-1, dims=(2, 3)),       # 6. Inverse 90° XY
+            lambda x: torch.rot90(x, k=-3, dims=(2, 3)),       # 7. Inverse 270° XY
+            lambda x: torch.flip(x, dims=(1, 2, 3)),           # 8. Inverse flip X+Y+Z
         ]
+
+        # Restrict to ntta if needed
+        self.tta_transforms = self.tta_transforms[:self.ntta]
+        self.inverse_tta_transforms = self.inverse_tta_transforms[:self.ntta]
 
     def save_parameters(self, 
         tomo_algorithm: str, 
@@ -439,7 +466,7 @@ class Predictor:
             'parameters': {
                 'sw_bs': self.sw_bs,
                 'overlap': self.overlap,
-                'apply_tta': self.apply_tta
+                'ntta': self.ntta
             },
             "outputs": {
                 "seg_name": seg_info[0],
@@ -471,7 +498,7 @@ class _JobSpec:
     model_weights: Union[str, List[str]]
     sw_bs: int
     overlap: float
-    apply_tta: bool
+    ntta: int
 
     runIDs: List[str]
     num_tomos_per_batch: int
@@ -512,7 +539,7 @@ def _worker_process(
         model_weights=job.model_weights,
         sw_bs=job.sw_bs,
         overlap=job.overlap,
-        apply_tta=job.apply_tta,
+        ntta=job.ntta,
         device=device,
         rank=local_rank
     )
@@ -547,14 +574,14 @@ class MultiGpuPredictor:
         model_weights: Union[str, List[str]],
         sw_bs: int = 4,
         overlap: float = 0.5,
-        apply_tta: bool = True,
+        ntta: int = 4,
         device: Optional[str] = None,  # ignored; we choose per-process cuda device
     ):
         self.config = config
         self.root = copick.from_file(config)
         self.model_config = model_config
         self.model_weights = model_weights
-        self.apply_tta = apply_tta
+        self.ntta = ntta
 
         self.sw_bs = sw_bs
         self.overlap = overlap
@@ -590,7 +617,7 @@ class MultiGpuPredictor:
                 model_weights=self.model_weights,
                 sw_bs=self.sw_bs,
                 overlap=self.overlap,
-                apply_tta=self.apply_tta,
+                ntta=self.ntta,
                 device=torch.device("cuda:0"),
             )
             predictor.batch_predict(
@@ -613,7 +640,7 @@ class MultiGpuPredictor:
                     config=self.config,
                     model_config=self.model_config,
                     model_weights=self.model_weights,
-                    apply_tta=self.apply_tta,
+                    ntta=self.ntta,
                     sw_bs=self.sw_bs,
                     overlap=self.overlap,
                     runIDs=shard,

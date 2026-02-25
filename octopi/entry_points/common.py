@@ -91,6 +91,8 @@ def inference_parameters():
                         help="Batch size for sliding window inference")(f)
         f = click.option('--overlap', '-o', default=0.5, type=FloatRange(0.0, 1.0),
                         help="Overlap fraction for sliding window inference")(f)
+        f = click.option('-ntta', '--ntta', default=4, type=IntRange(min=1),
+                        help="Number of test-time augmentations for inference")(f)
         return f
     return decorator
 
