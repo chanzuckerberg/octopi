@@ -14,6 +14,7 @@ from monai.transforms import (
     RandGaussianNoised,
     ScaleIntensityRanged,  
     RandomOrder,
+    RandAffined,
 )
 
 def get_transforms():
@@ -119,16 +120,7 @@ def get_random_transforms( input_dim, num_samples, Nclasses, bg_ratio: float = 0
     # Augmentations to Explore in the Future: 
     # Intensity-based augmentations
     # RandHistogramShiftd(keys="image", prob=0.5, num_control_points=(3, 5))
-    # RandGaussianSmoothd(keys="image", prob=0.5, sigma_x=(0.5, 1.5), sigma_y=(0.5, 1.5), sigma_z=(0.5, 1.5)),
-
-    # Geometric Transforms
-    # RandAffined(
-    #     keys=["image", "label"],
-    #     rotate_range=(0.1, 0.1, 0.1),  # Rotation angles (radians) for x, y, z axes
-    #     scale_range=(0.1, 0.1, 0.1),   # Scale range for isotropic/anisotropic scaling
-    #     prob=0.5,                      # Probability of applying the transform
-    #     padding_mode="border"          # Handle out-of-bounds values
-    # )    
+    # RandGaussianSmoothd(keys="image", prob=0.5, sigma_x=(0.5, 1.5), sigma_y=(0.5, 1.5), sigma_z=(0.5, 1.5)),  
 
 def get_predict_transforms():
     """
