@@ -26,14 +26,19 @@ theme:
     - search.highlight
     - search.share
     - search.suggest
+    - content.tooltips
 
 markdown_extensions:
   - pymdownx.highlight:
       anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
   - pymdownx.superfences
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
   - pymdownx.tabbed:
       alternate_style: true
-  - pymdownx.inlinehilite
+  - pymdownx.keys
   - admonition
   - pymdownx.details
   - pymdownx.emoji:
@@ -59,6 +64,9 @@ plugins:
       minify_html: true
 
 
+extra_css:
+  - stylesheets/extra.css
+
 extra_javascript:
   - https://polyfill.io/v3/polyfill.min.js?features=es6
   - https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js
@@ -72,7 +80,7 @@ nav:
     - Quick Start: getting-started/quickstart.md
   - User Guide:
     - Overview: user-guide/overview.md
-    - Import to Copick: user-guide/data-import.md 
+    - Import to Copick: user-guide/data-import.md
     - Pick Particles: user-guide/pick-particles.md
     - Create Target Labels: user-guide/labels.md
     - Train Models: user-guide/training.md
