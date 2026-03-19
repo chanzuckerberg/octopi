@@ -1,4 +1,4 @@
-from skimage.morphology import binary_opening, ball
+from skimage.morphology import binary_opening, ball, white_tophat
 from scipy.sparse.csgraph import connected_components
 from skimage.segmentation import watershed
 from scipy.sparse import coo_matrix
@@ -25,8 +25,8 @@ def process_localization(run,
                           pick_user_id: str = 'octopi'): 
 
     # Check if method is valid
-    if method not in ['watershed', 'com']:
-        raise ValueError(f"Invalid method '{method}'. Expected 'watershed' or 'com'.")
+    if method not in ['watershed', 'com', 'cc3d', 'tophat']:
+        raise ValueError(f"Invalid method '{method}'. Expected 'watershed', 'com', 'cc3d', or 'tophat'.")
 
     # Get Segmentation with Error Handling
     try:
@@ -62,8 +62,12 @@ def process_localization(run,
 
         if method == 'watershed':
             points = extract_particle_centroids_via_watershed(seg, obj[1], filter_size, min_radius, max_radius)
-        elif method == 'com': 
+        elif method == 'com':
             points = extract_particle_centroids_via_com(seg, obj[1], min_radius, max_radius)
+        elif method == 'cc3d':
+            points = extract_particle_centroids_via_cc3d(seg, obj[1], min_radius, max_radius)
+        elif method == 'tophat':
+            points = extract_particle_centroids_via_tophat(seg, obj[1], min_radius, max_radius)
         points = np.array(points)
 
         # Save Coordinates if any 3D points are provided
@@ -205,6 +209,87 @@ def extract_particle_centroids_via_com(
         octopiCoords.append(swapped_com)
    
     return octopiCoords
+
+def extract_particle_centroids_via_cc3d(
+    segmentation,
+    segmentation_idx,
+    min_particle_radius,
+    max_particle_radius
+):
+    try:
+        import cc3d
+    except ImportError:
+        raise ImportError("cc3d is required for the 'cc3d' method. Install with: pip install connected-components-3d")
+
+    min_sz = FOUR_THIRDS_PI * (min_particle_radius ** 3)
+    max_sz = FOUR_THIRDS_PI * (max_particle_radius ** 3)
+
+    mask = (segmentation == segmentation_idx)
+    if not mask.any():
+        print(f"No segmentation with label {segmentation_idx} found.")
+        return []
+
+    labels = cc3d.connected_components(mask, connectivity=26)
+
+    props = regionprops_table(labels, properties=("area", "centroid"))
+    area = np.asarray(props["area"])
+    cz = np.asarray(props["centroid-0"])
+    cy = np.asarray(props["centroid-1"])
+    cx = np.asarray(props["centroid-2"])
+
+    keep = (area >= min_sz) & (area <= max_sz)
+    if not np.any(keep):
+        return []
+
+    return list(zip(cz[keep], cy[keep], cx[keep]))
+
+
+def extract_particle_centroids_via_tophat(
+    segmentation,
+    segmentation_idx,
+    min_particle_radius,
+    max_particle_radius
+):
+    """
+    Uses a white top-hat filter on the distance transform to isolate local peaks
+    (particle centers), which helps separate touching or closely packed particles.
+    """
+    min_sz = FOUR_THIRDS_PI * (min_particle_radius ** 3)
+    max_sz = FOUR_THIRDS_PI * (max_particle_radius ** 3)
+
+    mask = (segmentation == segmentation_idx)
+    if not mask.any():
+        print(f"No segmentation with label {segmentation_idx} found.")
+        return []
+
+    # Distance transform: max value at particle centers
+    dist = ndi.distance_transform_edt(mask).astype(np.float32)
+
+    # White top-hat removes broad background, leaves local peaks
+    selem_radius = max(1, int(min_particle_radius * 0.5))
+    tophat = white_tophat(dist, ball(selem_radius))
+
+    if tophat.max() == 0:
+        return []
+
+    # Threshold at 10% of peak height to get marker blobs
+    peak_mask = tophat > (tophat.max() * 0.1)
+
+    labels, _ = ndi.label(peak_mask)
+
+    props = regionprops_table(labels, properties=("area", "centroid"))
+    area = np.asarray(props["area"])
+    cz = np.asarray(props["centroid-0"])
+    cy = np.asarray(props["centroid-1"])
+    cx = np.asarray(props["centroid-2"])
+
+    # Minimal size filter — top-hat peaks are much smaller than full particle blobs
+    keep = area >= 1
+    if not np.any(keep):
+        return []
+
+    return list(zip(cz[keep], cy[keep], cx[keep]))
+
 
 def remove_repeated_picks(coordinates: np.ndarray,
                                distance_threshold: float) -> np.ndarray:

@@ -96,7 +96,7 @@ def save_parameters(seg_info: Tuple[str, str, str],
 @click.option('-sinfo', '--seg-info', type=str, default='predict,octopi,1',
               callback=lambda ctx, param, value: parsers.parse_target(value),
               help='Query for the organelles segmentations (e.g., "name" or "name,user_id,session_id")')
-@click.option('-m', '--method', type=click.Choice(['watershed', 'com'], case_sensitive=False), 
+@click.option('-m', '--method', type=click.Choice(['watershed', 'com', 'cc3d', 'tophat'], case_sensitive=False),
               default='watershed',
               help="Localization method to use")
 @click.option('-c', '--config', type=click.Path(exists=True), required=True,
