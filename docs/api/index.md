@@ -1,44 +1,33 @@
-# Octopi API Documentation
+# API Overview
 
-Octopi is a comprehensive 3D particle picking framework designed for cryo-electron tomography data analysis. This documentation covers the complete workflow from training to inference and evaluation.
+The octopi Python API gives you full programmatic control over the particle picking pipeline — useful for scripting large-scale workflows, integrating into notebooks, or customizing training beyond what the CLI exposes.
 
-## Overview
+## Core Workflow
 
-Octopi provides a streamlined pipeline for:
+<div class="grid cards" markdown>
 
-- **Training**: Deep learning models for particle segmentation
-- **Inference**: Automated particle detection and localization
-- **Evaluation**: Performance assessment against ground truth annotations
+-   :octicons-rocket-24: **Quick Start**
 
-## Quick Start
+    End-to-end pipeline in one script — target creation, training, segmentation, localization, and evaluation.
 
-For a minimal introduction to all core functions with essential parameters, see the [Quick Start Guide](quick-start.md). The sections below describe each component in greater detail.
+    [:octicons-arrow-right-24: Get started](quick-start.md)
 
-## Core Components
+-   :octicons-cpu-24: **Training**
 
-### Configuration
-All octopi workflows start with a Copick configuration file that defines:
+    Set up data generators, configure model architectures, choose loss functions, and run model exploration.
 
-- Data locations and formats
-- Pickable object definitions with corresponding segmentation label values
-- Tomogram metadata and processing parameters
+    [:octicons-arrow-right-24: Train](training.md)
 
-The configuration file maps each pickable object to a specific integer value used in segmentation masks, enabling multi-class particle detection and classification.
+-   :octicons-play-24: **Inference**
 
-## Workflow Pages
+    Segment tomograms, localize particle coordinates, and evaluate against ground truth.
 
-### [Training](training.md)
-Learn how to:
+    [:octicons-arrow-right-24: Run inference](inference.md)
 
-- Create training targets from existing annotations
-- Configure and train deep learning models
-- Set up cross-validation splits
-- Choose appropriate loss functions and model architectures
+-   :octicons-plus-circle-24: **Adding New Models**
 
-### [Inference](inference.md)
-Discover how to:
+    Implement a custom architecture and register it with the octopi model registry.
 
-- Run segmentation on new tomograms
-- Perform particle localization from segmentation masks
-- Configure test-time augmentation
-- Evaluate results against ground truth
+    [:octicons-arrow-right-24: Extend](adding-new-models.md)
+
+</div>

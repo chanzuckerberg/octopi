@@ -240,4 +240,4 @@ With this notebook, we can overlay the segmentation masks or coordiantes the tom
 
 You now have a complete workflow for applying Octopi models to new tomographic data. The inference pipeline transforms your trained models into actionable scientific results through robust segmentation, intelligent localization, and comprehensive evaluation.
 
-For users who want to integrate Octopi into custom analysis pipelines or automate large-scale processing workflows, refer to the [API Tutorial](api-tutorial.md) to learn how to script new workflows programmatically with OCTOPI's Python interface.
+For users who want to integrate Octopi into custom analysis pipelines or automate large-scale processing workflows, refer to the [API Tutorial](../api/index.md) to learn how to script new workflows programmatically with OCTOPI's Python interface.

@@ -37,7 +37,6 @@ class ExploreSubmitter:
             target_session_id (str): Optional session ID for tracking.
             tomo_algorithm (str): Tomogram algorithm to use.
             voxel_size (float): Voxel size for tomograms.
-            Nclass (int): Number of prediction classes.
             model_type (str): Type of model to use.
             random_seed (int): Seed for reproducibility.
             num_epochs (int): Number of epochs per trial.
@@ -305,9 +304,11 @@ class SubmititExplorer(ExploreSubmitter):
         executor = submitit.AutoExecutor(folder=log_dir)
         executor.update_parameters(
             slurm_partition="gpu",
+            slurm_use_srun = False,
+            slurm_job_name=study_name,
             timeout_min=self.slurm_timeout_min,
             cpus_per_task=self.slurm_cpus_per_task,
-            mem_per_cpu=f"{self.mem_per_cpu_gb}G",
+            slurm_mem_per_cpu=f"{self.mem_per_cpu_gb}G",
             slurm_additional_parameters={
                 "gpus": "1",
             },

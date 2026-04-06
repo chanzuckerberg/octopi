@@ -1,0 +1,123 @@
+[project]
+site_name = "octopi 🐙🐙🐙"
+repo_url = "https://github.com/chanzuckerberg/octopi"
+repo_name = "chanzuckerberg/octopi"
+copyright = "2025, Jonathan Schwartz"
+extra_javascript = [
+    "javascripts/mathjax.js",
+    "https://unpkg.com/mathjax@3/es5/tex-mml-chtml.js",
+]
+
+nav = [
+    {"🏡 Home" = [
+        {"Overview" = "index.md"},
+    ]},
+    {"🛠️ Getting Started" = [
+        {"Installation" = "getting-started/installation.md"},
+        {"Import to Copick" = "getting-started/data-import.md"},
+        {"Quick Start" = "getting-started/quickstart.md"},
+    ]},
+    {"📓 User Guide" = [
+        {"Overview" = "user-guide/overview.md"},
+        {"Import to Copick" = "user-guide/data-import.md"},
+        {"Pick Particles" = "user-guide/pick-particles.md"},
+        {"Create Target Labels" = "user-guide/labels.md"},
+        {"Train Models" = "user-guide/training.md"},
+        {"Inference" = "user-guide/inference.md"},
+    ]},
+    {"📦 API Reference" = [
+        {"Overview" = "api/index.md"},
+        {"Quick Start" = "api/quick-start.md"},
+        {"Training" = "api/training.md"},
+        {"Inference" = "api/inference.md"},
+        {"Adding New Models" = "api/adding-new-models.md"},
+    ]},
+]
+
+# --- Theme ---
+
+[project.theme]
+variant = "classic"
+logo = "assets/logo.png"
+features = [
+    "navigation.instant",
+    "navigation.tracking",
+    "navigation.tabs",
+    "navigation.tabs.sticky",
+    "navigation.expand",
+    "navigation.sections",
+    "navigation.top",
+    "search.highlight",
+    "search.share",
+    "search.suggest",
+    "content.tabs.link",
+    "content.code.annotate",
+    "content.code.copy",
+    "content.tooltips",
+]
+
+[[project.theme.palette]]
+scheme = "default"
+primary = "cyan"
+accent = "cyan"
+toggle.icon = "lucide/moon"
+toggle.name = "Switch to dark mode"
+
+[[project.theme.palette]]
+scheme = "slate"
+primary = "cyan"
+accent = "cyan"
+toggle.icon = "lucide/sun"
+toggle.name = "Switch to light mode"
+
+# --- Plugins ---
+
+[project.plugins.search]
+
+# --- Extra ---
+
+[[project.extra.social]]
+icon = "fontawesome/brands/github"
+link = "https://github.com/chanzuckerberg/octopi"
+
+# --- Markdown Extensions (must list all defaults when overriding any) ---
+
+[project.markdown_extensions.abbr]
+[project.markdown_extensions.admonition]
+[project.markdown_extensions.attr_list]
+[project.markdown_extensions.def_list]
+[project.markdown_extensions.footnotes]
+[project.markdown_extensions.md_in_html]
+[project.markdown_extensions.tables]
+
+[project.markdown_extensions.toc]
+permalink = true
+
+[project.markdown_extensions.pymdownx.arithmatex]
+generic = true
+
+[project.markdown_extensions.pymdownx.betterem]
+smart_enable = "all"
+
+[project.markdown_extensions.pymdownx.caret]
+[project.markdown_extensions.pymdownx.details]
+[project.markdown_extensions.pymdownx.inlinehilite]
+[project.markdown_extensions.pymdownx.keys]
+[project.markdown_extensions.pymdownx.mark]
+[project.markdown_extensions.pymdownx.smartsymbols]
+[project.markdown_extensions.pymdownx.superfences]
+[project.markdown_extensions.pymdownx.tilde]
+
+[project.markdown_extensions.pymdownx.emoji]
+emoji_index = "zensical.extensions.emoji.twemoji"
+emoji_generator = "zensical.extensions.emoji.to_svg"
+
+[project.markdown_extensions.pymdownx.highlight]
+auto_title = true
+pygments_lang_class = true
+
+[project.markdown_extensions.pymdownx.tabbed]
+alternate_style = true
+
+[project.markdown_extensions.pymdownx.tasklist]
+custom_checkbox = true
