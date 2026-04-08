@@ -213,6 +213,22 @@ octopi evaluate
     --save-path evaluate_results
 ```
 
+??? tip "Setting class weights for evaluation (e.g. ML Challenge dataset)"
+
+    Octopi reads per-class weights from the `metadata` field of each `pickable_object` in your CoPick config. Classes with `weight: 0` are excluded from the aggregate score entirely.
+
+    ```json
+    {
+        "name": "ribosome",
+        "is_particle": true,
+        "label": 4,
+        "radius": 150,
+        "metadata": { "weight": 1 }
+    }
+    ```
+
+    If `metadata` or `weight` is absent, the class defaults to a weight of `1`. See the [Class Weighting](training.md#class-weighting) section in the training guide for a full example.
+
 ??? abstract "Evaluation Metrics"
 
     - **Precision**: Fraction of predicted particles that are correct (TP / (TP + FP))
