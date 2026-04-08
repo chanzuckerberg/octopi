@@ -61,14 +61,11 @@ class evaluator:
                 
         print('Using the following valid objects:', [name for name, _ in self.objects])
 
-        # Define object-specific weights
+        # Load weights from config metadata, default to 1 if not set
         self.weights = {
-            "apo-ferritin": 1,
-            "beta-amylase": 0,  # Excluded from scoring
-            "beta-galactosidase": 2,
-            "ribosome": 1,
-            "thyroglobulin": 2,
-            "virus-like particle": 1,
+            obj.name: obj.metadata.get('weight', 1)
+            for obj in self.root.pickable_objects
+            if obj.is_particle
         }
 
     def run(self, 

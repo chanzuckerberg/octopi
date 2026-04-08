@@ -213,6 +213,22 @@ octopi evaluate
     --save-path evaluate_results
 ```
 
+??? tip "Setting class weights for evaluation (e.g. ML Challenge dataset)"
+
+    Octopi reads per-class weights from the `metadata` field of each `pickable_object` in your CoPick config. Classes with `weight: 0` are excluded from the aggregate score entirely.
+
+    ```json
+    {
+        "name": "ribosome",
+        "is_particle": true,
+        "label": 4,
+        "radius": 150,
+        "metadata": { "weight": 1 }
+    }
+    ```
+
+    If `metadata` or `weight` is absent, the class defaults to a weight of `1`. See the [Class Weighting](training.md#class-weighting) section in the training guide for a full example.
+
 ??? abstract "Evaluation Metrics"
 
     - **Precision**: Fraction of predicted particles that are correct (TP / (TP + FP))
@@ -240,4 +256,4 @@ With this notebook, we can overlay the segmentation masks or coordiantes the tom
 
 You now have a complete workflow for applying Octopi models to new tomographic data. The inference pipeline transforms your trained models into actionable scientific results through robust segmentation, intelligent localization, and comprehensive evaluation.
 
-For users who want to integrate Octopi into custom analysis pipelines or automate large-scale processing workflows, refer to the [API Tutorial](api-tutorial.md) to learn how to script new workflows programmatically with OCTOPI's Python interface.
+For users who want to integrate Octopi into custom analysis pipelines or automate large-scale processing workflows, refer to the [API Tutorial](../api/index.md) to learn how to script new workflows programmatically with OCTOPI's Python interface.

@@ -317,6 +317,82 @@ Octopi supports two complementary workflows:
         - Best-performing model checkpoints
         - Per-trial metrics and configurations
 
+## Class Weighting
+
+When training on datasets with multiple particle types, some classes may be more important to detect than others — or should be excluded from scoring entirely. Octopi supports per-class weights read directly from the CoPick configuration file, so no additional training flags are needed.
+
+Weights are applied in two places:
+
+- **Training** — the validation F-beta score is computed as a weighted average across classes, so checkpoint selection favors performance on higher-weight classes.
+- **Evaluation** — `octopi evaluate` uses the same weights when reporting aggregate metrics.
+
+??? example "How to set weights in your CoPick config"
+
+    Add a `metadata` field to any `pickable_object` entry in your `config.json` with a `weight` key:
+
+    ```json
+    {
+        "name": "ribosome",
+        "is_particle": true,
+        "label": 4,
+        "radius": 150,
+        "metadata": {
+            "weight": 2
+        }
+    }
+    ```
+
+    If `metadata` or `weight` is absent for a class, it defaults to `1`. Set `weight` to `0` to exclude a class from scoring entirely.
+
+    The following config weights beta-galactosidase and thyroglobulin twice as heavily as apoferritin and ribosome, and excludes beta-amylase from scoring:
+
+    ```json
+    {
+        "pickable_objects": [
+            {
+                "name": "apoferritin",
+                "is_particle": true,
+                "label": 1,
+                "radius": 60,
+                "metadata": { "weight": 1 }
+            },
+            {
+                "name": "beta-amylase",
+                "is_particle": true,
+                "label": 2,
+                "radius": 80,
+                "metadata": { "weight": 0 }
+            },
+            {
+                "name": "beta-galactosidase",
+                "is_particle": true,
+                "label": 3,
+                "radius": 90,
+                "metadata": { "weight": 2 }
+            },
+            {
+                "name": "ribosome",
+                "is_particle": true,
+                "label": 4,
+                "radius": 150,
+                "metadata": { "weight": 1 }
+            },
+            {
+                "name": "thyroglobulin",
+                "is_particle": true,
+                "label": 5,
+                "radius": 130,
+                "metadata": { "weight": 2 }
+            }
+        ]
+    }
+    ```
+
+    !!! tip
+        Weights only affect the validation metric used for checkpoint selection and the aggregate evaluation score — the loss function and per-class metrics are unaffected.
+
+---
+
 ## Next Steps
 
 After training is complete:

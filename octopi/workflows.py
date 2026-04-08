@@ -12,9 +12,9 @@ from tqdm import tqdm
     
 def train(data_generator, loss_function, batch_size = 16,
           model_config = None, model_weights = None, lr0 = 1e-3,
-          model_save_path = 'results', best_metric = 'fBeta2', 
+          model_save_path = 'results', best_metric = 'fBeta2',
           num_epochs = 1000, use_ema = True, val_interval = 10,
-          sw_bs = 4, overlap = 0.5, ):
+          sw_bs = 4, overlap = 0.5, class_weights = None):
     """
     Train a UNet Model for Segmentation
 
@@ -72,6 +72,7 @@ def train(data_generator, loss_function, batch_size = 16,
     )
     model_trainer.sw_bs = sw_bs
     model_trainer.overlap = overlap
+    model_trainer.class_weights_dict = class_weights
 
     # Pretty Print all the Training Parameters
     print('🔍 Training Parameters:')
@@ -124,18 +125,14 @@ def segment(config, tomo_algorithm, voxel_size, model_weights, model_config,
     if gpu_count > 1:
         print(f"# of GPUs Available: {gpu_count} -- Using Multi-GPU Predictor.")
         predict = segmentation.MultiGpuPredictor(
-            config,
-            model_config,
-            model_weights,
-            ntta=ntta
+            config, model_config, model_weights,
+            sw_bs=swbs, overlap=overlap, ntta=ntta
         )
     else:
         print(f"# of GPUs Available: {gpu_count} -- Using Single-GPU Predictor.")
         predict = segmentation.Predictor(
-            config,
-            model_config,
-            model_weights,
-            ntta=ntta
+            config, model_config, model_weights,
+            sw_bs=swbs, overlap=overlap, ntta=ntta
         )
 
     # Run batch prediction and Save Processing Parameters

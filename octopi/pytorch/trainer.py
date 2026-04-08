@@ -32,6 +32,7 @@ class ModelTrainer:
         self.beta = 2
         self.overlap = 0.5
         self.sw_bs = 4
+        self.class_weights_dict = None  # optional {name: weight} from copick config
 
         # Initialize EMAHandler for the model
         self.ema_experiment = use_ema
@@ -162,7 +163,16 @@ class ModelTrainer:
         # Get number of classes and create results dictionary
         Nclass = data_load_gen.Nclasses
         self.class_names = data_load_gen.class_names
-        self.create_results_dictionary(Nclass)  
+        self.create_results_dictionary(Nclass)
+
+        # Build class weight tensor (one weight per non-background class, in class order)
+        if self.class_weights_dict is not None:
+            self.class_weights = torch.tensor(
+                [float(self.class_weights_dict.get(name, 1)) for name in self.class_names],
+                dtype=torch.float32
+            )
+        else:
+            self.class_weights = None  
 
         # Resolve the best metric
         self.best_metric = self.resolve_best_metric(best_metric)
@@ -438,7 +448,13 @@ class ModelTrainer:
             metrics_to_log["avg_recall"] = recall.mean().cpu().item()
             metrics_to_log["avg_precision"] = precision.mean().cpu().item()
             metrics_to_log["avg_f1"] = f1s.mean().cpu().item()
-            metrics_to_log["avg_fbeta"] = self.fbeta(precision, recall).mean().cpu().item()
+            fbeta_per_class = self.fbeta(precision, recall)
+            if self.class_weights is not None:
+                w = self.class_weights.to(fbeta_per_class.device)
+                avg_fbeta = (fbeta_per_class * w).sum() / w.sum()
+            else:
+                avg_fbeta = fbeta_per_class.mean()
+            metrics_to_log["avg_fbeta"] = avg_fbeta.cpu().item()
             metrics_to_log['val_loss'] = val_loss
 
             # Update metrics_dict for further logging

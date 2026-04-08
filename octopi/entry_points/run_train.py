@@ -52,15 +52,24 @@ def train_model(
     # Loss Functions
     alpha = tversky_alpha
     beta = 1 - alpha
-    loss_function = TverskyLoss(include_background=True, to_onehot_y=True, softmax=True, alpha=alpha, beta=beta)  
+    loss_function = TverskyLoss(include_background=True, to_onehot_y=True, softmax=True, alpha=alpha, beta=beta)
+
+    # Read per-class score weights from copick config metadata (score_weight key)
+    import copick as _copick
+    _config_path = copick_config_path if isinstance(copick_config_path, str) else copick_config_path[0]
+    _root = _copick.from_file(_config_path)
+    class_weights = {
+        obj.name: obj.metadata.get('weight', 1)
+        for obj in _root.pickable_objects if obj.is_particle
+    }
 
     # Train the Model
     train(
-        data_generator, loss_function, 
+        data_generator, loss_function,
         model_config = model_config, model_weights = model_weights,
         best_metric = best_metric, num_epochs = num_epochs,
         model_save_path = output, lr0 = lr, val_interval = val_interval,
-        batch_size = batch_size,
+        batch_size = batch_size, class_weights = class_weights,
     )
 
 def get_model_config(channels, strides, res_units, dim_in):

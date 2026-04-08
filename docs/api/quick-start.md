@@ -4,7 +4,7 @@ This page provides a minimal introduction to all core octopi functions to get yo
 
 ## Prerequisites
 
-- Copick configuration file pointing to your tomogram data
+- CoPick configuration file pointing to your tomogram data
 - Existing particle annotations (picks) or segmentations for training
 - Python environment with octopi installed
 
@@ -17,46 +17,49 @@ Here's the essential 5-step workflow from data preparation to evaluation:
 ```python
 from octopi.entry_points.run_create_targets import create_sub_train_targets
 
-# Configuration
 config = 'config.json'
-target_name = 'targets'
-target_user_id = 'octopi'
-target_session_id = '1'
-
-# Tomogram parameters
 voxel_size = 10.012
 tomo_algorithm = 'denoised'
 radius_scale = 0.7
 
-# Define source annotations
+# Define source annotations as (object_name, user_id, session_id)
 pick_targets = [
     ('ribosome', 'data-portal', '1'),
     ('virus-like-particle', 'data-portal', '1'),
     ('apoferritin', 'data-portal', '1')
 ]
 
-# Create training targets
 create_sub_train_targets(
     config, pick_targets, [], voxel_size, radius_scale,
-    tomo_algorithm, target_name, target_user_id, target_session_id
+    tomo_algorithm, 'targets', 'octopi', '1'
 )
 ```
-🔬 Check available data with: <code>copick browse -c config.json
+
+!!! tip
+    Browse available data with `copick browse -c config.json` (local) or `copick browse -ds <datasetID>` (Data Portal).
 
 ### 2. Train Model
 
 ```python
+from octopi.datasets.config import DataGeneratorConfig
 from octopi.workflows import train
 from monai.losses import TverskyLoss
 
-# Training configuration
-target_info = ['targets', 'octopi', '1']
+config = 'config.json'
 results_folder = 'model_output'
+
+# Build the data generator
+cfg = DataGeneratorConfig(
+    config=config,
+    name='targets', user_id='octopi', session_id='1',
+    voxel_size=10.012, tomo_algorithm='denoised',
+)
+data_generator = cfg.create_data_generator()
 
 # Model architecture
 model_config = {
     'architecture': 'Unet',
-    'num_classes': 4,  # 3 objects + 1 background
+    'num_classes': data_generator.Nclasses,  # objects + background
     'dim_in': 80,
     'strides': [2, 2, 1],
     'channels': [48, 64, 80, 80],
@@ -66,17 +69,18 @@ model_config = {
 
 # Loss function
 loss_function = TverskyLoss(
-    include_background=True, 
-    to_onehot_y=True, 
+    include_background=True,
+    to_onehot_y=True,
     softmax=True,
-    alpha=0.3, 
+    alpha=0.3,
     beta=0.7
 )
 
-# Train the model
+# Train
 train(
-    config, target_info, tomo_algorithm, voxel_size, loss_function,
-    model_config, model_save_path=results_folder
+    data_generator, loss_function,
+    model_config=model_config,
+    model_save_path=results_folder
 )
 ```
 
@@ -85,22 +89,14 @@ train(
 ```python
 from octopi.workflows import segment
 
-# Model paths from training
-model_weights = f'{results_folder}/best_model.pth'
-model_config = f'{results_folder}/model_config.yaml'
-
-# Segmentation parameters
-seg_info = ['predict', 'octopi', '1']
-
-# Run segmentation
 segment(
     config=config,
-    tomo_algorithm=tomo_algorithm,
-    voxel_size=voxel_size,
-    model_weights=model_weights,
-    model_config=model_config,
-    seg_info=seg_info,
-    use_tta=True
+    tomo_algorithm='denoised',
+    voxel_size=10.012,
+    model_weights=f'{results_folder}/best_model.pth',
+    model_config=f'{results_folder}/model_config.yaml',
+    seg_info=['predict', 'octopi', '1'],
+    ntta=4  # number of test-time augmentation rotations
 )
 ```
 
@@ -109,17 +105,12 @@ segment(
 ```python
 from octopi.workflows import localize
 
-# Localization parameters
-pick_user_id = 'octopi'
-pick_session_id = '1'
-
-# Run localization
 localize(
     config=config,
-    voxel_size=voxel_size,
-    seg_info=seg_info,
-    pick_user_id=pick_user_id,
-    pick_session_id=pick_session_id
+    voxel_size=10.012,
+    seg_info=['predict', 'octopi', '1'],
+    pick_user_id='octopi',
+    pick_session_id='1'
 )
 ```
 
@@ -128,13 +119,12 @@ localize(
 ```python
 from octopi.workflows import evaluate
 
-# Evaluation against ground truth
 evaluate(
     config=config,
-    gt_user_id='data-portal',  # Ground truth source
+    gt_user_id='data-portal',
     gt_session_id='1',
-    pred_user_id=pick_user_id,
-    pred_session_id=pick_session_id,
+    pred_user_id='octopi',
+    pred_session_id='1',
     distance_threshold=0.5,
     save_path=f'{results_folder}/evaluation'
 )
@@ -146,6 +136,7 @@ evaluate(
 
     ```python
     from octopi.entry_points.run_create_targets import create_sub_train_targets
+    from octopi.datasets.config import DataGeneratorConfig
     from octopi.workflows import train, segment, localize, evaluate
     from monai.losses import TverskyLoss
 
@@ -153,24 +144,22 @@ evaluate(
     # CONFIGURATION - Modify these variables for your dataset
     # =============================================================================
 
-    config = 'config.json'                    # Path to your Copick config
-    voxel_size = 10.012                       # Voxel size in Angstroms
-    tomo_algorithm = 'denoised'               # Tomogram algorithm identifier
-    results_folder = 'model_output'          # Where to save results
+    config = 'config.json'
+    voxel_size = 10.012
+    tomo_algorithm = 'denoised'
+    results_folder = 'model_output'
 
-    # Define your objects and annotation sources
     pick_targets = [
         ('ribosome', 'data-portal', '1'),
         ('virus-like-particle', 'data-portal', '1'),
         ('apoferritin', 'data-portal', '1')
     ]
 
-    # Ground truth for evaluation
     gt_user_id = 'data-portal'
     gt_session_id = '1'
 
     # =============================================================================
-    # WORKFLOW - No need to modify below this line
+    # WORKFLOW
     # =============================================================================
 
     print("Step 1: Creating training targets...")
@@ -180,9 +169,16 @@ evaluate(
     )
 
     print("Step 2: Training model...")
+    cfg = DataGeneratorConfig(
+        config=config,
+        name='targets', user_id='octopi', session_id='1',
+        voxel_size=voxel_size, tomo_algorithm=tomo_algorithm,
+    )
+    data_generator = cfg.create_data_generator()
+
     model_config = {
         'architecture': 'Unet',
-        'num_classes': len(pick_targets) + 1,  # objects + background
+        'num_classes': data_generator.Nclasses,
         'dim_in': 80,
         'strides': [2, 2, 1],
         'channels': [48, 64, 80, 80],
@@ -196,8 +192,9 @@ evaluate(
     )
 
     train(
-        config, ['targets', 'octopi', '1'], tomo_algorithm, voxel_size,
-        loss_function, model_config, model_save_path=results_folder
+        data_generator, loss_function,
+        model_config=model_config,
+        model_save_path=results_folder
     )
 
     print("Step 3: Running segmentation...")
@@ -208,7 +205,7 @@ evaluate(
         model_weights=f'{results_folder}/best_model.pth',
         model_config=f'{results_folder}/model_config.yaml',
         seg_info=['predict', 'octopi', '1'],
-        use_tta=True
+        ntta=4
     )
 
     print("Step 4: Extracting coordinates...")
@@ -234,20 +231,16 @@ evaluate(
     print(f"Complete! Results saved to: {results_folder}")
     ```
 
-## Key Parameters to Modify
+## Key Parameters
 
-- **`config`**: Path to your Copick configuration file
-- **`voxel_size`**: Tomogram resolution (check your data specifications)
-- **`tomo_algorithm`**: Algorithm used for tomogram reconstruction
-- **`pick_targets`**: List of (object_name, user_id, session_id) for your annotations
-- **`num_classes`**: Number of object types + 1 for background
-- **`gt_user_id/gt_session_id`**: Ground truth annotation source for evaluation
-
+- **`config`**: Path to your CoPick configuration file
+- **`voxel_size`**: Tomogram resolution in Angstroms
+- **`tomo_algorithm`**: Algorithm identifier used during reconstruction
+- **`pick_targets`**: List of `(object_name, user_id, session_id)` for your annotations
+- **`num_classes`**: `data_generator.Nclasses` — automatically computed from your targets
 
 ## Next Steps
 
-**For detailed explanations and advanced options:**
-
-- **[Training Guide](training.md)** - Learn about loss functions, cross-validation, and model exploration
-- **[Inference Guide](inference.md)** - Understand segmentation, localization, and evaluation in detail
-- **[Adding New Models](adding-new-models.md)** - Integrate custom architectures
+- **[Training Guide](training.md)** — Loss functions, cross-validation, and model exploration
+- **[Inference Guide](inference.md)** — Segmentation, localization, and evaluation in detail
+- **[Adding New Models](adding-new-models.md)** — Integrate custom architectures

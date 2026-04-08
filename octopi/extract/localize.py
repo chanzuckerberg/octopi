@@ -1,5 +1,5 @@
-from skimage.morphology import binary_opening, ball
 from scipy.sparse.csgraph import connected_components
+from skimage.morphology import binary_opening, ball
 from skimage.segmentation import watershed
 from scipy.sparse import coo_matrix
 from scipy.spatial import cKDTree
@@ -13,34 +13,105 @@ import numpy as np
 
 FOUR_THIRDS_PI = 4.0/3.0 * np.pi  # reuse
 
-def process_localization(run,  
-                          objects, 
-                          seg_info: Tuple[str, str, str],
-                          method: str = 'com', 
-                          voxel_size: float = 10,
-                          filter_size: int = None,
-                          radius_min_scale: float = 0.5, 
-                          radius_max_scale: float = 1.0,
-                          pick_session_id: str = '1',
-                          pick_user_id: str = 'octopi'): 
 
-    # Check if method is valid
+############################# ENTRY POINTS #########################
+
+def extract_coordinates(
+        seg: np.ndarray,
+        min_radius: float,
+        max_radius: float,
+        label: int = 1,
+        method: str = 'watershed',
+        filter_size: int = 10,
+) -> np.ndarray:
+    """
+    Extract 3D particle coordinates from a segmentation array.
+
+    Args:
+        seg (np.ndarray): Integer-labeled segmentation volume [Z, Y, X].
+            Each unique integer corresponds to a different particle class.
+        min_radius (float): Minimum accepted particle size in Angstroms.
+        max_radius (float): Maximum accepted particle size in Angstroms.
+        label (int): Integer value in ``seg`` corresponding to the particle class to extract. Default: 1.
+        method (str): Localization algorithm — ``'watershed'`` or ``'com'``
+            (center of mass). Default: ``'watershed'``.
+        filter_size (int): Gaussian filter size for watershed peak detection.
+            Ignored when ``method='com'``. Default: 10.
+
+    Returns:
+        points (np.ndarray): Array of 3D coordinates with shape (N, 3).
+    """
+
+    # Input validation with error handling
+    if label <= 0:
+        raise ValueError("Label must be a positive integer corresponding to a segmentation label.")
+    elif label > seg.max():
+        raise ValueError(f"Label {label} exceeds maximum label in segmentation ({seg.max()}).")
+
     if method not in ['watershed', 'com']:
         raise ValueError(f"Invalid method '{method}'. Expected 'watershed' or 'com'.")
+
+    tomo_size = np.array(seg.shape, dtype=float)
+    margin = tomo_size * 0.005
+
+    # Core Extraction
+    if method == 'watershed':
+        points = extract_particle_centroids_via_watershed(seg, label, filter_size, min_radius, max_radius)
+    else:
+        points = extract_particle_centroids_via_com(seg, label, min_radius, max_radius)
+    points = np.array(points)
+
+    # Post-process: remove duplicates and filter out picks near borders
+    if points.size > 2:
+        points = remove_repeated_picks(points, min_radius)
+
+        keep = (
+            (points[:, 0] >= margin[0]) & (points[:, 0] <= (tomo_size[0] - margin[0])) &
+            (points[:, 1] >= margin[1]) & (points[:, 1] <= (tomo_size[1] - margin[1])) &
+            (points[:, 2] >= margin[2]) & (points[:, 2] <= (tomo_size[2] - margin[2]))
+        )
+        points = points[keep]
+    return points
+
+
+def process_localization(
+    run,
+    objects,
+    seg_info: Tuple[str, str, str],
+    method: str = 'com',
+    voxel_size: float = 10,
+    filter_size: int = 10,
+    radius_min_scale: float = 0.5,
+    radius_max_scale: float = 1.0,
+    pick_session_id: str = '1',
+    pick_user_id: str = 'octopi'
+    ):
+    """
+    Process localization for a given run and set of objects.
+
+    Args:
+        run: The run object.
+        objects: List of objects to process.
+        seg_info (Tuple[str, str, str]): Segmentation information (name, user_id, session_id).
+        method (str): Localization method ('com' or 'watershed').
+        voxel_size (float): Size of a voxel.
+        filter_size (int): Filter size for watershed peak detection.
+        radius_min_scale (float): Minimum radius scale.
+        radius_max_scale (float): Maximum radius scale.
+        pick_session_id (str): Session ID for picks.
+        pick_user_id (str): User ID for picks.
+
+    """
 
     # Get Segmentation with Error Handling
     try:
         seg = readers.segmentation(
-            run, float(voxel_size), 
-            seg_info[0], 
-            user_id=seg_info[1], 
+            run, float(voxel_size),
+            seg_info[0],
+            user_id=seg_info[1],
             session_id=seg_info[2],
             raise_error=False)
 
-        # Preprocess Segmentation
-        # seg = preprocess_segmentation(seg, voxel_size, objects)
-
-        # If No Segmentation is Found, Return
         if seg is None:
             print(f"No segmentation found for {run.name}.")
             return
@@ -49,56 +120,39 @@ def process_localization(run,
         print(f"[ERROR] - Occurred while reading segmentation from {run.name}: {e}")
         return
 
-    # Calculate Margin based on Tomogram Size
-    tomo_size = np.array(seg.shape, dtype=float)
-    margin = tomo_size * 0.005  # 0.5% margin
-    
-    # Iterate through all user pickable objects
+    # Save results back to CoPick
     for obj in objects:
-
+        
+        name, label, particle_radius  = obj
+        
         # Extract Particle Radius from Root
-        min_radius = obj[2] * radius_min_scale / voxel_size
-        max_radius = obj[2] * radius_max_scale / voxel_size
+        min_radius = particle_radius * radius_min_scale / voxel_size
+        max_radius = particle_radius * radius_max_scale / voxel_size
 
-        if method == 'watershed':
-            points = extract_particle_centroids_via_watershed(seg, obj[1], filter_size, min_radius, max_radius)
-        elif method == 'com': 
-            points = extract_particle_centroids_via_com(seg, obj[1], min_radius, max_radius)
-        points = np.array(points)
+        points = extract_coordinates(
+            seg, min_radius, max_radius,
+            label, method, filter_size,
+        )
 
-        # Save Coordinates if any 3D points are provided
+        # Swap to (X,Y,Z) for CoPick; downstream expects (N,3) in XYZ order
+        points = points[:,[2,1,0]] 
+        points *= voxel_size
+
         if points.size > 2:
-
-            # Remove Picks that are too close to each other
-            points = remove_repeated_picks(points, min_radius)
-
-            # Keep picks away from edges (inclusive on margin, exclusive on far edge is fine either way)
-            keep = (
-                (points[:, 0] >= margin[0]) & (points[:, 0] <= (tomo_size[0] - margin[0])) &
-                (points[:, 1] >= margin[1]) & (points[:, 1] <= (tomo_size[1] - margin[1])) &
-                (points[:, 2] >= margin[2]) & (points[:, 2] <= (tomo_size[2] - margin[2]))
-            )
-            points = points[keep]
-
-            # Swap the coordinates to match the expected format
-            points = points[:,[2,1,0]] 
-
-            # Convert the Picks back to Angstrom
-            points *= voxel_size
-
-            # Save Picks - Overwrite if exists
             picks = run.new_picks(
-                object_name = obj[0], session_id = pick_session_id, 
+                object_name=name, session_id=pick_session_id,
                 user_id=pick_user_id, exist_ok=True)
 
-            # Assign Identity As Orientation
             orientations = np.zeros([points.shape[0], 4, 4])
-            orientations[:,:3,:3] = np.identity(3)
-            orientations[:,3,3] = 1
+            orientations[:, :3, :3] = np.identity(3)
+            orientations[:, 3, 3] = 1
 
-            picks.from_numpy( points, orientations )
+            picks.from_numpy(points, orientations)
         else:
-            print(f"{run.name} didn't have any available picks for {obj[0]}!")
+            print(f"{run.name} didn't have any available picks for {name}!")
+
+
+######################### CORE LOCALIZATION METHODS #########################
 
 
 def extract_particle_centroids_via_watershed(
@@ -168,9 +222,9 @@ def extract_particle_centroids_via_watershed(
     return list(zip(cz[keep], cy[keep], cx[keep]))
 
 def extract_particle_centroids_via_com(
-        segmentation, 
-        segmentation_idx, 
-        min_particle_radius, 
+        segmentation,
+        segmentation_idx,
+        min_particle_radius,
         max_particle_radius
     ):
     """
@@ -184,7 +238,7 @@ def extract_particle_centroids_via_com(
     """
 
     # Calculate minimum and maximum particle volumes based on the given radii
-    min_particle_size = (4 / 3) * np.pi * (min_particle_radius ** 3) 
+    min_particle_size = (4 / 3) * np.pi * (min_particle_radius ** 3)
     max_particle_size = (4 / 3) * np.pi * (max_particle_radius ** 3)
 
     # Create a binary mask for the specific segmentation label
@@ -195,7 +249,7 @@ def extract_particle_centroids_via_com(
     object_sizes = np.bincount(label_objs.flat)
 
     # Filter the objects based on size
-    valid_objects = np.where((object_sizes > min_particle_size) & (object_sizes < max_particle_size))[0]                        
+    valid_objects = np.where((object_sizes > min_particle_size) & (object_sizes < max_particle_size))[0]
 
     # Estimate Coordiantes from CoM for LabelMaps
     octopiCoords = []
@@ -203,7 +257,7 @@ def extract_particle_centroids_via_com(
         com = ndi.center_of_mass(label_objs == object_num)
         swapped_com = (com[2], com[1], com[0])
         octopiCoords.append(swapped_com)
-   
+
     return octopiCoords
 
 def remove_repeated_picks(coordinates: np.ndarray,
@@ -226,4 +280,3 @@ def remove_repeated_picks(coordinates: np.ndarray,
     n_comp, labels = connected_components(A, directed=False)
     out = np.vstack([coordinates[labels == k].mean(axis=0) for k in range(n_comp)])
     return out
-

@@ -52,7 +52,7 @@ Follow the complete workflow:
 - **[Skip to Inference →](inference.md)** - If you have pre-trained models
 
 ### 💻 **Python developer?**
-- **[Explore the API →](api-tutorial.md)** - For programmatic usage
+- **[Explore the API →](../api/index.md)** - For programmatic usage
 
 ---
 

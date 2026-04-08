@@ -161,16 +161,29 @@ Create a new Python file in the `octopi/models/` directory (e.g., `MyCustomModel
 
 ### Step 2: Register Your Model
 
-Add your model to octopi's model registry by updating the model builder system. This typically involves:
+Add your model to octopi's model registry by adding an `elif` branch to `get_model()` in `octopi/models/common.py`:
 
 ```python
-# In your model file or a registry file
-from octopi.models.common import register_model
+# In octopi/models/common.py
+from octopi.models import (
+    Unet, AttentionUnet, MedNeXt, SegResNet,
+    MyCustomModel  # import your new module
+)
 
-@register_model("MyCustomModel")
-class MyCustomModel:
-    # Your model implementation
-    pass
+def get_model(architecture):
+    if architecture == "Unet":
+        model = Unet.myUNet()
+    elif architecture == "AttentionUnet":
+        model = AttentionUnet.myAttentionUnet()
+    elif architecture == "MedNeXt":
+        model = MedNeXt.myMedNeXt()
+    elif architecture == "SegResNet":
+        model = SegResNet.mySegResNet()
+    elif architecture == "MyCustomModel":          # add this
+        model = MyCustomModel.MyCustomModel()      # add this
+    else:
+        raise ValueError(f"Model type {architecture} not supported!")
+    return model
 ```
 
 ### Step 3: Use in Training

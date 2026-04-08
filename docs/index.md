@@ -1,32 +1,99 @@
-# OCTOPI 🐙🐙🐙
+# Octopi 🐙🐙🐙
 
-**O**bject dete**CT**ion **O**f **P**rote**I**ns. A deep learning framework for Cryo-ET 3D particle picking with autonomous model exploration capabilities.
+<strong>O</strong>bject dete<strong>CT</strong>ion <strong>O</strong>f <strong>P</strong>rote<strong>I</strong>ns. A deep learning framework for automated 3D particle picking in cryo-electron tomography (cryo-ET).
 
 ![Octopi](assets/octopi.png)
 
-## 🧬 Introduction
+---
 
-octopi addresses a critical bottleneck in cryo-electron tomography (cryo-ET) research: the efficient identification and extraction of proteins within complex cellular environments. As advances in cryo-ET enable the collection of thousands of tomograms, the need for automated, accurate particle picking has become increasingly urgent.
+## Why OCTOPI?
 
-Our deep learning-based pipeline streamlines the training and execution of 3D autoencoder models specifically designed for cryo-ET particle picking. Built on [copick](https://github.com/copick/copick), a storage-agnostic API, octopi seamlessly accesses tomograms and segmentations across local and remote environments.
+<div class="grid cards" markdown>
 
-## 🚀 Key Features
+-   :material-molecule: **Built for cryo-ET**
 
-- Training and evaluating custom 3D U-Net models for particle segmentation
-- Automatic model architecture exploration using Bayesian optimization via Optuna
-- Inference for both semantic segmentation and particle localization
-- Seamless integration with MLflow for experiment tracking
-- Support for both CLI and Python API interfaces
-- HPC cluster compatibility with SLURM integration
+    3D U-Net models designed specifically for the challenges of tomographic data — missing wedge, low SNR, and anisotropic resolution.
 
-## 🔗 Quick Links
+-   :material-magnify-scan: **Autonomous architecture search**
 
-- [Installation Guide](getting-started/installation.md)
-- [Import Data to Copick](getting-started/data-import.md)
-- [Quick Start](getting-started/quickstart.md)
-- [User Guide](user-guide/overview.md)
-- [API Tutorial](user-guide/api-tutorial.md)
+    Bayesian optimization via Optuna finds the best model architecture for your data — no manual hyperparameter tuning required.
 
-## 🙋 Getting Help
+-   :material-layers-triple: **Storage-agnostic data layer**
 
-- Visit our [GitHub repository](https://github.com/chanzuckerberg/octopi) for source code and issues 
+    Built on [CoPick](https://github.com/copick/copick) — seamlessly reads tomograms and writes picks from local disk, S3, or any remote store.
+
+-   :material-server: **HPC-ready**
+
+    Submit training and architecture search jobs directly to SLURM clusters. Multi-GPU inference included out of the box.
+
+</div>
+
+---
+
+## Tutorials
+
+### CLI
+
+<div class="grid cards" markdown>
+
+-   :octicons-database-24: **Import Data**
+
+    Set up a CoPick project and import your tomograms and initial picks.
+
+    [:octicons-arrow-right-24: Import data](user-guide/data-import.md)
+
+-   :fontawesome-solid-crosshairs: **Pick Particles**
+
+    Generate initial particle picks using the interactive GUI or existing pick files.
+
+    [:octicons-arrow-right-24: Pick particles](user-guide/pick-particles.md)
+
+-   :octicons-cpu-24: **Train Models**
+
+    Train a 3D U-Net or run autonomous architecture search with `model-explore`.
+
+    [:octicons-arrow-right-24: Train](user-guide/training.md)
+
+-   :octicons-play-24: **Inference**
+
+    Segment tomograms, localize particles, and evaluate against ground truth.
+
+    [:octicons-arrow-right-24: Run inference](user-guide/inference.md)
+
+</div>
+
+### Python API
+
+<div class="grid cards" markdown>
+
+-   :octicons-code-24: **API Overview**
+
+    Introduction to driving octopi programmatically from Python.
+
+    [:octicons-arrow-right-24: Read more](api/index.md)
+
+-   :octicons-rocket-24: **Quick Start**
+
+    End-to-end particle picking in a Jupyter notebook.
+
+    [:octicons-arrow-right-24: Get started](api/quick-start.md)
+
+-   :octicons-book-24: **Training Guide**
+
+    Customize training loops, loss functions, and data augmentation via the API.
+
+    [:octicons-arrow-right-24: Customize](api/training.md)
+
+-   :octicons-plus-circle-24: **Adding New Models**
+
+    Register new MONAI architectures in the octopi model registry.
+
+    [:octicons-arrow-right-24: Extend](api/adding-new-models.md)
+
+</div>
+
+---
+
+## Getting Help
+
+Open an issue on our [GitHub repository](https://github.com/chanzuckerberg/octopi).

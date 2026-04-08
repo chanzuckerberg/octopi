@@ -75,23 +75,27 @@ Key training parameters include:
 ### Basic Training Setup
 
 ```python
-from octopi.utils.losses import FocalTverskyLoss
-from monai.losses import TverskyLoss
+from octopi.datasets.config import DataGeneratorConfig
 from octopi.workflows import train
+from monai.losses import TverskyLoss
 
-# Training configuration
 config = 'train_config.json'
-target_info = ['targets', 'octopi', '1']
 results_folder = 'model_output'
 
-# Data splits
-trainRunIDs = ['run_001', 'run_002', 'run_003']
-valRunIDs = ['run_004']
+# Build the data generator
+cfg = DataGeneratorConfig(
+    config=config,
+    name='targets', user_id='octopi', session_id='1',
+    voxel_size=10.012, tomo_algorithm='denoised',
+    trainRunIDs=['run_001', 'run_002', 'run_003'],
+    validateRunIDs=['run_004'],
+)
+data_generator = cfg.create_data_generator()
 
 # Model architecture
 model_config = {
     'architecture': 'Unet',
-    'num_classes': 6,   # number of objects + 1 for background
+    'num_classes': data_generator.Nclasses,  # objects + background
     'dim_in': 80,
     'strides': [2, 2, 1],
     'channels': [48, 64, 80, 80],
@@ -101,44 +105,43 @@ model_config = {
 
 # Loss function
 loss_function = TverskyLoss(
-    include_background=True, 
-    to_onehot_y=True, 
+    include_background=True,
+    to_onehot_y=True,
     softmax=True,
-    alpha=0.3, 
+    alpha=0.3,
     beta=0.7
 )
 
 # Train the model
 train(
-    config, target_info, 'denoised', 10.012, loss_function,
-    model_config, trainRunIDs=trainRunIDs, validateRunIDs=valRunIDs
+    data_generator, loss_function,
+    model_config=model_config,
+    model_save_path=results_folder
 )
 ```
 
 <details markdown="1">
 <summary><strong>💡 Training Function Reference  </strong></summary>
 
-`train(config, target_info, tomo_algorithm, voxel_size, loss_function,`
-`model_config, model_weights = None, trainRunIDs = None, validateRunIDs = None,`
-`model_save_path = 'results', best_metric = 'fBeta2', num_epochs = 1000, use_ema = True)`
+`train(data_generator, loss_function, batch_size=16, model_config=None,`
+`model_weights=None, lr0=1e-3, model_save_path='results', best_metric='fBeta2',`
+`num_epochs=1000, use_ema=True, val_interval=10)`
 
 Trains a segmentation model for particle detection.
 
 **Parameters:**
 
-- `config` (str): Path to Copick configuration file
-- `target_info` (tuple): Target specification `(name, user_id, session_id)`
-- `tomo_algorithm` (str): Tomogram algorithm identifier
-- `voxel_size` (float): Voxel spacing in Angstroms
+- `data_generator`: Data generator created via `DataGeneratorConfig.create_data_generator()`
 - `loss_function`: PyTorch loss function
-- `model_config` (dict): Model architecture configuration
-- `model_weights` (str): Path to pretrained weights (default: None)
-- `trainRunIDs` (list): List of training tomogram IDs (default: None - uses all available)
-- `validateRunIDs` (list): List of validation tomogram IDs (default: None - uses all available)
+- `batch_size` (int): Number of patches per training step (default: 16)
+- `model_config` (dict): Model architecture configuration (default: None — uses default UNet)
+- `model_weights` (str): Path to pretrained weights for fine-tuning (default: None)
+- `lr0` (float): Initial learning rate (default: 1e-3)
 - `model_save_path` (str): Directory to save trained model (default: 'results')
 - `best_metric` (str): Metric for model selection (default: 'fBeta2')
 - `num_epochs` (int): Maximum training epochs (default: 1000)
 - `use_ema` (bool): Use exponential moving average (default: True)
+- `val_interval` (int): Validation frequency in epochs (default: 10)
 
 **Returns:**
 
@@ -177,7 +180,7 @@ def train_cross_validation(split_id):
 
 Choosing the right loss function is crucial for effective particle segmentation, especially given the class imbalance typical in cryo-ET data where background voxels vastly outnumber particle voxels.
 
-**[MONAI Loss Functions](https://docs.monai.io/en/stable/losses.html):**
+**[MONAI Loss Functions](https://monai-dev.readthedocs.io/en/fixes-sphinx/losses.html):**
 ```python
 from monai.losses import FocalLoss, TverskyLoss, DiceLoss, GeneralizedDiceLoss
 ```
