@@ -125,18 +125,14 @@ def segment(config, tomo_algorithm, voxel_size, model_weights, model_config,
     if gpu_count > 1:
         print(f"# of GPUs Available: {gpu_count} -- Using Multi-GPU Predictor.")
         predict = segmentation.MultiGpuPredictor(
-            config,
-            model_config,
-            model_weights,
-            ntta=ntta
+            config, model_config, model_weights,
+            sw_bs=swbs, overlap=overlap, ntta=ntta
         )
     else:
         print(f"# of GPUs Available: {gpu_count} -- Using Single-GPU Predictor.")
         predict = segmentation.Predictor(
-            config,
-            model_config,
-            model_weights,
-            ntta=ntta
+            config, model_config, model_weights,
+            sw_bs=swbs, overlap=overlap, ntta=ntta
         )
 
     # Run batch prediction and Save Processing Parameters
