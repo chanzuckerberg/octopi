@@ -1,5 +1,30 @@
 # Changelog
 
+## [1.5.0](https://github.com/chanzuckerberg/octopi/compare/octopi-v1.4.0...octopi-v1.5.0) (2026-04-08)
+
+
+### ✨ Features
+
+* Cache dataset, Provide Support for Multi Tomogram Algorithms ([#52](https://github.com/chanzuckerberg/octopi/issues/52)) ([fd4842a](https://github.com/chanzuckerberg/octopi/commit/fd4842a12020653a686c8407eee99c9c18994db9))
+* Cropping control ([#54](https://github.com/chanzuckerberg/octopi/issues/54)) ([983d8ee](https://github.com/chanzuckerberg/octopi/commit/983d8ee64b923c11092ae43cf6648c1bdfa1d18c))
+* Mdocs2.0 ([#62](https://github.com/chanzuckerberg/octopi/issues/62)) ([78ebe04](https://github.com/chanzuckerberg/octopi/commit/78ebe046e8c4b164768ca8772cf85174ff1e665b))
+* Submit Model Exploration jobs on slurm through Submitter ([#58](https://github.com/chanzuckerberg/octopi/issues/58)) ([7f6f96a](https://github.com/chanzuckerberg/octopi/commit/7f6f96a1b64d42da6707987fe7d81c30bf97bfd6))
+
+
+### 🐞 Bug Fixes
+
+* dashboards description ([#56](https://github.com/chanzuckerberg/octopi/issues/56)) ([56b92a1](https://github.com/chanzuckerberg/octopi/commit/56b92a1f2302e9dce03a3582db8693255ef9fc7c))
+* docs page ([#61](https://github.com/chanzuckerberg/octopi/issues/61)) ([ba028ec](https://github.com/chanzuckerberg/octopi/commit/ba028ec23efdcb070d0df67f029e79e9e4128288))
+* import error ([#59](https://github.com/chanzuckerberg/octopi/issues/59)) ([52c7043](https://github.com/chanzuckerberg/octopi/commit/52c704369c080f6cfa7b165680143b5bdf89d106))
+* import error ([#60](https://github.com/chanzuckerberg/octopi/issues/60)) ([9af258b](https://github.com/chanzuckerberg/octopi/commit/9af258b6eaab3de84babf49aba611fdfbc469fb9))
+* improve inference for large volumes ([#57](https://github.com/chanzuckerberg/octopi/issues/57)) ([b4af85d](https://github.com/chanzuckerberg/octopi/commit/b4af85d4c659db76e195cb3f91be28bd5b9fabfa))
+* Improve the Documents for training and optuna stability ([#55](https://github.com/chanzuckerberg/octopi/issues/55)) ([3c1c3d0](https://github.com/chanzuckerberg/octopi/commit/3c1c3d00f6ecebef91f7a18ef0aeab2a6ecd2165))
+
+
+### 📝 Documentation
+
+* ChimeraX-copick picking tutorial ([#12](https://github.com/chanzuckerberg/octopi/issues/12)) ([824a5ab](https://github.com/chanzuckerberg/octopi/commit/824a5abcc342e80e80fc692ac5942ed97dfa8f8c))
+
 ## [1.4.0](https://github.com/chanzuckerberg/octopi/compare/octopi-v1.3.3...octopi-v1.4.0) (2025-12-23)
 
 
