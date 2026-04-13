@@ -66,12 +66,53 @@ def load_segmentation(root, seg_uri: str, run_name: str) -> np.ndarray:
     return segs[0].numpy().astype(np.uint8)
 
 
+def _process_train_run(args):
+    """Worker: load one training tomogram + segmentation and write nii.gz files."""
+    run_name, root, vol_uri, seg_uri, voxel_size, images_tr, labels_tr = args
+    import SimpleITK as sitk
+
+    case_id = run_to_case_id(run_name)
+    try:
+        tomo_data = load_volume(root, vol_uri, run_name)
+        seg_data  = load_segmentation(root, seg_uri, run_name)
+    except RuntimeError as e:
+        return run_name, False, str(e)
+
+    sitk.WriteImage(
+        array_to_nifti(tomo_data.astype(np.float32), voxel_size),
+        str(images_tr / f"{case_id}_0000.nii.gz"),
+    )
+    sitk.WriteImage(
+        array_to_nifti(seg_data, voxel_size),
+        str(labels_tr / f"{case_id}.nii.gz"),
+    )
+    return run_name, True, None
+
+
+def _process_test_run(args):
+    """Worker: load one test tomogram and write nii.gz file."""
+    run_name, root, vol_uri, voxel_size, images_ts = args
+    import SimpleITK as sitk
+
+    case_id = run_to_case_id(run_name)
+    try:
+        tomo_data = load_volume(root, vol_uri, run_name)
+    except RuntimeError as e:
+        return run_name, False, str(e)
+
+    sitk.WriteImage(
+        array_to_nifti(tomo_data.astype(np.float32), voxel_size),
+        str(images_ts / f"{case_id}_0000.nii.gz"),
+    )
+    return run_name, True, None
+
+
 def convert(cfg: dict):
     from octopi.datasets.helpers import build_target_uri
-    import SimpleITK as sitk
+    from concurrent.futures import ThreadPoolExecutor, as_completed
     from pathlib import Path
     from tqdm import tqdm
-    import copick 
+    import copick
     import json
 
     copick_cfg   = cfg["copick_config"]
@@ -80,6 +121,7 @@ def convert(cfg: dict):
     seg_name     = cfg["segmentation_name"]
     user_id      = cfg.get("segmentation_user_id", "octopi")
     session_id   = cfg.get("segmentation_session_id", "1")
+    num_workers  = cfg.get("num_workers", 4)
 
     train_run_ids = cfg.get("train_run_ids") or []
     test_run_ids  = cfg.get("test_run_ids")  or []
@@ -110,41 +152,34 @@ def convert(cfg: dict):
     # Training cases
     n_training = 0
     skipped    = []
-    print(f"Converting {len(train_run_ids)} training runs...")
-    for run_name in tqdm(train_run_ids):
-        case_id = run_to_case_id(run_name)
-        try:
-            tomo_data = load_volume(root, vol_uri, run_name)
-            seg_data  = load_segmentation(root, seg_uri, run_name)
-        except RuntimeError as e:
-            print(f"  [SKIP] {e}")
-            skipped.append(run_name)
-            continue
-
-        sitk.WriteImage(
-            array_to_nifti(tomo_data.astype(np.float32), voxel_size),
-            str(images_tr / f"{case_id}_0000.nii.gz"),
-        )
-        sitk.WriteImage(
-            array_to_nifti(seg_data, voxel_size),
-            str(labels_tr / f"{case_id}.nii.gz"),
-        )
-        n_training += 1
+    print(f"Converting {len(train_run_ids)} training runs (num_workers={num_workers})...")
+    train_args = [
+        (run_name, root, vol_uri, seg_uri, voxel_size, images_tr, labels_tr)
+        for run_name in train_run_ids
+    ]
+    with ThreadPoolExecutor(max_workers=num_workers) as pool:
+        futures = {pool.submit(_process_train_run, a): a[0] for a in train_args}
+        for fut in tqdm(as_completed(futures), total=len(futures)):
+            run_name, ok, err = fut.result()
+            if ok:
+                n_training += 1
+            else:
+                print(f"  [SKIP] {err}")
+                skipped.append(run_name)
 
     # Test cases (images only — no labels written)
     if test_run_ids:
-        print(f"\nConverting {len(test_run_ids)} test runs...")
-        for run_name in tqdm(test_run_ids):
-            case_id = run_to_case_id(run_name)
-            try:
-                tomo_data = load_volume(root, vol_uri, run_name)
-            except RuntimeError as e:
-                print(f"  [SKIP] {e}")
-                continue
-            sitk.WriteImage(
-                array_to_nifti(tomo_data.astype(np.float32), voxel_size),
-                str(images_ts / f"{case_id}_0000.nii.gz"),
-            )
+        print(f"\nConverting {len(test_run_ids)} test runs (num_workers={num_workers})...")
+        test_args = [
+            (run_name, root, vol_uri, voxel_size, images_ts)
+            for run_name in test_run_ids
+        ]
+        with ThreadPoolExecutor(max_workers=num_workers) as pool:
+            futures = {pool.submit(_process_test_run, a): a[0] for a in test_args}
+            for fut in tqdm(as_completed(futures), total=len(futures)):
+                run_name, ok, err = fut.result()
+                if not ok:
+                    print(f"  [SKIP] {err}")
 
     # dataset.json
     dataset_json = {
@@ -171,8 +206,17 @@ def convert(cfg: dict):
     type=click.Path(exists=True),
     help="Path to nnunet config.yaml",
 )
-def cli(config):
+@click.option(
+    "-j", "--num-workers",
+    default=4,
+    show_default=True,
+    type=int,
+    help="Number of parallel worker threads for converting tomograms.",
+)
+def cli(config, num_workers):
     """Convert a CoPick project to nnUNet raw dataset format (imagesTr / labelsTr / imagesTs)."""
     from octopi.nnunet.utils import _load_config
 
-    convert(_load_config(config))
+    cfg = _load_config(config)
+    cfg["num_workers"] = num_workers
+    convert(cfg)
