@@ -121,6 +121,21 @@ def get_optimizer_parameters(trainer):
     return optimizer_parameters
 
 
+def save_init_model_config(model, dataloader, filename):
+    """
+    Save the initial model configuration to a YAML file.
+    """
+
+    # Combine and flatten parameters
+    parameters = {
+        'model': model.get_model_parameters(),
+        'dataloader': dataloader.get_dataloader_parameters()
+    }
+
+    save_parameters_yaml(parameters, filename)
+    print(f"⚙️ Initial Model Configuration saved to {filename}")
+
+
 def save_parameters_to_yaml(model, trainer, dataloader, filename: str):
     """
     Save training parameters to a YAML file.

@@ -84,7 +84,9 @@ def train(data_generator, loss_function, batch_size = 16,
     print()
 
     # Train the Model
-    print(f'🔃 Starting Training...\nSaving Training Results to: {model_save_path}/\n')
+    print(f'🔃 Starting Training...\nSaving Results to: {model_save_path}/\n')
+    cfg_name = os.path.join(model_save_path, "model_config.yaml")
+    io.save_init_model_config(model_builder, data_generator, cfg_name)
     results = model_trainer.train(
         data_generator, model_save_path, max_epochs=num_epochs,
         crop_size=model_config['dim_in'], my_num_samples=batch_size,
@@ -93,13 +95,9 @@ def train(data_generator, loss_function, batch_size = 16,
     print('✅ Training Complete!')
 
     # Save parameters and results
-    print(f'💾 Saving Training Parameters and Results to: {model_save_path}/\n')
-    parameters_save_name = os.path.join(model_save_path, "model_config.yaml")
-    io.save_parameters_to_yaml(model_builder, model_trainer, data_generator, parameters_save_name)
-
-    # TODO: Write Results to CSV...
-    results_save_name = os.path.join(model_save_path, "results.csv")
-    io.save_results_to_csv(results, results_save_name)
+    print(f'💾 Saving Training Results...\n')
+    io.save_parameters_to_yaml(model_builder, model_trainer, data_generator, cfg_name)
+    io.save_results_to_csv(results, os.path.join(model_save_path, "results.csv"))
 
 def segment(config, tomo_algorithm, voxel_size, model_weights, model_config, 
             seg_info = ['predict', 'octopi', '1'], run_ids = None, batch_size = 1,

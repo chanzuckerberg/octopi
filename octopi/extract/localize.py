@@ -1,5 +1,6 @@
 from scipy.sparse.csgraph import connected_components
-from skimage.morphology import binary_opening, ball
+# from skimage.morphology import binary_opening, ball
+from skimage.morphology import opening, ball
 from skimage.segmentation import watershed
 from scipy.sparse import coo_matrix
 from scipy.spatial import cKDTree
@@ -46,7 +47,7 @@ def extract_coordinates(
     if label <= 0:
         raise ValueError("Label must be a positive integer corresponding to a segmentation label.")
     elif label > seg.max():
-        raise ValueError(f"Label {label} exceeds maximum label in segmentation ({seg.max()}).")
+        return np.empty((0, 3))  # No such label in segmentation; return empty array
 
     if method not in ['watershed', 'com']:
         raise ValueError(f"Invalid method '{method}'. Expected 'watershed' or 'com'.")
@@ -134,11 +135,12 @@ def process_localization(
             label, method, filter_size,
         )
 
-        # Swap to (X,Y,Z) for CoPick; downstream expects (N,3) in XYZ order
-        points = points[:,[2,1,0]] 
-        points *= voxel_size
-
         if points.size > 2:
+
+            # Swap to (X,Y,Z) for CoPick; downstream expects (N,3) in XYZ order
+            points = points[:,[2,1,0]] 
+            points *= voxel_size
+
             picks = run.new_picks(
                 object_name=name, session_id=pick_session_id,
                 user_id=pick_user_id, exist_ok=True)
@@ -183,7 +185,7 @@ def extract_particle_centroids_via_watershed(
     mask_c = mask[z0:z1, y0:y1, x0:x1]
 
     # --- single-pass morphology (speeds + denoise speckles) ---
-    opened = binary_opening(mask_c, ball(1))  # bool in, bool out
+    opened = opening(mask_c, ball(1))  # bool in, bool out
     if not opened.any():
         return []
 
