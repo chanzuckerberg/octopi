@@ -1,6 +1,6 @@
 import rich_click as click
 from octopi import cli_context
-from octopi.entry_points import groups 
+from octopi.entry_points import groups
 from octopi.processing.downloader import cli as download
 from octopi.processing.importers import cli as import_tomograms
 from octopi.entry_points.run_train import cli as train_model
@@ -10,6 +10,7 @@ from octopi.entry_points.run_segment import cli as inference
 from octopi.entry_points.run_localize import cli as localize
 from octopi.entry_points.run_evaluate import cli as evaluate
 from octopi.entry_points.run_extract_mb_picks import cli as mb_extract
+from octopi.nnunet import cli as nnunet_group
 
 @click.group(context_settings=cli_context)
 def routines():
@@ -25,6 +26,7 @@ routines.add_command(localize)
 routines.add_command(model_explore)
 routines.add_command(evaluate)
 routines.add_command(mb_extract)
+routines.add_command(nnunet_group)
 
 @click.group(context_settings=cli_context)
 def slurm_routines():

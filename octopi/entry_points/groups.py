@@ -18,6 +18,10 @@ click.rich_click.COMMAND_GROUPS = {
         {
             "name": "Inference",
             "commands": ["segment", "localize", "membrane-extract", "evaluate"]
+        },
+        {
+            "name": "nnUNet",
+            "commands": ["nnunet"]
         }
     ]
 }
