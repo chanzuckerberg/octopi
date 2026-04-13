@@ -123,8 +123,8 @@ def convert(cfg: dict):
     session_id   = cfg.get("segmentation_session_id", "1")
     num_workers  = cfg.get("num_workers", 4)
 
-    train_run_ids = cfg.get("train_run_ids") or []
-    test_run_ids  = cfg.get("test_run_ids")  or []
+    train_run_ids = [str(r) for r in (cfg.get("train_run_ids") or [])]
+    test_run_ids  = [str(r) for r in (cfg.get("test_run_ids")  or [])]
 
     dataset_id   = cfg["dataset_id"]
     dataset_name = cfg["dataset_name"]

@@ -11,7 +11,7 @@ from octopi.nnunet.train import MODEL_TO_TRAINER, resolve_trainer, set_nnunet_en
 import rich_click as click
 
 
-def run_inference(cfg: dict, env: dict, trainer: str):
+def run_inference(cfg: dict, env: dict, model: str, trainer: str):
     from pathlib import Path
     import sys
 
@@ -34,7 +34,7 @@ def run_inference(cfg: dict, env: dict, trainer: str):
     for f in folds:
         fold_args += ["-f", str(f)]
 
-    _run([
+    cmd = [
         "nnUNetv2_predict",
         "-i", str(images_ts),
         "-o", str(predictions_dir),
@@ -42,7 +42,10 @@ def run_inference(cfg: dict, env: dict, trainer: str):
         "-c", configuration,
         "-tr", trainer,
         *fold_args,
-    ], env)
+    ]
+    if model == "resnecl":
+        cmd += ["-p", "nnUNetResEncUNetLPlans"]
+    _run(cmd, env)
 
 
 def _save_to_copick(cfg: dict):
@@ -116,11 +119,11 @@ def cli(config, model, save_to_copick):
     from octopi.nnunet.utils import _load_config
 
     """Run nnUNet inference on CoPick test tomograms."""
-    cfg     = _load_config(config)
-    env     = set_nnunet_env(cfg)
-    trainer = resolve_trainer(cfg, model)
+    cfg            = _load_config(config)
+    env            = set_nnunet_env(cfg)
+    model, trainer = resolve_trainer(cfg, model)
 
-    run_inference(cfg, env, trainer)
+    run_inference(cfg, env, model, trainer)
 
     if save_to_copick:
         _save_to_copick(cfg)

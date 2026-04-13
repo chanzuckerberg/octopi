@@ -9,6 +9,7 @@ Steps:
 
 Supported models (--model flag):
   nnunet              Standard nnUNet               → nnUNetTrainer
+  resnecl             Residual Encoder Large        → nnUNetTrainer + nnUNetResEncUNetLPlans
   mednext_s           MedNeXt Small,  kernel 3      → nnUNetTrainerMedNeXtS_kernel3
   mednext_b           MedNeXt Base,   kernel 3      → nnUNetTrainerMedNeXtB_kernel3
   mednext_m           MedNeXt Medium, kernel 3      → nnUNetTrainerMedNeXtM_kernel3
@@ -21,11 +22,10 @@ Supported models (--model flag):
 
 import rich_click as click
 
-# Mapping from friendly model name → nnUNet trainer class.
-# MedNeXt trainers are provided by the nnunet-mednext package:
-#   pip install git+https://github.com/MIC-DKFZ/MedNeXt.git
+# MedNeXt trainers require: pip install git+https://github.com/MIC-DKFZ/MedNeXt.git
 MODEL_TO_TRAINER = {
     "nnunet":       "nnUNetTrainer",
+    "resnecl":      "nnUNetTrainer",
     "mednext_s":    "nnUNetTrainerMedNeXtS_kernel3",
     "mednext_b":    "nnUNetTrainerMedNeXtB_kernel3",
     "mednext_m":    "nnUNetTrainerMedNeXtM_kernel3",
@@ -37,20 +37,18 @@ MODEL_TO_TRAINER = {
 }
 
 
-def resolve_trainer(cfg: dict, model_override: str | None) -> str:
+def resolve_trainer(cfg: dict, model_override: str | None) -> tuple[str, str]:
     """
-    Determine the nnUNet trainer class to use.
+    Return (model_name, trainer_class).
 
-    Priority: --model CLI flag > config.yaml 'model' key > config.yaml 'trainer' key > 'nnunet' default.
+    Priority: --model CLI flag > config.yaml 'model' key > 'nnunet' default.
     """
     import sys
-    model = model_override or cfg.get("model")
-    if model:
-        if model not in MODEL_TO_TRAINER:
-            print(f"[ERROR] Unknown model '{model}'. Choose from: {list(MODEL_TO_TRAINER)}")
-            sys.exit(1)
-        return MODEL_TO_TRAINER[model]
-    return cfg.get("trainer", "nnUNetTrainer")
+    model = model_override or cfg.get("model", "nnunet")
+    if model not in MODEL_TO_TRAINER:
+        print(f"[ERROR] Unknown model '{model}'. Choose from: {list(MODEL_TO_TRAINER)}")
+        sys.exit(1)
+    return model, MODEL_TO_TRAINER[model]
 
 
 def set_nnunet_env(cfg: dict) -> dict:
@@ -69,18 +67,21 @@ def set_nnunet_env(cfg: dict) -> dict:
     return env
 
 
-def plan_and_preprocess(cfg: dict, env: dict):
+def plan_and_preprocess(cfg: dict, env: dict, model: str):
     from octopi.nnunet.utils import _run
-    
-    _run([
+
+    cmd = [
         "nnUNetv2_plan_and_preprocess",
         "-d", str(cfg["dataset_id"]),
         "-c", cfg.get("configuration", "3d_fullres"),
         "--verify_dataset_integrity",
-    ], env)
+    ]
+    if model == "resnecl":
+        cmd += ["-pl", "nnUNetPlannerResEncL"]
+    _run(cmd, env)
 
 
-def train(cfg: dict, env: dict, trainer: str):
+def train(cfg: dict, env: dict, model: str, trainer: str):
     from octopi.nnunet.utils import _run
 
     dataset_id    = cfg["dataset_id"]
@@ -89,13 +90,16 @@ def train(cfg: dict, env: dict, trainer: str):
 
     print(f"Training with trainer: {trainer}")
     for fold in folds:
-        _run([
+        cmd = [
             "nnUNetv2_train",
             str(dataset_id),
             configuration,
             str(fold),
             "--trainer", trainer,
-        ], env)
+        ]
+        if model == "resnecl":
+            cmd += ["-p", "nnUNetResEncUNetLPlans"]
+        _run(cmd, env)
 
 
 @click.command("train", no_args_is_help=True)
@@ -120,12 +124,12 @@ def train(cfg: dict, env: dict, trainer: str):
 def cli(config, model, skip_preprocess):
     """Plan, preprocess, and train nnUNet on a CoPick dataset."""
     from octopi.nnunet.utils import _load_config
-    
-    cfg     = _load_config(config)
-    env     = set_nnunet_env(cfg)
-    trainer = resolve_trainer(cfg, model)
+
+    cfg             = _load_config(config)
+    env             = set_nnunet_env(cfg)
+    model, trainer  = resolve_trainer(cfg, model)
 
     if not skip_preprocess:
-        plan_and_preprocess(cfg, env)
+        plan_and_preprocess(cfg, env, model)
 
-    train(cfg, env, trainer)
+    train(cfg, env, model, trainer)
