@@ -11,39 +11,23 @@ Reads tomograms and segmentation masks from CoPick and writes them as
         ├── labelsTr/   {case}.nii.gz
         └── imagesTs/   {case}_0000.nii.gz   (if test_run_ids provided)
 """
-
-import json
-from pathlib import Path
-
-import copick
-import numpy as np
-import SimpleITK as sitk
-import yaml
 import rich_click as click
-from copick.util.uri import resolve_copick_objects
-from tqdm import tqdm
-
-from octopi.datasets.helpers import build_target_uri
-from octopi.utils.io import get_config
-
-
-def _load_config(path: str) -> dict:
-    with open(path) as f:
-        return yaml.safe_load(f)
-
+import numpy as np
 
 def run_to_case_id(run_name: str) -> str:
     """Sanitize a CoPick run name into a valid nnUNet case identifier."""
     return run_name.replace("-", "_").replace(" ", "_")
 
 
-def array_to_nifti(data: np.ndarray, voxel_size_angstrom: float) -> sitk.Image:
+def array_to_nifti(data: np.ndarray, voxel_size_angstrom: float):
     """
     Wrap a (Z, Y, X) numpy array in a SimpleITK image.
 
     Spacing is converted from Angstroms to nanometres (divide by 10) so that
     nnUNet's patch-size planner sees reasonable numbers.
     """
+    import SimpleITK as sitk
+
     spacing_nm = float(voxel_size_angstrom) / 10.0
     img = sitk.GetImageFromArray(data)
     img.SetSpacing([spacing_nm, spacing_nm, spacing_nm])  # SimpleITK uses (x, y, z)
@@ -55,6 +39,8 @@ def get_label_map(copick_config: str, seg_name: str, user_id: str, session_id: s
     Return {class_name: integer_label} from the OCTOPI targets config stored
     in the CoPick overlay.  Background (0) is added automatically.
     """
+    from octopi.utils.io import get_config
+
     target_cfg = get_config(copick_config, seg_name, "targets", user_id, session_id)
     labels = {"background": 0}
     for name, idx in target_cfg["input"]["labels"].items():
@@ -63,6 +49,8 @@ def get_label_map(copick_config: str, seg_name: str, user_id: str, session_id: s
 
 
 def load_volume(root, vol_uri: str, run_name: str) -> np.ndarray:
+    from copick.util.uri import resolve_copick_objects
+    
     vols = resolve_copick_objects(vol_uri, root, "tomogram", run_name=run_name)
     if not vols:
         raise RuntimeError(f"No tomogram found for run '{run_name}' with URI '{vol_uri}'")
@@ -70,6 +58,8 @@ def load_volume(root, vol_uri: str, run_name: str) -> np.ndarray:
 
 
 def load_segmentation(root, seg_uri: str, run_name: str) -> np.ndarray:
+    from copick.util.uri import resolve_copick_objects
+
     segs = resolve_copick_objects(seg_uri, root, "segmentation", run_name=run_name)
     if not segs:
         raise RuntimeError(f"No segmentation found for run '{run_name}' with URI '{seg_uri}'")
@@ -77,6 +67,13 @@ def load_segmentation(root, seg_uri: str, run_name: str) -> np.ndarray:
 
 
 def convert(cfg: dict):
+    from octopi.datasets.helpers import build_target_uri
+    import SimpleITK as sitk
+    from pathlib import Path
+    from tqdm import tqdm
+    import copick 
+    import json
+
     copick_cfg   = cfg["copick_config"]
     tomo_alg     = cfg["tomo_algorithm"]
     voxel_size   = cfg["voxel_size"]
@@ -176,4 +173,6 @@ def convert(cfg: dict):
 )
 def cli(config):
     """Convert a CoPick project to nnUNet raw dataset format (imagesTr / labelsTr / imagesTs)."""
+    from octopi.nnunet.utils import _load_config
+
     convert(_load_config(config))

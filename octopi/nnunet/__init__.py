@@ -1,6 +1,5 @@
-import rich_click as click
 from octopi import cli_context
-
+import rich_click as click
 
 @click.group("nnunet", context_settings=cli_context, no_args_is_help=True)
 def cli():

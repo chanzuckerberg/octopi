@@ -19,12 +19,6 @@ Supported models (--model flag):
   mednext_l_k5        MedNeXt Large,  kernel 5      → nnUNetTrainerMedNeXtL_kernel5
 """
 
-import os
-import subprocess
-import sys
-from pathlib import Path
-
-import yaml
 import rich_click as click
 
 # Mapping from friendly model name → nnUNet trainer class.
@@ -43,17 +37,13 @@ MODEL_TO_TRAINER = {
 }
 
 
-def _load_config(path: str) -> dict:
-    with open(path) as f:
-        return yaml.safe_load(f)
-
-
 def resolve_trainer(cfg: dict, model_override: str | None) -> str:
     """
     Determine the nnUNet trainer class to use.
 
     Priority: --model CLI flag > config.yaml 'model' key > config.yaml 'trainer' key > 'nnunet' default.
     """
+    import sys
     model = model_override or cfg.get("model")
     if model:
         if model not in MODEL_TO_TRAINER:
@@ -65,6 +55,9 @@ def resolve_trainer(cfg: dict, model_override: str | None) -> str:
 
 def set_nnunet_env(cfg: dict) -> dict:
     """Set the three nnUNet path environment variables and return the updated env."""
+    from pathlib import Path
+    import os
+
     env = os.environ.copy()
     env["nnUNet_raw"]          = str(cfg["nnunet_raw"])
     env["nnUNet_preprocessed"] = str(cfg["nnunet_preprocessed"])
@@ -76,16 +69,9 @@ def set_nnunet_env(cfg: dict) -> dict:
     return env
 
 
-def _run(cmd: list[str], env: dict):
-    """Run a subprocess command, streaming output, and exit on failure."""
-    print(f"\n>>> {' '.join(cmd)}\n")
-    result = subprocess.run(cmd, env=env)
-    if result.returncode != 0:
-        print(f"[ERROR] Command failed with return code {result.returncode}")
-        sys.exit(result.returncode)
-
-
 def plan_and_preprocess(cfg: dict, env: dict):
+    from octopi.nnunet.utils import _run
+    
     _run([
         "nnUNetv2_plan_and_preprocess",
         "-d", str(cfg["dataset_id"]),
@@ -95,6 +81,8 @@ def plan_and_preprocess(cfg: dict, env: dict):
 
 
 def train(cfg: dict, env: dict, trainer: str):
+    from octopi.nnunet.utils import _run
+
     dataset_id    = cfg["dataset_id"]
     configuration = cfg.get("configuration", "3d_fullres")
     folds         = cfg.get("folds", [0])
@@ -131,6 +119,8 @@ def train(cfg: dict, env: dict, trainer: str):
 )
 def cli(config, model, skip_preprocess):
     """Plan, preprocess, and train nnUNet on a CoPick dataset."""
+    from octopi.nnunet.utils import _load_config
+    
     cfg     = _load_config(config)
     env     = set_nnunet_env(cfg)
     trainer = resolve_trainer(cfg, model)

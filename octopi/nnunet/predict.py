@@ -7,24 +7,8 @@ Expects:
   - A trained model in nnunet_results (run `octopi nnunet train` first)
 """
 
-from octopi.nnunet.train import MODEL_TO_TRAINER, resolve_trainer, set_nnunet_env, _load_config
+from octopi.nnunet.train import MODEL_TO_TRAINER, resolve_trainer, set_nnunet_env
 import rich_click as click
-
-
-def _load_config(path: str) -> dict:
-    import yaml 
-    with open(path) as f:
-        return yaml.safe_load(f)
-
-
-def _run(cmd: list[str], env: dict):
-    import subprocess, sys 
-
-    print(f"\n>>> {' '.join(cmd)}\n")
-    result = subprocess.run(cmd, env=env)
-    if result.returncode != 0:
-        print(f"[ERROR] Command failed with return code {result.returncode}")
-        sys.exit(result.returncode)
 
 
 def run_inference(cfg: dict, env: dict, trainer: str):
@@ -129,6 +113,8 @@ def _save_to_copick(cfg: dict):
     help="Write predictions back into the CoPick project as segmentations (user_id='nnunet').",
 )
 def cli(config, model, save_to_copick):
+    from octopi.nnunet.utils import _load_config
+
     """Run nnUNet inference on CoPick test tomograms."""
     cfg     = _load_config(config)
     env     = set_nnunet_env(cfg)
