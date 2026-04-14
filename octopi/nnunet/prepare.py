@@ -186,7 +186,7 @@ def convert(cfg: dict):
         "channel_names": {"0": "cryo-ET"},
         "labels": labels_dict,
         "numTraining": n_training,
-        "file_endings": ".nii.gz",
+        "file_ending": ".nii.gz",
     }
     with open(dataset_dir / "dataset.json", "w") as f:
         json.dump(dataset_json, f, indent=4)

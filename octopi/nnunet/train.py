@@ -81,16 +81,32 @@ def plan_and_preprocess(cfg: dict, env: dict, model: str):
     _run(cmd, env)
 
 
-def train(cfg: dict, env: dict, model: str, trainer: str):
+def checkpoint_exists(cfg: dict, trainer: str, model: str, fold: int) -> bool:
+    from pathlib import Path
+
+    plans         = "nnUNetResEncUNetLPlans" if model == "resnecl" else "nnUNetPlans"
+    configuration = cfg.get("configuration", "3d_fullres")
+    dataset_dir   = f"Dataset{cfg['dataset_id']:03d}_{cfg['dataset_name']}"
+    checkpoint    = (
+        Path(cfg["nnunet_results"])
+        / dataset_dir
+        / f"{trainer}__{plans}__{configuration}"
+        / f"fold_{fold}"
+        / "checkpoint_latest.pth"
+    )
+    return checkpoint.exists()
+
+
+def train(cfg: dict, env: dict, model: str, trainer: str, num_gpus: int = 1):
     from octopi.nnunet.utils import _run
 
     dataset_id    = cfg["dataset_id"]
     configuration = cfg.get("configuration", "3d_fullres")
     folds         = cfg.get("folds", [0])
 
-    print(f"Training with trainer: {trainer}")
+    print(f"Training with trainer: {trainer}" + (f" on {num_gpus} GPUs" if num_gpus > 1 else ""))
     for fold in folds:
-        cmd = [
+        train_cmd = [
             "nnUNetv2_train",
             str(dataset_id),
             configuration,
@@ -98,7 +114,15 @@ def train(cfg: dict, env: dict, model: str, trainer: str):
             "--trainer", trainer,
         ]
         if model == "resnecl":
-            cmd += ["-p", "nnUNetResEncUNetLPlans"]
+            train_cmd += ["-p", "nnUNetResEncUNetLPlans"]
+        if checkpoint_exists(cfg, trainer, model, fold):
+            print(f"  [fold {fold}] Checkpoint found — resuming.")
+            train_cmd += ["--c"]
+
+        if num_gpus > 1:
+            cmd = ["torchrun", f"--nproc_per_node={num_gpus}"] + train_cmd
+        else:
+            cmd = train_cmd
         _run(cmd, env)
 
 
@@ -121,7 +145,14 @@ def train(cfg: dict, env: dict, model: str, trainer: str):
     default=False,
     help="Skip nnUNetv2_plan_and_preprocess (useful if already done).",
 )
-def cli(config, model, skip_preprocess):
+@click.option(
+    "--num-gpus",
+    default=1,
+    show_default=True,
+    type=int,
+    help="Number of GPUs for distributed training via torchrun.",
+)
+def cli(config, model, skip_preprocess, num_gpus):
     """Plan, preprocess, and train nnUNet on a CoPick dataset."""
     from octopi.nnunet.utils import _load_config
 
@@ -132,4 +163,4 @@ def cli(config, model, skip_preprocess):
     if not skip_preprocess:
         plan_and_preprocess(cfg, env, model)
 
-    train(cfg, env, model, trainer)
+    train(cfg, env, model, trainer, num_gpus=num_gpus)
