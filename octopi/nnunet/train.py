@@ -22,18 +22,19 @@ Supported models (--model flag):
 
 import rich_click as click
 
-# MedNeXt trainers require: pip install git+https://github.com/MIC-DKFZ/MedNeXt.git
+# MedNeXt trainers (mednextv1) require: pip install git+https://github.com/MIC-DKFZ/MedNeXt.git
+# Note: mednextv1 is a nnUNet v1 package — trainer classes are passed to nnUNetv2_train via -tr.
 MODEL_TO_TRAINER = {
     "nnunet":       "nnUNetTrainer",
     "resnecl":      "nnUNetTrainer",
-    "mednext_s":    "nnUNetTrainerMedNeXtS_kernel3",
-    "mednext_b":    "nnUNetTrainerMedNeXtB_kernel3",
-    "mednext_m":    "nnUNetTrainerMedNeXtM_kernel3",
-    "mednext_l":    "nnUNetTrainerMedNeXtL_kernel3",
-    "mednext_s_k5": "nnUNetTrainerMedNeXtS_kernel5",
-    "mednext_b_k5": "nnUNetTrainerMedNeXtB_kernel5",
-    "mednext_m_k5": "nnUNetTrainerMedNeXtM_kernel5",
-    "mednext_l_k5": "nnUNetTrainerMedNeXtL_kernel5",
+    "mednext_s":    "nnUNetTrainerV2_MedNeXt_S_kernel3",
+    "mednext_b":    "nnUNetTrainerV2_MedNeXt_B_kernel3",
+    "mednext_m":    "nnUNetTrainerV2_MedNeXt_M_kernel3",
+    "mednext_l":    "nnUNetTrainerV2_MedNeXt_L_kernel3",
+    "mednext_s_k5": "nnUNetTrainerV2_MedNeXt_S_kernel5",
+    "mednext_b_k5": "nnUNetTrainerV2_MedNeXt_B_kernel5",
+    "mednext_m_k5": "nnUNetTrainerV2_MedNeXt_M_kernel5",
+    "mednext_l_k5": "nnUNetTrainerV2_MedNeXt_L_kernel5",
 }
 
 
@@ -44,7 +45,7 @@ MEDNEXT_INSTALL = "pip install git+https://github.com/MIC-DKFZ/MedNeXt.git"
 def check_mednext_installed():
     try:
         import importlib
-        importlib.import_module("nnunetv2.training.nnUNetTrainer.variants.MedNeXt.nnUNetTrainerMedNeXt")
+        importlib.import_module("nnunet_mednext")
     except ModuleNotFoundError:
         import sys
         print("[ERROR] MedNeXt is not installed. Run:")
