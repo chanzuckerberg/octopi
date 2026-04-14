@@ -37,6 +37,21 @@ MODEL_TO_TRAINER = {
 }
 
 
+MEDNEXT_MODELS = {k for k in MODEL_TO_TRAINER if k.startswith("mednext")}
+MEDNEXT_INSTALL = "pip install git+https://github.com/MIC-DKFZ/MedNeXt.git"
+
+
+def check_mednext_installed():
+    try:
+        import importlib
+        importlib.import_module("nnunetv2.training.nnUNetTrainer.variants.MedNeXt.nnUNetTrainerMedNeXt")
+    except ModuleNotFoundError:
+        import sys
+        print("[ERROR] MedNeXt is not installed. Run:")
+        print(f"  {MEDNEXT_INSTALL}")
+        sys.exit(1)
+
+
 def resolve_trainer(cfg: dict, model_override: str | None) -> tuple[str, str]:
     """
     Return (model_name, trainer_class).
@@ -48,6 +63,8 @@ def resolve_trainer(cfg: dict, model_override: str | None) -> tuple[str, str]:
     if model not in MODEL_TO_TRAINER:
         print(f"[ERROR] Unknown model '{model}'. Choose from: {list(MODEL_TO_TRAINER)}")
         sys.exit(1)
+    if model in MEDNEXT_MODELS:
+        check_mednext_installed()
     return model, MODEL_TO_TRAINER[model]
 
 
@@ -97,7 +114,7 @@ def checkpoint_exists(cfg: dict, trainer: str, model: str, fold: int) -> bool:
     return checkpoint.exists()
 
 
-def train(cfg: dict, env: dict, model: str, trainer: str, num_gpus: int = 1):
+def train(cfg: dict, env: dict, model: str, trainer: str, num_gpus: int = 1, num_epochs: int | None = None):
     from octopi.nnunet.utils import _run
 
     dataset_id    = cfg["dataset_id"]
@@ -115,6 +132,8 @@ def train(cfg: dict, env: dict, model: str, trainer: str, num_gpus: int = 1):
         ]
         if model == "resnecl":
             train_cmd += ["-p", "nnUNetResEncUNetLPlans"]
+        if num_epochs is not None:
+            train_cmd += ["-num_epochs", str(num_epochs)]
         if checkpoint_exists(cfg, trainer, model, fold):
             print(f"  [fold {fold}] Checkpoint found — resuming.")
             train_cmd += ["--c"]
@@ -152,7 +171,13 @@ def train(cfg: dict, env: dict, model: str, trainer: str, num_gpus: int = 1):
     type=int,
     help="Number of GPUs for distributed training via torchrun.",
 )
-def cli(config, model, skip_preprocess, num_gpus):
+@click.option(
+    "--num-epochs",
+    default=None,
+    type=int,
+    help="Override number of training epochs (default: nnUNet's 1000).",
+)
+def cli(config, model, skip_preprocess, num_gpus, num_epochs):
     """Plan, preprocess, and train nnUNet on a CoPick dataset."""
     from octopi.nnunet.utils import _load_config
 
@@ -163,4 +188,4 @@ def cli(config, model, skip_preprocess, num_gpus):
     if not skip_preprocess:
         plan_and_preprocess(cfg, env, model)
 
-    train(cfg, env, model, trainer, num_gpus=num_gpus)
+    train(cfg, env, model, trainer, num_gpus=num_gpus, num_epochs=num_epochs)
