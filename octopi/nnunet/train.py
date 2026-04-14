@@ -111,7 +111,7 @@ def train(cfg: dict, env: dict, model: str, trainer: str, num_gpus: int = 1):
             str(dataset_id),
             configuration,
             str(fold),
-            "--trainer", trainer,
+            "-tr", trainer,
         ]
         if model == "resnecl":
             train_cmd += ["-p", "nnUNetResEncUNetLPlans"]
