@@ -40,33 +40,6 @@ MODEL_TO_TRAINER = {
 
 
 MEDNEXT_MODELS = {k for k in MODEL_TO_TRAINER if k.startswith("mednext")}
-MEDNEXT_INSTALL = "pip install git+https://github.com/MIC-DKFZ/MedNeXt.git"
-
-
-def _register_mednext_trainer():
-    """Copy octopi's MedNeXt trainer into nnunetv2's trainer discovery directory."""
-    import shutil
-    from pathlib import Path
-    import nnunetv2
-
-    src = Path(__file__).parent / "mednext_trainer.py"
-    dst = (Path(nnunetv2.__path__[0]) / "training" / "nnUNetTrainer"
-           / "variants" / "nnUNetTrainerMedNeXt.py")
-
-    if not dst.exists():
-        shutil.copy2(src, dst)
-        print(f"  [INFO] Registered MedNeXt trainer into nnUNet v2.")
-
-
-def check_mednext_installed():
-    import sys
-    try:
-        import nnunet_mednext  # noqa: F401
-    except ModuleNotFoundError:
-        print("[ERROR] MedNeXt is not installed. Run:")
-        print(f"  {MEDNEXT_INSTALL}")
-        sys.exit(1)
-    _register_mednext_trainer()
 
 
 def resolve_trainer(cfg: dict, model_override: str | None) -> tuple[str, str]:
@@ -75,7 +48,9 @@ def resolve_trainer(cfg: dict, model_override: str | None) -> tuple[str, str]:
 
     Priority: --model CLI flag > config.yaml 'model' key > 'nnunet' default.
     """
+    from octopi.nnunet.utils import check_mednext_installed
     import sys
+
     model = model_override or cfg.get("model", "nnunet")
     if model not in MODEL_TO_TRAINER:
         print(f"[ERROR] Unknown model '{model}'. Choose from: {list(MODEL_TO_TRAINER)}")
@@ -130,8 +105,8 @@ def checkpoint_exists(cfg: dict, trainer: str, model: str, fold: int) -> bool:
     )
     return checkpoint.exists()
 
-
 def train(cfg: dict, env: dict, model: str, trainer: str, num_gpus: int = 1):
+    from octopi.nnunet.utils import _scale_batch_size_for_ddp
     from octopi.nnunet.utils import _run
     import shutil, sys
 
@@ -143,6 +118,11 @@ def train(cfg: dict, env: dict, model: str, trainer: str, num_gpus: int = 1):
     if nnunet_train_bin is None:
         print("[ERROR] nnUNetv2_train not found on PATH. Is nnunetv2 installed?")
         sys.exit(1)
+
+    # Scale global batch_size so each GPU sees the same per-GPU sample count
+    # as the single-GPU plan (nnUNet DDP requires batch_size >= num_gpus).
+    if num_gpus > 1:
+        _scale_batch_size_for_ddp(cfg, model, num_gpus)
 
     print(f"Training with trainer: {trainer}" + (f" on {num_gpus} GPUs" if num_gpus > 1 else ""))
     for fold in folds:
