@@ -22,19 +22,20 @@ Supported models (--model flag):
 
 import rich_click as click
 
-# MedNeXt trainers (mednextv1) require: pip install git+https://github.com/MIC-DKFZ/MedNeXt.git
-# Note: mednextv1 is a nnUNet v1 package — trainer classes are passed to nnUNetv2_train via -tr.
+# MedNeXt trainers require: pip install git+https://github.com/MIC-DKFZ/MedNeXt.git
+# Trainer classes are defined in octopi/nnunet/mednext_trainer.py and auto-registered
+# into nnunetv2's trainer directory on first use.
 MODEL_TO_TRAINER = {
     "nnunet":       "nnUNetTrainer",
     "resnecl":      "nnUNetTrainer",
-    "mednext_s":    "nnUNetTrainerV2_MedNeXt_S_kernel3",
-    "mednext_b":    "nnUNetTrainerV2_MedNeXt_B_kernel3",
-    "mednext_m":    "nnUNetTrainerV2_MedNeXt_M_kernel3",
-    "mednext_l":    "nnUNetTrainerV2_MedNeXt_L_kernel3",
-    "mednext_s_k5": "nnUNetTrainerV2_MedNeXt_S_kernel5",
-    "mednext_b_k5": "nnUNetTrainerV2_MedNeXt_B_kernel5",
-    "mednext_m_k5": "nnUNetTrainerV2_MedNeXt_M_kernel5",
-    "mednext_l_k5": "nnUNetTrainerV2_MedNeXt_L_kernel5",
+    "mednext_s":    "nnUNetTrainerMedNeXtS_kernel3",
+    "mednext_b":    "nnUNetTrainerMedNeXtB_kernel3",
+    "mednext_m":    "nnUNetTrainerMedNeXtM_kernel3",
+    "mednext_l":    "nnUNetTrainerMedNeXtL_kernel3",
+    "mednext_s_k5": "nnUNetTrainerMedNeXtS_kernel5",
+    "mednext_b_k5": "nnUNetTrainerMedNeXtB_kernel5",
+    "mednext_m_k5": "nnUNetTrainerMedNeXtM_kernel5",
+    "mednext_l_k5": "nnUNetTrainerMedNeXtL_kernel5",
 }
 
 
@@ -42,15 +43,30 @@ MEDNEXT_MODELS = {k for k in MODEL_TO_TRAINER if k.startswith("mednext")}
 MEDNEXT_INSTALL = "pip install git+https://github.com/MIC-DKFZ/MedNeXt.git"
 
 
+def _register_mednext_trainer():
+    """Copy octopi's MedNeXt trainer into nnunetv2's trainer discovery directory."""
+    import shutil
+    from pathlib import Path
+    import nnunetv2
+
+    src = Path(__file__).parent / "mednext_trainer.py"
+    dst = (Path(nnunetv2.__path__[0]) / "training" / "nnUNetTrainer"
+           / "variants" / "nnUNetTrainerMedNeXt.py")
+
+    if not dst.exists():
+        shutil.copy2(src, dst)
+        print(f"  [INFO] Registered MedNeXt trainer into nnUNet v2.")
+
+
 def check_mednext_installed():
+    import sys
     try:
-        import importlib
-        importlib.import_module("nnunet_mednext")
+        import nnunet_mednext  # noqa: F401
     except ModuleNotFoundError:
-        import sys
         print("[ERROR] MedNeXt is not installed. Run:")
         print(f"  {MEDNEXT_INSTALL}")
         sys.exit(1)
+    _register_mednext_trainer()
 
 
 def resolve_trainer(cfg: dict, model_override: str | None) -> tuple[str, str]:
@@ -117,15 +133,21 @@ def checkpoint_exists(cfg: dict, trainer: str, model: str, fold: int) -> bool:
 
 def train(cfg: dict, env: dict, model: str, trainer: str, num_gpus: int = 1, num_epochs: int | None = None):
     from octopi.nnunet.utils import _run
+    import shutil, sys
 
     dataset_id    = cfg["dataset_id"]
     configuration = cfg.get("configuration", "3d_fullres")
     folds         = cfg.get("folds", [0])
 
+    nnunet_train_bin = shutil.which("nnUNetv2_train")
+    if nnunet_train_bin is None:
+        print("[ERROR] nnUNetv2_train not found on PATH. Is nnunetv2 installed?")
+        sys.exit(1)
+
     print(f"Training with trainer: {trainer}" + (f" on {num_gpus} GPUs" if num_gpus > 1 else ""))
     for fold in folds:
         train_cmd = [
-            "nnUNetv2_train",
+            nnunet_train_bin,
             str(dataset_id),
             configuration,
             str(fold),
