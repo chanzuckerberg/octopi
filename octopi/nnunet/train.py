@@ -119,10 +119,20 @@ def train(cfg: dict, env: dict, model: str, trainer: str, num_gpus: int = 1):
         print("[ERROR] nnUNetv2_train not found on PATH. Is nnunetv2 installed?")
         sys.exit(1)
 
-    # Scale global batch_size so each GPU sees the same per-GPU sample count
-    # as the single-GPU plan (nnUNet DDP requires batch_size >= num_gpus).
     if num_gpus > 1:
+        # Scale global batch_size so each GPU sees the same per-GPU sample count
+        # as the single-GPU plan (nnUNet DDP requires batch_size >= num_gpus).
         _scale_batch_size_for_ddp(cfg, model, num_gpus)
+
+        # Each DDP worker spawns its own data-augmentation thread pool.
+        # Without a cap, 8 workers × N DA threads exhausts CPU RAM (pod OOM).
+        # Divide available cores evenly across workers; scheduler env var wins.
+        if "nnUNet_n_proc_da" not in env:
+            import os
+            total_cpu   = os.cpu_count() or 16
+            per_gpu_da  = max(2, total_cpu // num_gpus)
+            env["nnUNet_n_proc_da"] = str(per_gpu_da)
+            print(f"  [DA workers] nnUNet_n_proc_da={per_gpu_da} ({total_cpu} CPUs ÷ {num_gpus} GPUs)")
 
     print(f"Training with trainer: {trainer}" + (f" on {num_gpus} GPUs" if num_gpus > 1 else ""))
     for fold in folds:
