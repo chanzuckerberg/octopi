@@ -131,7 +131,7 @@ def checkpoint_exists(cfg: dict, trainer: str, model: str, fold: int) -> bool:
     return checkpoint.exists()
 
 
-def train(cfg: dict, env: dict, model: str, trainer: str, num_gpus: int = 1, num_epochs: int | None = None):
+def train(cfg: dict, env: dict, model: str, trainer: str, num_gpus: int = 1):
     from octopi.nnunet.utils import _run
     import shutil, sys
 
@@ -155,26 +155,14 @@ def train(cfg: dict, env: dict, model: str, trainer: str, num_gpus: int = 1, num
         ]
         if model == "resnecl":
             train_cmd += ["-p", "nnUNetResEncUNetLPlans"]
-        if num_epochs is not None:
-            train_cmd += ["-num_epochs", str(num_epochs)]
+        if num_gpus > 1:
+            # nnUNetv2_train handles DDP natively via -num_gpus; no torchrun needed.
+            train_cmd += ["-num_gpus", str(num_gpus)]
         if checkpoint_exists(cfg, trainer, model, fold):
             print(f"  [fold {fold}] Checkpoint found — resuming.")
             train_cmd += ["--c"]
 
-        if num_gpus > 1:
-            # nnUNetv2_train must receive -num_gpus N so it initializes DDP
-            # and assigns each worker to LOCAL_RANK's device. Without this flag
-            # every process thinks it is a single-GPU run and both land on cuda:0.
-            train_cmd += ["-num_gpus", str(num_gpus)]
-            # Also ensure CUDA_VISIBLE_DEVICES exposes the right physical GPUs.
-            # Schedulers (SLURM/RunAI) typically set this already; only override
-            # when running outside a scheduler.
-            if "CUDA_VISIBLE_DEVICES" not in env:
-                env["CUDA_VISIBLE_DEVICES"] = ",".join(str(i) for i in range(num_gpus))
-            cmd = ["torchrun", f"--nproc_per_node={num_gpus}"] + train_cmd
-        else:
-            cmd = train_cmd
-        _run(cmd, env)
+        _run(train_cmd, env)
 
 
 @click.command("train", no_args_is_help=True)
@@ -201,15 +189,9 @@ def train(cfg: dict, env: dict, model: str, trainer: str, num_gpus: int = 1, num
     default=1,
     show_default=True,
     type=int,
-    help="Number of GPUs for distributed training via torchrun.",
+    help="Number of GPUs for distributed training (uses nnUNet's native -num_gpus flag).",
 )
-@click.option(
-    "--num-epochs",
-    default=None,
-    type=int,
-    help="Override number of training epochs (default: nnUNet's 1000).",
-)
-def cli(config, model, skip_preprocess, num_gpus, num_epochs):
+def cli(config, model, skip_preprocess, num_gpus):
     """Plan, preprocess, and train nnUNet on a CoPick dataset."""
     from octopi.nnunet.utils import _load_config
 
@@ -220,4 +202,4 @@ def cli(config, model, skip_preprocess, num_gpus, num_epochs):
     if not skip_preprocess:
         plan_and_preprocess(cfg, env, model)
 
-    train(cfg, env, model, trainer, num_gpus=num_gpus, num_epochs=num_epochs)
+    train(cfg, env, model, trainer, num_gpus=num_gpus)
