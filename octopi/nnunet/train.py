@@ -162,6 +162,15 @@ def train(cfg: dict, env: dict, model: str, trainer: str, num_gpus: int = 1, num
             train_cmd += ["--c"]
 
         if num_gpus > 1:
+            # nnUNetv2_train must receive -num_gpus N so it initializes DDP
+            # and assigns each worker to LOCAL_RANK's device. Without this flag
+            # every process thinks it is a single-GPU run and both land on cuda:0.
+            train_cmd += ["-num_gpus", str(num_gpus)]
+            # Also ensure CUDA_VISIBLE_DEVICES exposes the right physical GPUs.
+            # Schedulers (SLURM/RunAI) typically set this already; only override
+            # when running outside a scheduler.
+            if "CUDA_VISIBLE_DEVICES" not in env:
+                env["CUDA_VISIBLE_DEVICES"] = ",".join(str(i) for i in range(num_gpus))
             cmd = ["torchrun", f"--nproc_per_node={num_gpus}"] + train_cmd
         else:
             cmd = train_cmd
