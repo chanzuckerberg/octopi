@@ -437,7 +437,7 @@ class nnUNetPredictor:
 @click.option("-c", "--config", required=True, type=click.Path(exists=True), help="Path to copick config.json")
 @click.option('-p', '--plans', required=True, type=click.Path(exists=True), help="Path to nnunet plans.json")
 @click.option('-d', '--dataset', required=True, type=click.Path(exists=True), help="Path to nnunet dataset.json")
-@click.option("-w","--weights", required=True, type=click.Path(exists=True), help="Path to nnunet checkpoint.pth")
+@click.option("-w","--weights", required=True, type=click.Path(exists=True), multiple=True, help="Path to checkpoint .pth (repeat for fold ensembling, e.g. -w fold_0/checkpoint_best.pth -w fold_1/checkpoint_best.pth)")
 @click.option('-turi', "--tomo-uri", type=str, default="wbp@10.0", help="Tomogram URI to predict")
 @click.option("--tta", type=bool, default=True, help="Enable mirroring TTA.")
 @click.option("--run-ids", '-runs', type=str, default=None,
