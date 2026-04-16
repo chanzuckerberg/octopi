@@ -63,14 +63,17 @@ def _resolve_trainer_class(trainer_name: str):
     scans the trainer directory — slow (~30-60 s) but only needed once per
     session and only when a MedNeXt checkpoint is used.
     """
-    # Fast path: standard nnUNet trainers
+    # Fast path: standard nnUNet trainers — format is "dotted.module.path::ClassName"
+    # The module path points to the .py file; the class name is after "::".
     _DIRECT = {
-        "nnUNetTrainer": "nnunetv2.training.nnUNetTrainer.nnUNetTrainer",
-        "nnUNetTrainerNoMirroring": "nnunetv2.training.nnUNetTrainer.variants.training_length_and_nsteps.nnUNetTrainerNoMirroring",
+        "nnUNetTrainer":
+            "nnunetv2.training.nnUNetTrainer.nnUNetTrainer::nnUNetTrainer",
+        "nnUNetTrainerNoMirroring":
+            "nnunetv2.training.nnUNetTrainer.variants.training_length_and_nsteps.nnUNetTrainerNoMirroring::nnUNetTrainerNoMirroring",
     }
     if trainer_name in _DIRECT:
-        module_path, _, class_name = _DIRECT[trainer_name].rpartition(".")
         import importlib
+        module_path, class_name = _DIRECT[trainer_name].split("::")
         mod = importlib.import_module(module_path)
         return getattr(mod, class_name)
 
