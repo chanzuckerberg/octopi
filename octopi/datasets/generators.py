@@ -141,8 +141,8 @@ class CopickDataModule:
             self.train_ds = SmartCacheDataset(
                 data=train_files,                
                 transform=train_transforms,
-                cache_num=self.tomo_batch_size,  # e.g. 8–64 volumes
-                replace_rate=0.3,                # e.g. 0.2–0.3
+                cache_num=self.tomo_batch_size,  
+                replace_rate=0.15,               
                 num_init_workers=8,
                 num_replace_workers=8,
                 shuffle=False,
@@ -395,8 +395,8 @@ class MultiCopickDataModule:
         self.train_ds = SmartCacheDataset(
             data=train_files,                
             transform=train_transforms,
-            cache_num=self.tomo_batch_size,  # e.g. 8–64 volumes
-            replace_rate=0.3,                # e.g. 0.2–0.3
+            cache_num=self.tomo_batch_size,  
+            replace_rate=0.15,               
             num_init_workers=8,
             num_replace_workers=8,
             shuffle=False,
