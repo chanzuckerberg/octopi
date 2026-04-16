@@ -81,6 +81,9 @@ Octopi supports two complementary workflows:
             | `--background-ratio` | Foreground/background crop sampling ratio. | `0.0` |
             | `--tversky-alpha` | Alpha parameter for the Tversky loss (foreground weighting). | `0.3` |
 
+            !!! tip "Choosing `--ncache-tomos`"
+                Use this parameter when your dataset has more tomograms than can fit into memory at once — only the cached subset is loaded per epoch, keeping memory usage bounded. Values between **8 and 32** are recommended. Higher values expose the model to more diversity per epoch and improve training throughput, but require more RAM.
+
         === "UNet Architecture"
 
             | Parameter | Description | Default |
@@ -163,9 +166,12 @@ Octopi supports two complementary workflows:
             | `--model-type` | Model family used for exploration. | `Unet` | Options: `unet`, `attentionunet`, `mednext`, `segresnet` |
             | `--num-epochs` | Number of epochs per trial. | `1000` | Consider fewer epochs for quick sweeps |
             | `--val-interval` | Validation frequency (every N epochs). | `10` | Smaller = more frequent metrics |
-            | `--ncache-tomos` | Number of tomograms cached per epoch (SmartCache window size). | `15` | Higher may improve throughput if memory allows |
+            | `--ncache-tomos` | Number of tomograms cached per epoch (SmartCache window size). | `15` | Higher values improve throughput but require more memory |
             | `--best-metric` | Metric used to select the best checkpoint (supports `fBetaN`). | `avg_f1` | Example: `fBeta3` emphasizes recall |
             | `--background-ratio` | Foreground/background crop sampling ratio. | `0.0` | `1.0` → 50/50; `<1.0` biases toward foreground |
+
+            !!! tip "Choosing `--ncache-tomos`"
+                Use this parameter when your dataset has more tomograms than can fit into memory at once — only the cached subset is loaded per epoch, keeping memory usage bounded. Values between **8 and 32** are recommended. Higher values expose the model to more diversity per epoch and improve training throughput, but require more RAM.
 
         === "Search / Reproducibility"
 
