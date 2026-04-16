@@ -4,53 +4,28 @@ nnUNet inference on CoPick tomograms.
 Usage
 -----
 Single tomogram:
-    from octopi.nnunet.predict import NnUNetPredictor
-    model = NnUNetPredictor(plans="plans.json", dataset_json="dataset.json", weights="checkpoint_best.pth")
+    from octopi.nnunet.predict import nnUNetPredictor
+    model = nnUNetPredictor(plans="plans.json", dataset_json="dataset.json", weights="checkpoint_best.pth")
     seg   = model.predict(tomogram)          # np.ndarray (Z, Y, X) uint8
 
-Full CoPick project:
-    model.predict_copick(copick_config, tomo_algorithm, voxel_size, seg_name)
+Full CoPick project (auto multi-GPU):
+    model.batch_predict(copick_config="config.json", tomogram_uri="wbp@10.0", seg_name="nnunet")
 
 CLI:
-    octopi nnunet predict -c config.yaml [--folds 0 --folds 1] [--run-ids TS_001]
+    octopi nnunet segment -c config.json -p plans.json -d dataset.json -w checkpoint.pth -uri wbp@10.0 -n nnunet
 """
-from octopi.nnunet.train import MODEL_TO_TRAINER, resolve_trainer
+import os, warnings
+
+# nnunetv2 emits warnings when its path env-vars are unset; irrelevant for inference.
+warnings.filterwarnings("ignore", message="nnUNet_raw")
+warnings.filterwarnings("ignore", message="nnUNet_preprocessed")
+warnings.filterwarnings("ignore", message="nnUNet_results")
+
+# Silence NumExpr thread-count notices.
+os.environ.setdefault("NUMEXPR_MAX_THREADS", "16")
+
+from octopi.nnunet.train import MODEL_TO_TRAINER
 import rich_click as click
-
-
-# ── helpers ──────────────────────────────────────────────────────────────────
-
-def _model_folder(cfg: dict, trainer: str, model: str) -> str:
-    """Resolve the nnUNet results folder for this trainer/model/configuration."""
-    from pathlib import Path
-
-    plans       = "nnUNetResEncUNetLPlans" if model == "resnecl" else "nnUNetPlans"
-    config      = cfg.get("configuration", "3d_fullres")
-    dataset_dir = f"Dataset{cfg['dataset_id']:03d}_{cfg['dataset_name']}"
-    folder = (
-        Path(cfg["nnunet_results"])
-        / dataset_dir
-        / f"{trainer}__{plans}__{config}"
-    )
-    if not folder.exists():
-        raise FileNotFoundError(
-            f"Model folder not found: {folder}\n"
-            "Run `octopi nnunet train` first."
-        )
-    return str(folder)
-
-
-def _checkpoint_paths(model_folder: str, folds: tuple, checkpoint_name: str) -> list[str]:
-    """Return the list of checkpoint paths for the requested folds."""
-    from pathlib import Path
-    paths = []
-    for f in folds:
-        p = Path(model_folder) / f"fold_{f}" / checkpoint_name
-        if not p.exists():
-            raise FileNotFoundError(f"Checkpoint not found: {p}")
-        paths.append(str(p))
-    return paths
-
 
 # ── trainer class resolution ─────────────────────────────────────────────────
 
@@ -103,7 +78,7 @@ def _resolve_trainer_class(trainer_name: str):
 
 # ── predictor ────────────────────────────────────────────────────────────────
 
-class nnUNetPredictor:
+class single_gpu_nnUNetPredictor:
     """
     nnUNet inference wrapper that accepts individual files rather than a folder.
 
@@ -133,11 +108,10 @@ class nnUNetPredictor:
         use_mirroring: bool = True,
         device=None,
     ):
-        import inspect, json, torch
-        import nnunetv2
+        from nnunetv2.utilities.label_handling.label_handling import determine_num_input_channels
         from nnunetv2.inference.predict_from_raw_data import nnUNetPredictor as _Pred
         from nnunetv2.utilities.plans_handling.plans_handler import PlansManager
-        from nnunetv2.utilities.label_handling.label_handling import determine_num_input_channels
+        import inspect, json, torch
         import os
 
         if device is None:
@@ -243,16 +217,15 @@ class nnUNetPredictor:
             output_file_truncated=None,
             save_or_return_probabilities=False,
         )
-        return seg.astype(np.uint16)
+        return seg.astype(np.uint8)
 
     def batch_predict(
         self,
         copick_config: str,
-        tomo_algorithm: str,
-        voxel_size: float,
+        tomogram_uri: str,
         seg_name: str,
         user_id: str = "nnunet",
-        session_id: str = "0",
+        session_id: str = "1",
         run_ids=None,
     ):
         """
@@ -260,22 +233,26 @@ class nnUNetPredictor:
 
         Parameters
         ----------
+        tomogram_uri : str
+            URI in ``algorithm@voxel_size`` format, e.g. ``"wbp@10.0"``.
         run_ids : list[str] | None
             Specific run names to process.  None = all runs in the project.
         """
-        import copick, numpy as np
+        import copick
         from copick_utils.io import writers
         from copick.util.uri import resolve_copick_objects
         from tqdm import tqdm
 
-        root    = copick.from_file(copick_config)
-        vol_uri = f"{tomo_algorithm}@{voxel_size}"
-        runs    = root.runs if run_ids is None else [root.get_run(r) for r in run_ids]
+        tomo_algorithm, voxel_size_str = tomogram_uri.split("@")
+        voxel_size = float(voxel_size_str)
+
+        root  = copick.from_file(copick_config)
+        runs  = root.runs if run_ids is None else [root.get_run(r) for r in run_ids]
 
         for run in tqdm(runs, desc="Running nnUNet inference"):
             if run is None:
                 continue
-            vols = resolve_copick_objects(vol_uri, root, "tomogram", run_name=run.name)
+            vols = resolve_copick_objects(tomogram_uri, root, "tomogram", run_name=run.name)
             if not vols:
                 print(f"  [SKIP] No tomogram found for run '{run.name}'")
                 continue
@@ -292,47 +269,202 @@ class nnUNetPredictor:
         print("Done writing predictions to CoPick.")
 
 
+# ── multi-GPU inference ───────────────────────────────────────────────────────
+
+from dataclasses import dataclass, field
+
+@dataclass
+class _NnUNetJobSpec:
+    plans: str
+    dataset_json: str
+    weights: list
+    tile_step_size: float
+    use_mirroring: bool
+    copick_config: str
+    tomogram_uri: str
+    seg_name: str
+    user_id: str
+    session_id: str
+    run_ids: list = field(default_factory=list)
+
+
+def _nnunet_worker(rank: int, jobs: list):
+    """One process per GPU — loads the model on cuda:{rank} and processes its shard."""
+    import torch
+    torch.cuda.set_device(rank)
+    import os
+    torch.set_num_threads(max(1, (os.cpu_count() or 1) // max(1, torch.cuda.device_count())))
+
+    job = jobs[rank]
+    predictor = single_gpu_nnUNetPredictor(
+        plans=job.plans,
+        dataset_json=job.dataset_json,
+        weights=job.weights,
+        tile_step_size=job.tile_step_size,
+        use_mirroring=job.use_mirroring,
+        device=torch.device(f"cuda:{rank}"),
+    )
+    if job.run_ids:
+        predictor.batch_predict(
+            copick_config=job.copick_config,
+            tomogram_uri=job.tomogram_uri,
+            seg_name=job.seg_name,
+            user_id=job.user_id,
+            session_id=job.session_id,
+            run_ids=job.run_ids,
+        )
+
+
+class nnUNetPredictor:
+    """
+    Universal nnUNet predictor — automatically uses all available GPUs for batch_predict.
+
+    For single-tomogram inference (predict) the model is loaded on-demand on cuda:0.
+    For batch inference (batch_predict) run IDs are sharded round-robin across all GPUs
+    using mp.spawn (one process per GPU, CUDA-safe).
+
+    Usage
+    -----
+    predictor = nnUNetPredictor(plans=..., dataset_json=..., weights=...)
+    seg = predictor.predict(tomogram)                            # single volume, single GPU
+    predictor.batch_predict(copick_config=..., tomogram_uri=..., seg_name=...)  # all GPUs
+    """
+
+    def __init__(
+        self,
+        plans: str,
+        dataset_json: str,
+        weights: "str | list[str]",
+        tile_step_size: float = 0.5,
+        use_mirroring: bool = True,
+    ):
+        self.plans          = plans
+        self.dataset_json   = dataset_json
+        self.weights        = [weights] if isinstance(weights, str) else weights
+        self.tile_step_size = tile_step_size
+        self.use_mirroring  = use_mirroring
+        self._single        = None   # lazy-loaded on first predict() call
+
+    def _get_single_predictor(self):
+        if self._single is None:
+            self._single = single_gpu_nnUNetPredictor(
+                plans=self.plans,
+                dataset_json=self.dataset_json,
+                weights=self.weights,
+                tile_step_size=self.tile_step_size,
+                use_mirroring=self.use_mirroring,
+            )
+        return self._single
+
+    def predict(self, tomogram: "np.ndarray", voxel_size_angstrom: float = 10.0) -> "np.ndarray":
+        """Predict segmentation for a single tomogram on cuda:0."""
+        return self._get_single_predictor().predict(tomogram, voxel_size_angstrom)
+
+    def batch_predict(
+        self,
+        copick_config: str,
+        tomogram_uri: str,
+        seg_name: str,
+        user_id: str = "nnunet",
+        session_id: str = "1",
+        run_ids=None,
+    ):
+        """
+        Run inference on CoPick runs across all available GPUs.
+
+        Parameters
+        ----------
+        tomogram_uri : str
+            URI in ``algorithm@voxel_size`` format, e.g. ``"wbp@10.0"``.
+        run_ids : list[str] | None
+            Specific run names to process.  None = all runs in the project.
+        """
+        import torch, copick
+        import torch.multiprocessing as mp
+
+        world_size = torch.cuda.device_count()
+        if world_size < 1:
+            raise RuntimeError("No CUDA GPUs available.")
+
+        if run_ids is None:
+            root    = copick.from_file(copick_config)
+            run_ids = [r.name for r in root.runs]
+
+        # Single-GPU: skip subprocess overhead, use lazy single predictor
+        if world_size == 1:
+            self._get_single_predictor().batch_predict(
+                copick_config=copick_config,
+                tomogram_uri=tomogram_uri,
+                seg_name=seg_name,
+                user_id=user_id,
+                session_id=session_id,
+                run_ids=run_ids,
+            )
+            return
+
+        # Multi-GPU: shard run IDs round-robin, one process per GPU
+        shards = [[] for _ in range(world_size)]
+        for i, rid in enumerate(run_ids):
+            shards[i % world_size].append(rid)
+
+        jobs = [
+            _NnUNetJobSpec(
+                plans=self.plans,
+                dataset_json=self.dataset_json,
+                weights=self.weights,
+                tile_step_size=self.tile_step_size,
+                use_mirroring=self.use_mirroring,
+                copick_config=copick_config,
+                tomogram_uri=tomogram_uri,
+                seg_name=seg_name,
+                user_id=user_id,
+                session_id=session_id,
+                run_ids=shard,
+            )
+            for shard in shards
+        ]
+
+        mp.spawn(_nnunet_worker, args=(jobs,), nprocs=world_size, join=True)
+        print("Done writing predictions to CoPick.")
+
+
 # ── CLI ───────────────────────────────────────────────────────────────────────
 
-@click.command("predict", no_args_is_help=True)
-@click.option("-c", "--config", required=True, type=click.Path(exists=True), help="Path to nnunet config.yaml")
-@click.option("--model", type=click.Choice(list(MODEL_TO_TRAINER)), default=None,
-              help="Model — must match training.")
-@click.option("--folds", multiple=True, type=int, default=[0], show_default=True,
-              help="Fold(s) to ensemble (repeat flag: --folds 0 --folds 1).")
-@click.option("--checkpoint", default="checkpoint_best.pth", show_default=True,
-              help="Checkpoint filename inside each fold directory.")
-@click.option("--tile-step-size", default=0.5, show_default=True, type=float,
-              help="Tile step size as fraction of patch size.")
-@click.option("--no-tta", is_flag=True, default=False, help="Disable mirroring TTA.")
-@click.option("--run-ids", multiple=True, default=None,
-              help="CoPick run IDs to predict (default: all runs).")
-def cli(config, model, folds, checkpoint, tile_step_size, no_tta, run_ids):
+@click.command("segment", no_args_is_help=True)
+# Input Arguments
+@click.option("-c", "--config", required=True, type=click.Path(exists=True), help="Path to copick config.json")
+@click.option('-p', '--plans', required=True, type=click.Path(exists=True), help="Path to nnunet plans.json")
+@click.option('-d', '--dataset', required=True, type=click.Path(exists=True), help="Path to nnunet dataset.json")
+@click.option("-w","--weights", required=True, type=click.Path(exists=True), help="Path to nnunet checkpoint.pth")
+@click.option('-uri', "--uri", type=str, default="wbp@10.0", help="Tomogram URI to predict")
+@click.option("--tta", type=bool, default=True, help="Enable mirroring TTA.")
+@click.option("--run-ids", type=str, default=None,
+              help="CoPick run IDs to predict (as comma-separated list).")
+# Output Arguments
+@click.option('-n', '--name', type=str, required=True, help="Name of Segmentation")
+@click.option('-uid', '--user-id', type=str, default="nnunet", help="User ID")
+@click.option('-sid', '--session-id', type=str, default="1", help="Session ID")
+def cli(config, plans, dataset, uri, weights, tta, run_ids, name, user_id, session_id):
     """Run nnUNet inference on CoPick tomograms and write predictions back."""
-    from octopi.nnunet.utils import _load_config
-
-    cfg            = _load_config(config)
-    model, trainer = resolve_trainer(cfg, model)
-    folder         = _model_folder(cfg, trainer, model)
-    weight_paths   = _checkpoint_paths(folder, tuple(folds) if folds else (0,), checkpoint)
-
-    plans_path      = f"{folder}/plans.json"
-    dataset_path    = f"{folder}/dataset.json"
+    
+    run_predict(config, plans, dataset, uri,  weights, tta, run_ids, name, user_id, session_id)
+    
+def run_predict(config, plans, dataset, uri, weights, tta, run_ids, name, user_id, session_id):
+    
+    run_ids_list = run_ids.split(',') if run_ids else None   
 
     predictor = nnUNetPredictor(
-        plans=plans_path,
-        dataset_json=dataset_path,
-        weights=weight_paths,
-        tile_step_size=tile_step_size,
-        use_mirroring=not no_tta,
+        plans=plans,
+        dataset_json=dataset,
+        weights=weights,
+        use_mirroring=tta,
     )
 
-    predictor.predict_copick(
-        copick_config=cfg["copick_config"],
-        tomo_algorithm=cfg["tomo_algorithm"],
-        voxel_size=cfg["voxel_size"],
-        seg_name=cfg.get("segmentation_name", "nnunet"),
-        user_id=cfg.get("prediction_user_id", "nnunet"),
-        session_id=cfg.get("prediction_session_id", "0"),
-        run_ids=list(run_ids) if run_ids else None,
+    predictor.batch_predict(
+        copick_config=config,
+        tomogram_uri=uri,
+        seg_name=name,
+        user_id=user_id,
+        session_id=session_id,
+        run_ids=run_ids_list,
     )

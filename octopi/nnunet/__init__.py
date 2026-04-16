@@ -15,4 +15,4 @@ from octopi.nnunet.predict import cli as predict_cli  # noqa: E402
 cli.add_command(config_cli, "config")
 cli.add_command(prepare_cli, "prepare")
 cli.add_command(train_cli, "train")
-cli.add_command(predict_cli, "predict")
+cli.add_command(predict_cli, "segment")
