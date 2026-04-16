@@ -31,8 +31,7 @@ nnunet_results: /path/to/nnunet_results
 # ── Training ──────────────────────────────────────────────────────────────────
 configuration: 3d_fullres      # 3d_fullres | 3d_lowres | 3d_cascade_fullres
 folds: [0]                     # [0,1,2,3,4] for full 5-fold cross-validation
-model: nnunet                  # nnunet | resnecl | mednext_s | mednext_b | mednext_m | mednext_l
-                               # Append _k5 for kernel-5 MedNeXt variants
+model: nnunet                  # nnunet | resnecl | mednext_s | mednext_b | mednext_l
 
 # ── Inference ─────────────────────────────────────────────────────────────────
 predictions_dir: /path/to/predictions

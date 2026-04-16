@@ -51,8 +51,11 @@ def _resolve_trainer_class(trainer_name: str):
         mod = importlib.import_module(module_path)
         return getattr(mod, class_name)
 
-    # MedNeXt trainers live in the file we copy into nnunetv2's trainer dir
+    # MedNeXt trainers: ensure the package is installed and the trainer file is
+    # registered into nnunetv2's discovery directory before importing.
     if "MedNeXt" in trainer_name:
+        from octopi.nnunet.utils import check_mednext_installed
+        check_mednext_installed()   # validates install + copies trainer file if missing
         try:
             from nnunetv2.training.nnUNetTrainer.variants import nnUNetTrainerMedNeXt as _mn_mod
             return getattr(_mn_mod, trainer_name)
