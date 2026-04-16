@@ -24,7 +24,6 @@ warnings.filterwarnings("ignore", message="nnUNet_results")
 # Silence NumExpr thread-count notices.
 os.environ.setdefault("NUMEXPR_MAX_THREADS", "16")
 
-from octopi.nnunet.train import MODEL_TO_TRAINER
 import rich_click as click
 
 # ── trainer class resolution ─────────────────────────────────────────────────
@@ -223,9 +222,7 @@ class single_gpu_nnUNetPredictor:
         self,
         copick_config: str,
         tomogram_uri: str,
-        seg_name: str,
-        user_id: str = "nnunet",
-        session_id: str = "1",
+        seg_uri: str = 'predict:nnunet/1',
         run_ids=None,
     ):
         """
@@ -243,8 +240,19 @@ class single_gpu_nnUNetPredictor:
         from copick.util.uri import resolve_copick_objects
         from tqdm import tqdm
 
-        tomo_algorithm, voxel_size_str = tomogram_uri.split("@")
-        voxel_size = float(voxel_size_str)
+        # Resolve the tomogram URI  — expected format: "algorithm@voxel_size"
+        try:
+            _, voxel_size_str = tomogram_uri.split("@")
+            voxel_size = float(voxel_size_str)
+        except ValueError:
+            raise ValueError(f"tomogram_uri must be 'algorithm@voxel_size', got: {tomogram_uri!r}")
+
+        # Resolve the segmentation URI — expected format: "name:user_id/session_id"
+        try:
+            seg_name, rest = seg_uri.split(":")
+            user_id, session_id = rest.split("/")
+        except ValueError:
+            raise ValueError(f"seg_uri must be 'name:user_id/session_id', got: {seg_uri!r}")
 
         root  = copick.from_file(copick_config)
         runs  = root.runs if run_ids is None else [root.get_run(r) for r in run_ids]
@@ -282,9 +290,7 @@ class _NnUNetJobSpec:
     use_mirroring: bool
     copick_config: str
     tomogram_uri: str
-    seg_name: str
-    user_id: str
-    session_id: str
+    seg_uri: str
     run_ids: list = field(default_factory=list)
 
 
@@ -308,9 +314,7 @@ def _nnunet_worker(rank: int, jobs: list):
         predictor.batch_predict(
             copick_config=job.copick_config,
             tomogram_uri=job.tomogram_uri,
-            seg_name=job.seg_name,
-            user_id=job.user_id,
-            session_id=job.session_id,
+            seg_uri=job.seg_uri,
             run_ids=job.run_ids,
         )
 
@@ -364,9 +368,7 @@ class nnUNetPredictor:
         self,
         copick_config: str,
         tomogram_uri: str,
-        seg_name: str,
-        user_id: str = "nnunet",
-        session_id: str = "1",
+        seg_uri: str,
         run_ids=None,
     ):
         """
@@ -379,8 +381,9 @@ class nnUNetPredictor:
         run_ids : list[str] | None
             Specific run names to process.  None = all runs in the project.
         """
-        import torch, copick
+        import torch
         import torch.multiprocessing as mp
+        import copick
 
         world_size = torch.cuda.device_count()
         if world_size < 1:
@@ -395,9 +398,7 @@ class nnUNetPredictor:
             self._get_single_predictor().batch_predict(
                 copick_config=copick_config,
                 tomogram_uri=tomogram_uri,
-                seg_name=seg_name,
-                user_id=user_id,
-                session_id=session_id,
+                seg_uri=seg_uri,
                 run_ids=run_ids,
             )
             return
@@ -416,9 +417,7 @@ class nnUNetPredictor:
                 use_mirroring=self.use_mirroring,
                 copick_config=copick_config,
                 tomogram_uri=tomogram_uri,
-                seg_name=seg_name,
-                user_id=user_id,
-                session_id=session_id,
+                seg_uri=seg_uri,
                 run_ids=shard,
             )
             for shard in shards
@@ -436,20 +435,18 @@ class nnUNetPredictor:
 @click.option('-p', '--plans', required=True, type=click.Path(exists=True), help="Path to nnunet plans.json")
 @click.option('-d', '--dataset', required=True, type=click.Path(exists=True), help="Path to nnunet dataset.json")
 @click.option("-w","--weights", required=True, type=click.Path(exists=True), help="Path to nnunet checkpoint.pth")
-@click.option('-uri', "--uri", type=str, default="wbp@10.0", help="Tomogram URI to predict")
+@click.option('-turi', "--tomo-uri", type=str, default="wbp@10.0", help="Tomogram URI to predict")
 @click.option("--tta", type=bool, default=True, help="Enable mirroring TTA.")
-@click.option("--run-ids", type=str, default=None,
+@click.option("--run-ids", '-runs', type=str, default=None,
               help="CoPick run IDs to predict (as comma-separated list).")
 # Output Arguments
-@click.option('-n', '--name', type=str, required=True, help="Name of Segmentation")
-@click.option('-uid', '--user-id', type=str, default="nnunet", help="User ID")
-@click.option('-sid', '--session-id', type=str, default="1", help="Session ID")
-def cli(config, plans, dataset, uri, weights, tta, run_ids, name, user_id, session_id):
+@click.option('-suri', '--seg-uri', type=str, default='predict:nnunet/1', help="Segmentation URI to write")
+def cli(config, plans, dataset, tomo_uri, weights, tta, run_ids, seg_uri):
     """Run nnUNet inference on CoPick tomograms and write predictions back."""
     
-    run_predict(config, plans, dataset, uri,  weights, tta, run_ids, name, user_id, session_id)
+    run_predict(config, plans, dataset, tomo_uri,  weights, tta, run_ids, seg_uri)
     
-def run_predict(config, plans, dataset, uri, weights, tta, run_ids, name, user_id, session_id):
+def run_predict(config, plans, dataset, tomo_uri, weights, tta, run_ids, seg_uri):
     
     run_ids_list = run_ids.split(',') if run_ids else None   
 
@@ -462,9 +459,7 @@ def run_predict(config, plans, dataset, uri, weights, tta, run_ids, name, user_i
 
     predictor.batch_predict(
         copick_config=config,
-        tomogram_uri=uri,
-        seg_name=name,
-        user_id=user_id,
-        session_id=session_id,
+        tomogram_uri=tomo_uri,
+        seg_uri=seg_uri,
         run_ids=run_ids_list,
     )
