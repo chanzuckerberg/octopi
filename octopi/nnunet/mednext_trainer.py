@@ -35,9 +35,21 @@ def _build_mednext(num_input_channels, num_output_channels, enable_deep_supervis
     )
 
 
+class _MedNeXtTrainerBase(nnUNetTrainer):
+    """Mixin that fixes deep_supervision toggling for MedNeXt models.
+
+    nnUNetTrainer.set_deep_supervision_enabled() assumes the network has a
+    .decoder sub-module, but MedNeXt exposes deep_supervision directly on the
+    top-level model object.
+    """
+
+    def set_deep_supervision_enabled(self, enabled: bool):
+        self.network.deep_supervision = enabled
+
+
 # ── Small (S) ────────────────────────────────────────────────────────────────
 
-class nnUNetTrainerMedNeXtS_kernel3(nnUNetTrainer):
+class nnUNetTrainerMedNeXtS_kernel3(_MedNeXtTrainerBase):
     @staticmethod
     def build_network_architecture(plans_manager, configuration_manager,
                                    num_input_channels, num_output_channels,
@@ -50,7 +62,7 @@ class nnUNetTrainerMedNeXtS_kernel3(nnUNetTrainer):
         )
 
 
-class nnUNetTrainerMedNeXtS_kernel5(nnUNetTrainer):
+class nnUNetTrainerMedNeXtS_kernel5(_MedNeXtTrainerBase):
     @staticmethod
     def build_network_architecture(plans_manager, configuration_manager,
                                    num_input_channels, num_output_channels,
@@ -65,7 +77,7 @@ class nnUNetTrainerMedNeXtS_kernel5(nnUNetTrainer):
 
 # ── Base (B) ─────────────────────────────────────────────────────────────────
 
-class nnUNetTrainerMedNeXtB_kernel3(nnUNetTrainer):
+class nnUNetTrainerMedNeXtB_kernel3(_MedNeXtTrainerBase):
     @staticmethod
     def build_network_architecture(plans_manager, configuration_manager,
                                    num_input_channels, num_output_channels,
@@ -78,7 +90,7 @@ class nnUNetTrainerMedNeXtB_kernel3(nnUNetTrainer):
         )
 
 
-class nnUNetTrainerMedNeXtB_kernel5(nnUNetTrainer):
+class nnUNetTrainerMedNeXtB_kernel5(_MedNeXtTrainerBase):
     @staticmethod
     def build_network_architecture(plans_manager, configuration_manager,
                                    num_input_channels, num_output_channels,
@@ -93,7 +105,7 @@ class nnUNetTrainerMedNeXtB_kernel5(nnUNetTrainer):
 
 # ── Medium (M) ───────────────────────────────────────────────────────────────
 
-class nnUNetTrainerMedNeXtM_kernel3(nnUNetTrainer):
+class nnUNetTrainerMedNeXtM_kernel3(_MedNeXtTrainerBase):
     @staticmethod
     def build_network_architecture(plans_manager, configuration_manager,
                                    num_input_channels, num_output_channels,
@@ -107,7 +119,7 @@ class nnUNetTrainerMedNeXtM_kernel3(nnUNetTrainer):
         )
 
 
-class nnUNetTrainerMedNeXtM_kernel5(nnUNetTrainer):
+class nnUNetTrainerMedNeXtM_kernel5(_MedNeXtTrainerBase):
     @staticmethod
     def build_network_architecture(plans_manager, configuration_manager,
                                    num_input_channels, num_output_channels,
@@ -123,7 +135,7 @@ class nnUNetTrainerMedNeXtM_kernel5(nnUNetTrainer):
 
 # ── Large (L) ────────────────────────────────────────────────────────────────
 
-class nnUNetTrainerMedNeXtL_kernel3(nnUNetTrainer):
+class nnUNetTrainerMedNeXtL_kernel3(_MedNeXtTrainerBase):
     @staticmethod
     def build_network_architecture(plans_manager, configuration_manager,
                                    num_input_channels, num_output_channels,
@@ -137,7 +149,7 @@ class nnUNetTrainerMedNeXtL_kernel3(nnUNetTrainer):
         )
 
 
-class nnUNetTrainerMedNeXtL_kernel5(nnUNetTrainer):
+class nnUNetTrainerMedNeXtL_kernel5(_MedNeXtTrainerBase):
     @staticmethod
     def build_network_architecture(plans_manager, configuration_manager,
                                    num_input_channels, num_output_channels,
