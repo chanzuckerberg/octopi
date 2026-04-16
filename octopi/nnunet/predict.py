@@ -52,6 +52,52 @@ def _checkpoint_paths(model_folder: str, folds: tuple, checkpoint_name: str) -> 
     return paths
 
 
+# ── trainer class resolution ─────────────────────────────────────────────────
+
+def _resolve_trainer_class(trainer_name: str):
+    """
+    Return the trainer class for the given name.
+
+    For standard nnUNet trainers we do a direct import (fast).
+    For MedNeXt trainers we fall back to recursive_find_python_class, which
+    scans the trainer directory — slow (~30-60 s) but only needed once per
+    session and only when a MedNeXt checkpoint is used.
+    """
+    # Fast path: standard nnUNet trainers
+    _DIRECT = {
+        "nnUNetTrainer": "nnunetv2.training.nnUNetTrainer.nnUNetTrainer",
+        "nnUNetTrainerNoMirroring": "nnunetv2.training.nnUNetTrainer.variants.training_length_and_nsteps.nnUNetTrainerNoMirroring",
+    }
+    if trainer_name in _DIRECT:
+        module_path, _, class_name = _DIRECT[trainer_name].rpartition(".")
+        import importlib
+        mod = importlib.import_module(module_path)
+        return getattr(mod, class_name)
+
+    # MedNeXt trainers live in the file we copy into nnunetv2's trainer dir
+    if "MedNeXt" in trainer_name:
+        try:
+            from nnunetv2.training.nnUNetTrainer.variants import nnUNetTrainerMedNeXt as _mn_mod
+            return getattr(_mn_mod, trainer_name)
+        except (ImportError, AttributeError):
+            pass
+
+    # Slow fallback: walk every .py in the trainer tree (original nnUNet approach)
+    import nnunetv2, os
+    from nnunetv2.utilities.find_class_by_name import recursive_find_python_class
+    cls = recursive_find_python_class(
+        os.path.join(nnunetv2.__path__[0], "training", "nnUNetTrainer"),
+        trainer_name,
+        "nnunetv2.training.nnUNetTrainer",
+    )
+    if cls is None:
+        raise RuntimeError(
+            f"Trainer class '{trainer_name}' not found. "
+            "For MedNeXt models, run `octopi nnunet train` once to register the trainer."
+        )
+    return cls
+
+
 # ── predictor ────────────────────────────────────────────────────────────────
 
 class nnUNetPredictor:
@@ -88,7 +134,6 @@ class nnUNetPredictor:
         import nnunetv2
         from nnunetv2.inference.predict_from_raw_data import nnUNetPredictor as _Pred
         from nnunetv2.utilities.plans_handling.plans_handler import PlansManager
-        from nnunetv2.utilities.find_class_by_name import recursive_find_python_class
         from nnunetv2.utilities.label_handling.label_handling import determine_num_input_channels
         import os
 
@@ -121,16 +166,7 @@ class nnUNetPredictor:
         configuration_manager = plans_manager.get_configuration(configuration_name)
 
         # ── build network ────────────────────────────────────────────────────
-        trainer_class = recursive_find_python_class(
-            os.path.join(nnunetv2.__path__[0], "training", "nnUNetTrainer"),
-            trainer_name,
-            "nnunetv2.training.nnUNetTrainer",
-        )
-        if trainer_class is None:
-            raise RuntimeError(
-                f"Trainer class '{trainer_name}' not found in nnunetv2.training.nnUNetTrainer. "
-                "For MedNeXt models, run `octopi nnunet train` once to register the trainer."
-            )
+        trainer_class = _resolve_trainer_class(trainer_name)
 
         num_input_channels  = determine_num_input_channels(plans_manager, configuration_manager, dataset_dict)
         num_output_channels = plans_manager.get_label_manager(dataset_dict).num_segmentation_heads
