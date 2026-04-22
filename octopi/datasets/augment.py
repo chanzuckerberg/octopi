@@ -28,31 +28,6 @@ def get_transforms():
         Orientationd(keys=["image", "label"], axcodes="RAS")
     ])
 
-def _pos_neg_from_bg_ratio(bg_ratio: float, max_pos: int = 9):
-    """
-
-    Input:
-        bg_ratio: float in (0, 1]
-        max_pos: int, maximum number of positive samples
-
-    bg_ratio in (0, 1]
-      bg_ratio = 1.0 -> pos=1, neg=1  (50/50)
-      bg_ratio = 0.5 -> pos=2, neg=1  (66/33)
-      bg_ratio = 0.25-> pos=4, neg=1  (80/20)   
-      smaller bg_ratio -> higher pos relative to neg (more foreground bias)
-
-    max_pos caps the foreground weight so bg_ratio near 0 doesn't explode.
-    """
-    if not (0.0 < bg_ratio <= 1.0):
-        raise ValueError(f"bg_ratio must be in (0, 1], got {bg_ratio}")
-
-    neg = 1
-    pos = int(round(1.0 / bg_ratio))
-
-    # clamp to avoid absurd ratios
-    pos = max(1, min(pos, max_pos))
-    return pos, neg
-
 def get_random_transforms( input_dim, num_samples, Nclasses, bg_ratio: float = 0.0):
     """
     Input:
@@ -72,26 +47,17 @@ def get_random_transforms( input_dim, num_samples, Nclasses, bg_ratio: float = 0
     if not (0.0 <= bg_ratio <= 1.0):
         raise ValueError(f"bg_ratio must be in [0,1], got {bg_ratio}")
 
-    # Determine the cropping strategy based on bg_ratio
-    if bg_ratio: 
-        # Mixed pos/neg crops: include some background (neg) 
-        # but never more than foreground (pos)    
-        pos, neg = _pos_neg_from_bg_ratio(bg_ratio)
-        crop = RandCropByPosNegLabeld(
-            keys=['image', 'label'],
-            label_key="label",
-            spatial_size=[input_dim[0], input_dim[1], input_dim[2]],     
-            pos=pos, neg=neg,
-            num_samples=num_samples
-        )
-    else: # Provide Crops Based on Label Classes
-        crop = RandCropByLabelClassesd(
-            keys=["image", "label"],
-            label_key="label",
-            spatial_size=[input_dim[0], input_dim[1], input_dim[2]],     
-            num_classes=Nclasses,
-            num_samples=num_samples
-        )
+    # bg_ratio controls background fraction; foreground classes are sampled equally
+    if bg_ratio > 0:
+        fg_ratio = (1 - bg_ratio) / (Nclasses - 1)
+        ratios = [bg_ratio] + [fg_ratio] * (Nclasses - 1)
+    else:
+        ratios = None  # equal sampling across all classes
+    crop = RandCropByLabelClassesd(
+        keys=["image", "label"], label_key="label",
+        spatial_size=[input_dim[0], input_dim[1], input_dim[2]],
+        num_classes=Nclasses, num_samples=num_samples, ratios=ratios
+    )
 
     # Random Affine Transform
     rot = RandAffined(

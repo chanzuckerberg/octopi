@@ -83,52 +83,36 @@ class ModelTrainer:
     @torch.no_grad()
     def validate_update(self):
         """
-        Perform validation and compute metrics, including validation loss.
-        """        
-
-        # Set model to evaluation mode
+        Validate patch-by-patch. GridPatchDataset yields individual patches so
+        the DataLoader batches them directly — no manual sub-batching needed.
+        """
         self.model.eval()
         val_loss = 0
-        with torch.amp.autocast(device_type="cuda", dtype=torch.float16):
-            for val_data in self.val_loader:
-                val_inputs = val_data["image"].to(self.device)
-                val_labels = val_data["label"].to(self.device) 
-                
-                # Apply sliding window inference
-                roi = max(128, self.crop_size)  # try setting a set size of 128, 144 or 160?
-                val_outputs = sliding_window_inference(
-                    inputs=val_inputs, 
-                    roi_size=(roi, roi, roi),
-                    sw_batch_size=self.sw_bs,
-                    predictor=self.model, 
-                    overlap=self.overlap,
-                    sw_device=self.device,
-                    device=self.device
-                )
+        n_batches = 0
 
-                del val_inputs
+        for val_data in self.val_loader:
+            batch_in  = val_data["image"].to(self.device)
+            batch_lbl = val_data["label"].to(self.device)
 
-                # Compute the loss for this batch
-                loss = self.loss_function(val_outputs.float(), val_labels)  
-                val_loss += loss.item()  # Accumulate the loss                
+            with torch.amp.autocast(device_type="cuda", dtype=torch.float16):
+                batch_out = self.model(batch_in)
 
-                # Apply post-processing
-                metric_val_outputs = [self.post_pred(i) for i in decollate_batch(val_outputs)]
-                metric_val_labels = [self.post_label(i) for i in decollate_batch(val_labels)]                             
-                
-                # Compute metrics
-                self.metrics_function(y_pred=metric_val_outputs, y=metric_val_labels)             
+            loss = self.loss_function(
+                batch_out.float().detach().cpu(),
+                batch_lbl.detach().cpu()
+            )
+            val_loss += loss.item()
+            n_batches += 1
 
-                del val_labels, val_outputs, metric_val_outputs, metric_val_labels
-            torch.cuda.empty_cache()
+            m_out = [self.post_pred(i) for i in decollate_batch(batch_out)]
+            m_lbl = [self.post_label(i) for i in decollate_batch(batch_lbl)]
+            self.metrics_function(y_pred=m_out, y=m_lbl)
 
-        # # Contains recall, precision, and f1 for each class
+            del batch_in, batch_lbl, batch_out, m_out, m_lbl
+
         metric_values = self.metrics_function.aggregate(reduction='mean_batch')
-
-        # Compute average validation loss and add to metrics dictionary
-        val_loss /= len(self.val_loader)
+        val_loss /= max(n_batches, 1)
         metric_values.append(val_loss)
-
         return metric_values
 
     def train(

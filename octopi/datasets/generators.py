@@ -1,4 +1,7 @@
-from monai.data import DataLoader, SmartCacheDataset, CacheDataset, Dataset
+from monai.data import (
+    DataLoader, SmartCacheDataset, CacheDataset,
+    GridPatchDataset, PatchIterd, pad_list_data_collate
+)
 from octopi.datasets import helpers as utils
 from monai.transforms import Compose
 from octopi.datasets import augment
@@ -103,7 +106,7 @@ class CopickDataModule:
         num_samples: int = 64,
         train_transforms: Compose = None,
         val_transforms: Compose = None,
-        val_batch_size: int = 1
+        val_batch_size: int = 128
         ):
         """
         Create the training and validation datasets and return the DataLoaders.
@@ -170,22 +173,22 @@ class CopickDataModule:
             for alg in algs
         ]
 
-        # Default Val Transforms for Particle Picking
-        if val_transforms is None:
-            val_transforms = augment.get_transforms()
+        # Load full volumes, then GridPatchDataset yields one patch at a time
+        # so the DataLoader can batch val_batch_size patches per iteration.
+        # PatchIterd yields (patch_dict, coords) tuples as GridPatchDataset expects.
+        roi = max(128, crop_size)
+        base_val_ds = CacheDataset(data=val_files, transform=augment.get_transforms(), cache_rate=1.0, num_workers=4)
+        patch_iter = PatchIterd(
+            keys=["image", "label"],
+            patch_size=(roi, roi, roi),
+            mode="constant"
+        )
+        val_ds = GridPatchDataset(data=base_val_ds, patch_iter=patch_iter, with_coordinates=False)
 
-        # Create the CacheDataset
-        val_ds = Dataset(
-            data=val_files,                
-            transform=val_transforms,
-            # cache_rate=1.0,          # cache all val items
-            # num_workers=8,           # threads for initial caching
-        )   
-
-        # Create the DataLoader
         val_loader = DataLoader(
-            val_ds, batch_size=val_batch_size, 
-            shuffle=False, num_workers=0, 
+            val_ds, batch_size=val_batch_size,
+            shuffle=False, num_workers=4,
+            collate_fn=pad_list_data_collate,
             pin_memory=torch.cuda.is_available()
         )
 
@@ -365,7 +368,7 @@ class MultiCopickDataModule:
         num_samples: int = 64,
         train_transforms: Compose = None,
         val_transforms: Compose = None,
-        val_batch_size: int = 1,
+        val_batch_size: int = 128,
         ):
         """
         Create the training and validation datasets and return the DataLoaders.
@@ -420,22 +423,22 @@ class MultiCopickDataModule:
             for alg in algs                
         ]
 
-        # Default Val Transforms for Particle Picking
-        if val_transforms is None:
-            val_transforms = augment.get_transforms()
+        # Load full volumes, then GridPatchDataset yields one patch at a time
+        # so the DataLoader can batch val_batch_size patches per iteration.
+        # PatchIterd yields (patch_dict, coords) tuples as GridPatchDataset expects.
+        roi = max(128, crop_size)
+        base_val_ds = CacheDataset(data=val_files, transform=augment.get_transforms(), cache_rate=1.0, num_workers=4)
+        patch_iter = PatchIterd(
+            keys=["image", "label"],
+            patch_size=(roi, roi, roi),
+            mode="constant"
+        )
+        val_ds = GridPatchDataset(data=base_val_ds, patch_iter=patch_iter, with_coordinates=False)
 
-        # Create the CacheDataset
-        val_ds = CacheDataset(
-            data=val_files,                
-            transform=val_transforms,
-            cache_rate=1.0,          # cache all val items
-            num_workers=8,           # threads for initial caching
-        )   
-
-        # Create the DataLoader
         val_loader = DataLoader(
-            val_ds, batch_size=val_batch_size, 
-            shuffle=False, num_workers=0, 
+            val_ds, batch_size=val_batch_size,
+            shuffle=False, num_workers=4,
+            collate_fn=pad_list_data_collate,
             pin_memory=torch.cuda.is_available()
         )
 

@@ -311,6 +311,7 @@ class SubmititExplorer(ExploreSubmitter):
             slurm_mem_per_cpu=f"{self.mem_per_cpu_gb}G",
             slurm_additional_parameters={
                 "gpus": "1",
+                "signal": f"USR1@180", # Send SIGUSR1 3 minutes before timeout (for graceful shutdown)
             },
         )
         if self.gpu_constraint: # Optional GPU Constraint
