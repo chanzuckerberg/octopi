@@ -153,5 +153,48 @@ click.rich_click.OPTION_GROUPS = {
             "name": "Voxel Settings",
             "options": ["--input-voxel-size", "--output-voxel-size"]
         }
-    ],    
+    ],
+    "routines nnunet prepare": [
+        {
+            "name": "Input Arguments",
+            "options": ["--config", "--voxel-size", "--tomo-alg", "--seg-info",
+                        "--train-run-ids", "--test-run-ids"]
+        },
+        {
+            "name": "Output Arguments",
+            "options": ["--dataset-id", "--dataset-name", "--raw"]
+        },
+        {
+            "name": "Parameters",
+            "options": ["--num-workers"]
+        }
+    ],
+    "routines nnunet train": [
+        {
+            "name": "Input/Output Arguments",
+            "options": ["--dataset-id", "--dataset-name", "--raw", "--preprocessed", "--results"]
+        },
+        {
+            "name": "Training Arguments",
+            "options": ["--configuration", "--folds", "--model", "--num-gpus"]
+        },
+        {
+            "name": "Options",
+            "options": ["--skip-preprocess"]
+        }
+    ],
+    "routines nnunet segment": [
+        {
+            "name": "Input Arguments",
+            "options": ["--config", "--tomo-uri", "--run-ids"]
+        },
+        {
+            "name": "Model Arguments",
+            "options": ["--plans", "--dataset", "--weights"]
+        },
+        {
+            "name": "Inference Arguments",
+            "options": ["--seg-uri", "--tta"]
+        }
+    ],
 }

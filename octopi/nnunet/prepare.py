@@ -13,6 +13,7 @@ Reads tomograms and segmentation masks from CoPick and writes them as
 """
 import rich_click as click
 import numpy as np
+from octopi.utils import parsers
 
 def run_to_case_id(run_name: str) -> str:
     """Sanitize a CoPick run name into a valid nnUNet case identifier."""
@@ -152,7 +153,8 @@ def convert(cfg: dict):
     # Training cases
     n_training = 0
     skipped    = []
-    print(f"Converting {len(train_run_ids)} training runs (num_workers={num_workers})...")
+    print(f"Attempting to convert {len(train_run_ids)} training runs "
+          f"(tomo={vol_uri}, seg={seg_uri}, num_workers={num_workers})...")
     train_args = [
         (run_name, root, vol_uri, seg_uri, voxel_size, images_tr, labels_tr)
         for run_name in train_run_ids
@@ -166,6 +168,13 @@ def convert(cfg: dict):
             else:
                 print(f"  [SKIP] {err}")
                 skipped.append(run_name)
+
+    if n_training == 0:
+        import sys
+        print(f"\n[ERROR] No training cases were written. "
+              f"Check that runs have both a tomogram matching '{vol_uri}' "
+              f"and a segmentation matching '{seg_uri}'.")
+        sys.exit(1)
 
     # Test cases (images only — no labels written)
     if test_run_ids:
@@ -200,23 +209,52 @@ def convert(cfg: dict):
 
 
 @click.command("prepare", no_args_is_help=True)
-@click.option(
-    "-c", "--config",
-    required=True,
-    type=click.Path(exists=True),
-    help="Path to nnunet config.yaml",
-)
-@click.option(
-    "-j", "--num-workers",
-    default=4,
-    show_default=True,
-    type=int,
-    help="Number of parallel worker threads for converting tomograms.",
-)
-def cli(config, num_workers):
+# Input Arguments
+@click.option("-c", "--config", required=True, type=click.Path(exists=True),
+              help="Path to copick config.json")
+@click.option("-vs", "--voxel-size", type=float, default=10.0, show_default=True,
+              help="Voxel size of tomograms in Angstroms")
+@click.option("-alg", "--tomo-alg", type=str, default="wbp", show_default=True,
+              help="Tomogram algorithm (e.g. wbp, denoised)")
+@click.option("-seginfo", "--seg-info", type=str, default="paintedPicks,octopi,1",
+              callback=lambda ctx, param, value: parsers.parse_target(value) if value else value,
+              help="Segmentation info as 'name,user_id,session_id'")
+@click.option("-truns", "--train-run-ids", type=str, default=None,
+              callback=lambda ctx, param, value: parsers.parse_list(value) if value else None,
+              help="Training run IDs, e.g. run1,run2,run3. Default: all runs not in test set.")
+@click.option("-tests", "--test-run-ids", type=str, default=None,
+              callback=lambda ctx, param, value: parsers.parse_list(value) if value else None,
+              help="Test run IDs, e.g. run4,run5")
+# Output Arguments
+@click.option("-did", "--dataset-id", type=int, required=True,
+              help="nnUNet dataset ID (integer; becomes Dataset{id}_{name})")
+@click.option("-dname", "--dataset-name", type=str, required=True,
+              help="nnUNet dataset name")
+@click.option("-raw", "--raw", "nnunet_raw", type=click.Path(), required=True,
+              help="Path to nnunet_raw output directory")
+@click.option("-j", "--num-workers", default=4, show_default=True, type=int,
+              help="Number of parallel worker threads for converting tomograms.")
+def cli(config, voxel_size, tomo_alg, seg_info, train_run_ids, test_run_ids,
+        dataset_id, dataset_name, nnunet_raw, num_workers):
     """Convert a CoPick project to nnUNet raw dataset format (imagesTr / labelsTr / imagesTs)."""
-    from octopi.nnunet.utils import _load_config
+    seg_name, user_id, session_id = seg_info
+    if user_id is None:
+        user_id = "octopi"
+    if session_id is None:
+        session_id = "1"
 
-    cfg = _load_config(config)
-    cfg["num_workers"] = num_workers
+    cfg = {
+        "copick_config":          config,
+        "tomo_algorithm":         tomo_alg,
+        "voxel_size":             voxel_size,
+        "segmentation_name":      seg_name,
+        "segmentation_user_id":   user_id,
+        "segmentation_session_id": session_id,
+        "dataset_id":             dataset_id,
+        "dataset_name":           dataset_name,
+        "nnunet_raw":             nnunet_raw,
+        "train_run_ids":          train_run_ids or [],
+        "test_run_ids":           test_run_ids or [],
+        "num_workers":            num_workers,
+    }
     convert(cfg)

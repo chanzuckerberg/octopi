@@ -7,12 +7,10 @@ def cli():
     pass
 
 
-from octopi.nnunet.config import cli as config_cli    # noqa: E402
 from octopi.nnunet.prepare import cli as prepare_cli  # noqa: E402
 from octopi.nnunet.train import cli as train_cli      # noqa: E402
 from octopi.nnunet.predict import cli as predict_cli  # noqa: E402
 
-cli.add_command(config_cli, "config")
 cli.add_command(prepare_cli, "prepare")
 cli.add_command(train_cli, "train")
 cli.add_command(predict_cli, "segment")

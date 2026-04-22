@@ -21,6 +21,7 @@ Supported models (--model flag):
 """
 
 import rich_click as click
+from octopi.utils import parsers
 
 # MedNeXt trainers require: pip install git+https://github.com/MIC-DKFZ/MedNeXt.git
 # Trainer classes are defined in octopi/nnunet/mednext_trainer.py and auto-registered
@@ -156,38 +157,46 @@ def train(cfg: dict, env: dict, model: str, trainer: str, num_gpus: int = 1):
 
 
 @click.command("train", no_args_is_help=True)
-@click.option(
-    "-c", "--config",
-    required=True,
-    type=click.Path(exists=True),
-    help="Path to nnunet config.yaml",
-)
-@click.option(
-    "--model",
-    type=click.Choice(list(MODEL_TO_TRAINER)),
-    default=None,
-    help="Model to train (overrides config.yaml). MedNeXt requires nnunet-mednext.",
-)
-@click.option(
-    "--skip-preprocess",
-    is_flag=True,
-    default=False,
-    help="Skip nnUNetv2_plan_and_preprocess (useful if already done).",
-)
-@click.option(
-    "--num-gpus",
-    default=1,
-    show_default=True,
-    type=int,
-    help="Number of GPUs for distributed training (uses nnUNet's native -num_gpus flag).",
-)
-def cli(config, model, skip_preprocess, num_gpus):
+# Input/Output Arguments
+@click.option("-did", "--dataset-id", type=int, required=True,
+              help="nnUNet dataset ID (must match the one used in prepare)")
+@click.option("-dname", "--dataset-name", type=str, required=True,
+              help="nnUNet dataset name (must match the one used in prepare)")
+@click.option("-raw", "--raw", "nnunet_raw", type=click.Path(), required=True,
+              help="Path to nnunet_raw directory")
+@click.option("-pre", "--preprocessed", type=click.Path(), required=True,
+              help="Path to nnunet_preprocessed directory")
+@click.option("-res", "--results", type=click.Path(), required=True,
+              help="Path to nnunet_results directory")
+# Training Arguments
+@click.option("-cfg", "--configuration",
+              type=click.Choice(["3d_fullres", "3d_lowres", "3d_cascade_fullres"]),
+              default="3d_fullres", show_default=True,
+              help="nnUNet configuration to train")
+@click.option("-folds", "--folds", type=str, default="0", show_default=True,
+              callback=lambda ctx, param, value: parsers.parse_int_list(value) if value else [0],
+              help="Folds to train, e.g. 0 or 0,1,2,3,4")
+@click.option("--model", type=click.Choice(list(MODEL_TO_TRAINER)), default="nnunet",
+              show_default=True,
+              help="Model architecture to train. MedNeXt variants require nnunet-mednext.")
+@click.option("--skip-preprocess", is_flag=True, default=False,
+              help="Skip nnUNetv2_plan_and_preprocess (useful if already done).")
+@click.option("-ngpus", "--num-gpus", default=1, show_default=True, type=int,
+              help="Number of GPUs for distributed training.")
+def cli(dataset_id, dataset_name, nnunet_raw, preprocessed, results,
+        configuration, folds, model, skip_preprocess, num_gpus):
     """Plan, preprocess, and train nnUNet on a CoPick dataset."""
-    from octopi.nnunet.utils import _load_config
-
-    cfg             = _load_config(config)
-    env             = set_nnunet_env(cfg)
-    model, trainer  = resolve_trainer(cfg, model)
+    cfg = {
+        "dataset_id":          dataset_id,
+        "dataset_name":        dataset_name,
+        "nnunet_raw":          nnunet_raw,
+        "nnunet_preprocessed": preprocessed,
+        "nnunet_results":      results,
+        "configuration":       configuration,
+        "folds":               folds,
+    }
+    env            = set_nnunet_env(cfg)
+    model, trainer = resolve_trainer(cfg, model)
 
     if not skip_preprocess:
         plan_and_preprocess(cfg, env, model)
