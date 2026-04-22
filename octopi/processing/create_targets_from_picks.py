@@ -6,6 +6,29 @@ from typing import List
 from tqdm import tqdm
 import numpy as np
 
+
+def align_seg_to_target(segvol, target_shape, run_id, seg_name, tol=4):
+    """Corner-align segvol to target_shape via zero-pad and/or crop.
+
+    Assumes both volumes share the (0,0,0) corner in physical space (the
+    copick/zarr convention). Rejects mismatches larger than `tol` voxels
+    on any axis, since those indicate a real extent difference rather
+    than FFT/binning rounding.
+    """
+    diffs = np.array(target_shape) - np.array(segvol.shape)
+    if np.any(np.abs(diffs) > tol):
+        raise ValueError(
+            f'Run {run_id}: segmentation "{seg_name}" shape {segvol.shape} '
+            f'differs from tomogram {tuple(target_shape)} by {diffs.tolist()} '
+            f'voxels (> tolerance {tol}). Origin alignment cannot be assumed '
+            f'— regenerate the segmentation against this tomogram.'
+        )
+    pad = [(0, max(d, 0)) for d in diffs]
+    segvol = np.pad(segvol, pad, mode='constant', constant_values=0)
+    slices = tuple(slice(0, t) for t in target_shape)
+    return segvol[slices]
+
+
 def print_target_summary(train_targets: dict, target_segmentation_name: str, maxval: int):
     """
     Print a summary of the target volume structure.
@@ -111,6 +134,15 @@ def generate_targets(
         for seg in query_seg:
             classLabel = train_targets[seg.name]['label']
             segvol = seg.numpy()
+            if segvol.shape != target.shape:
+                try:
+                    segvol = align_seg_to_target(segvol, target.shape, runID, seg.name)
+                    tqdm.write(
+                        f'ℹ️  Padded/cropped "{seg.name}" in run {runID} to match tomogram.'
+                    )
+                except ValueError as e:
+                    tqdm.write(f'⚠️  Skipping: {e}')
+                    continue
             # Set all non-zero values to the class label
             segvol[segvol > 0] = classLabel
             target = np.maximum(target, segvol)
