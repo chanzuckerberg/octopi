@@ -1,7 +1,7 @@
 from monai.losses import FocalLoss, TverskyLoss
 from octopi.utils import losses
 from octopi.models import (
-    Unet, AttentionUnet, MedNeXt, SegResNet, SwinUNETR
+    Unet, SwinUNETR
 )
 
 def get_model(architecture):
@@ -9,16 +9,10 @@ def get_model(architecture):
     # Initialize model based on architecture
     if architecture == "Unet":
         model = Unet.myUNet()
-    elif architecture == "AttentionUnet":
-        model = AttentionUnet.myAttentionUnet()
-    elif architecture == "MedNeXt":
-        model = MedNeXt.myMedNeXt()
-    elif architecture == "SegResNet":
-        model = SegResNet.mySegResNet()
     elif architecture == "SwinUNETR":
         model = SwinUNETR.mySwinUNETR()
     else:
-        raise ValueError(f"Model type {architecture} not supported!\nPlease use one of the following: Unet, AttentionUnet, MedNeXt, SegResNet, SwinUNETR")
+        raise ValueError(f"Model type {architecture} not supported!\nPlease use one of the following: Unet, SwinUNETR")
 
     return model
 

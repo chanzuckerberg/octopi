@@ -83,8 +83,6 @@ class mySwinUNETR:
             (2, 4, 4, 4),   # medium-large
             (4, 4, 4, 4),   # large
             (4, 4, 8, 4),   # large (deep bottleneck)
-            (4, 8, 8, 4),   # extra large
-            (4, 8, 8, 8),   # extra large (deep decoder)
         ])
 
         drop_rate         = trial.suggest_float("drop_rate", 0.0, 0.3)
