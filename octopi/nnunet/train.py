@@ -158,7 +158,7 @@ def train(cfg: dict, env: dict, model: str, trainer: str, num_gpus: int = 1):
 
 @click.command("train", no_args_is_help=True)
 # Input/Output Arguments
-@click.option("-did", "--dataset-id", type=int, required=True,
+@click.option("-did", "--dataset-id", type=int, required=False, default=1,
               help="nnUNet dataset ID (must match the one used in prepare)")
 @click.option("-dname", "--dataset-name", type=str, required=True,
               help="nnUNet dataset name (must match the one used in prepare)")

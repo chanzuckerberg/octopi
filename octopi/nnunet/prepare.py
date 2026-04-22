@@ -117,11 +117,9 @@ def convert(cfg: dict):
     import json
 
     copick_cfg   = cfg["copick_config"]
-    tomo_alg     = cfg["tomo_algorithm"]
-    voxel_size   = cfg["voxel_size"]
-    seg_name     = cfg["segmentation_name"]
-    user_id      = cfg.get("segmentation_user_id", "octopi")
-    session_id   = cfg.get("segmentation_session_id", "1")
+    tomo_uri     = cfg["tomo_uri"]
+    voxel_size   = float(tomo_uri.split("@")[1])
+    seg_name, user_id, session_id = cfg["seg_info"]
     num_workers  = cfg.get("num_workers", 4)
 
     train_run_ids = [str(r) for r in (cfg.get("train_run_ids") or [])]
@@ -131,7 +129,7 @@ def convert(cfg: dict):
     dataset_name = cfg["dataset_name"]
     nnunet_raw   = Path(cfg["nnunet_raw"])
 
-    vol_uri = f"{tomo_alg}@{voxel_size}"
+    vol_uri = tomo_uri
     seg_uri = build_target_uri(seg_name, session_id, user_id, voxel_size)
 
     dataset_dir = nnunet_raw / f"Dataset{dataset_id:03d}_{dataset_name}"
@@ -212,13 +210,11 @@ def convert(cfg: dict):
 # Input Arguments
 @click.option("-c", "--config", required=True, type=click.Path(exists=True),
               help="Path to copick config.json")
-@click.option("-vs", "--voxel-size", type=float, default=10.0, show_default=True,
-              help="Voxel size of tomograms in Angstroms")
-@click.option("-alg", "--tomo-alg", type=str, default="wbp", show_default=True,
-              help="Tomogram algorithm (e.g. wbp, denoised)")
-@click.option("-seginfo", "--seg-info", type=str, default="paintedPicks,octopi,1",
+@click.option("-uri", "--tomo-uri", type=str, default="wbp@10.0",
+              help="Tomogram URI to use for training")
+@click.option("-sinfo", "--seg-info", type=str, default="targets",
               callback=lambda ctx, param, value: parsers.parse_target(value) if value else value,
-              help="Segmentation info as 'name,user_id,session_id'")
+              help="Segmentation info as 'name' or 'name,user_id,session_id'")
 @click.option("-truns", "--train-run-ids", type=str, default=None,
               callback=lambda ctx, param, value: parsers.parse_list(value) if value else None,
               help="Training run IDs, e.g. run1,run2,run3. Default: all runs not in test set.")
@@ -226,7 +222,7 @@ def convert(cfg: dict):
               callback=lambda ctx, param, value: parsers.parse_list(value) if value else None,
               help="Test run IDs, e.g. run4,run5")
 # Output Arguments
-@click.option("-did", "--dataset-id", type=int, required=True,
+@click.option("-did", "--dataset-id", type=int, required=False, default=1,
               help="nnUNet dataset ID (integer; becomes Dataset{id}_{name})")
 @click.option("-dname", "--dataset-name", type=str, required=True,
               help="nnUNet dataset name")
@@ -234,22 +230,14 @@ def convert(cfg: dict):
               help="Path to nnunet_raw output directory")
 @click.option("-j", "--num-workers", default=4, show_default=True, type=int,
               help="Number of parallel worker threads for converting tomograms.")
-def cli(config, voxel_size, tomo_alg, seg_info, train_run_ids, test_run_ids,
+def cli(config, tomo_uri, seg_info, train_run_ids, test_run_ids,
         dataset_id, dataset_name, nnunet_raw, num_workers):
     """Convert a CoPick project to nnUNet raw dataset format (imagesTr / labelsTr / imagesTs)."""
-    seg_name, user_id, session_id = seg_info
-    if user_id is None:
-        user_id = "octopi"
-    if session_id is None:
-        session_id = "1"
 
     cfg = {
         "copick_config":          config,
-        "tomo_algorithm":         tomo_alg,
-        "voxel_size":             voxel_size,
-        "segmentation_name":      seg_name,
-        "segmentation_user_id":   user_id,
-        "segmentation_session_id": session_id,
+        "tomo_uri":               tomo_uri,
+        "seg_info":               seg_info,
         "dataset_id":             dataset_id,
         "dataset_name":           dataset_name,
         "nnunet_raw":             nnunet_raw,
