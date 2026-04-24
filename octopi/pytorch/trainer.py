@@ -1,5 +1,6 @@
 from octopi.utils import visualization_tools as viz
 from monai.inferers import sliding_window_inference
+from octopi.pytorch.train_helper import auto_amp
 from octopi.utils import stopping_criteria
 import torch, os, mlflow, re, optuna, time
 from monai.transforms import AsDiscrete
@@ -39,6 +40,16 @@ class ModelTrainer:
         if self.ema_experiment:
             self.ema_handler = ema.ExponentialMovingAverage(self.model.parameters(), decay=0.995)
 
+        # Mixed precision: bf16 on Ampere+, fp16+GradScaler on Volta/Turing, off otherwise.
+        self.amp_enabled, self.amp_dtype, self.scaler = auto_amp(self.device)
+
+        # Let TF32 accelerate fp32 matmuls on Ampere+, and let cuDNN pick the
+        # fastest conv algorithm for this input shape (shapes are fixed here
+        # since we crop to a constant patch size).
+        if self.device.type == "cuda":
+            torch.set_float32_matmul_precision("high")
+            torch.backends.cudnn.benchmark = True
+
         # Initialize Figure and Axes for Plotting
         self.fig = None; self.axs = None
 
@@ -61,13 +72,25 @@ class ModelTrainer:
         self.model.train()
         for batch_data in self.train_loader:
             step += 1
-            inputs = batch_data["image"].to(self.device)  # Shape: [B, C, H, W, D]
-            labels = batch_data["label"].to(self.device)  # Shape: [B, C, H, W, D]
-            self.optimizer.zero_grad()
-            outputs = self.model(inputs)    # Output shape: [B, num_classes, H, W, D] 
-            loss = self.loss_function(outputs, labels)
-            loss.backward()
-            self.optimizer.step()
+            inputs = batch_data["image"].to(self.device, non_blocking=True)  # [B, C, H, W, D]
+            labels = batch_data["label"].to(self.device, non_blocking=True)  # [B, C, H, W, D]
+            self.optimizer.zero_grad(set_to_none=True)
+
+            with torch.amp.autocast(
+                device_type=self.device.type,
+                dtype=self.amp_dtype,
+                enabled=self.amp_enabled,
+            ):
+                outputs = self.model(inputs)    # [B, num_classes, H, W, D]
+                loss = self.loss_function(outputs, labels)
+
+            if self.scaler is not None:
+                self.scaler.scale(loss).backward()
+                self.scaler.step(self.optimizer)
+                self.scaler.update()
+            else:
+                loss.backward()
+                self.optimizer.step()
 
             # Update EMA weights
             if self.ema_experiment:
@@ -91,16 +114,21 @@ class ModelTrainer:
         n_batches = 0
 
         for val_data in self.val_loader:
-            batch_in  = val_data["image"].to(self.device)
-            batch_lbl = val_data["label"].to(self.device)
+            batch_in  = val_data["image"].to(self.device, non_blocking=True)
+            batch_lbl = val_data["label"].to(self.device, non_blocking=True)
 
-            with torch.amp.autocast(device_type="cuda", dtype=torch.float16):
+            with torch.amp.autocast(
+                device_type=self.device.type,
+                dtype=self.amp_dtype,
+                enabled=self.amp_enabled,
+            ):
                 batch_out = self.model(batch_in)
 
-            loss = self.loss_function(
-                batch_out.float().detach().cpu(),
-                batch_lbl.detach().cpu()
-            )
+            # Keep loss computation on GPU: the old path did a round-trip to
+            # CPU per batch (~2-4 GB transfer) and forced a GPU sync, which
+            # was the dominant cost of validation. .float() upcasts bf16/fp16
+            # output to fp32 for numeric stability in TverskyLoss.
+            loss = self.loss_function(batch_out.float(), batch_lbl)
             val_loss += loss.item()
             n_batches += 1
 

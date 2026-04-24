@@ -1,6 +1,26 @@
 from octopi.datasets import io as dio
 from collections.abc import Mapping
 from octopi.utils import io as io
+import os
+
+def auto_num_workers(cap: int = 16, min_workers: int = 1) -> int:
+    """
+    Pick a DataLoader worker count that respects the CPUs actually available
+    to this process.
+
+    On Linux this uses ``os.sched_getaffinity`` so SLURM ``--cpus-per-task``
+    bindings are honoured. Elsewhere it falls back to ``os.cpu_count``. The
+    result is clamped to ``cap`` since past ~16 workers gains are usually
+    noise for a 3D UNet with cached datasets, and each worker adds ~1-2 GB
+    of RAM overhead.
+
+    The cap only clamps from above: a 4-core laptop still gets 4 workers.
+    """
+    try:
+        n = len(os.sched_getaffinity(0))
+    except AttributeError:
+        n = 4 # default to small number on non-slurm platforms
+    return max(min_workers, min(cap, n))
 
 def scan_runs(
     *,
