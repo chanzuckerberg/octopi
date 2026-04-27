@@ -150,13 +150,16 @@ class single_gpu_nnUNetPredictor:
         num_input_channels  = determine_num_input_channels(plans_manager, configuration_manager, dataset_dict)
         num_output_channels = plans_manager.get_label_manager(dataset_dict).num_segmentation_heads
 
-        # nnUNet v2 changed the build_network_architecture signature; handle both
+        # Build with deep_supervision=True so the architecture matches the
+        # checkpoint (MedNeXt omits output-head layers when ds is False,
+        # causing load_state_dict to fail on the extra keys).  We disable
+        # deep supervision after weight loading instead.
         sig = inspect.signature(trainer_class.build_network_architecture)
         if "plans_manager" in sig.parameters:
             network = trainer_class.build_network_architecture(
                 plans_manager, configuration_manager,
                 num_input_channels, num_output_channels,
-                enable_deep_supervision=False,
+                enable_deep_supervision=True,
             )
         else:
             network = trainer_class.build_network_architecture(
@@ -164,8 +167,15 @@ class single_gpu_nnUNetPredictor:
                 configuration_manager.network_arch_init_kwargs,
                 configuration_manager.network_arch_init_kwargs_req_import,
                 num_input_channels, num_output_channels,
-                enable_deep_supervision=False,
+                enable_deep_supervision=True,
             )
+
+        # Disable deep supervision for inference — standard nnUNet uses
+        # network.decoder.deep_supervision; MedNeXt uses network.do_ds.
+        if hasattr(network, 'decoder') and hasattr(network.decoder, 'deep_supervision'):
+            network.decoder.deep_supervision = False
+        elif hasattr(network, 'do_ds'):
+            network.do_ds = False
 
         # ── wire everything into the nnUNet predictor ─────────────────────────
         self._predictor = _Pred(
