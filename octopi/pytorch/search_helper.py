@@ -209,9 +209,15 @@ def run_one_trial(storage_url: str, study_name: str, submit_kwargs: dict):
     walltime_event = threading.Event()
 
     # Define signal handler and register it
-    def _on_sigusr2(signum, frame):
+    # SIGUSR1: SLURM pre-timeout warning (via --signal USR1@N)
+    # SIGUSR2: legacy / manual
+    # SIGTERM: SLURM hard cancellation (time limit, scancel)
+    def _on_walltime(signum, frame):
+        print(f"[Trial] Received signal {signum} — setting walltime event for graceful stop.", flush=True)
         walltime_event.set()
-    signal.signal(signal.SIGUSR2, _on_sigusr2)
+    signal.signal(signal.SIGUSR1, _on_walltime)
+    signal.signal(signal.SIGUSR2, _on_walltime)
+    signal.signal(signal.SIGTERM, _on_walltime)
 
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     if torch.cuda.is_available():

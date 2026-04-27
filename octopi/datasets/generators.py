@@ -1,4 +1,7 @@
-from monai.data import DataLoader, SmartCacheDataset, CacheDataset, Dataset
+from monai.data import (
+    DataLoader, SmartCacheDataset, CacheDataset,
+    GridPatchDataset, PatchIterd, pad_list_data_collate
+)
 from octopi.datasets import helpers as utils
 from monai.transforms import Compose
 from octopi.datasets import augment
@@ -103,7 +106,7 @@ class CopickDataModule:
         num_samples: int = 64,
         train_transforms: Compose = None,
         val_transforms: Compose = None,
-        val_batch_size: int = 1
+        val_batch_size: int = 64
         ):
         """
         Create the training and validation datasets and return the DataLoaders.
@@ -141,8 +144,8 @@ class CopickDataModule:
             self.train_ds = SmartCacheDataset(
                 data=train_files,                
                 transform=train_transforms,
-                cache_num=self.tomo_batch_size,  # e.g. 8–64 volumes
-                replace_rate=0.3,                # e.g. 0.2–0.3
+                cache_num=self.tomo_batch_size,  
+                replace_rate=0.15,               
                 num_init_workers=8,
                 num_replace_workers=8,
                 shuffle=False,
@@ -155,11 +158,20 @@ class CopickDataModule:
             )
 
         # Create the DataLoader
+        #
+        # persistent_workers=False is deliberate: with CacheDataset the
+        # tomogram cache lives in the main process and is shared to workers
+        # via copy-on-write. Over many epochs, workers drift toward their
+        # own full copy of the cache (~cache_size per worker), which can
+        # OOM on large worker counts. Re-forking each epoch resets COW.
+        train_nw = utils.auto_num_workers()
         train_loader = DataLoader(
-            self.train_ds, batch_size=1, 
-            shuffle=True, num_workers=4, 
+            self.train_ds, batch_size=1,
+            shuffle=True, num_workers=train_nw,
+            persistent_workers=False,
+            prefetch_factor=4 if train_nw > 0 else None,
             pin_memory=torch.cuda.is_available()
-        )         
+        )
 
         # Create the list of validation files
         val_files = [
@@ -170,22 +182,29 @@ class CopickDataModule:
             for alg in algs
         ]
 
-        # Default Val Transforms for Particle Picking
-        if val_transforms is None:
-            val_transforms = augment.get_transforms()
+        # Load full volumes, then GridPatchDataset yields one patch at a time
+        # so the DataLoader can batch val_batch_size patches per iteration.
+        # PatchIterd yields (patch_dict, coords) tuples as GridPatchDataset expects.
+        roi = max(128, crop_size)
+        base_val_ds = CacheDataset(data=val_files, transform=augment.get_transforms(), cache_rate=1.0, num_workers=4)
+        patch_iter = PatchIterd(
+            keys=["image", "label"],
+            patch_size=(roi, roi, roi),
+            mode="constant"
+        )
+        val_ds = GridPatchDataset(data=base_val_ds, patch_iter=patch_iter, with_coordinates=False)
 
-        # Create the CacheDataset
-        val_ds = Dataset(
-            data=val_files,                
-            transform=val_transforms,
-            # cache_rate=1.0,          # cache all val items
-            # num_workers=8,           # threads for initial caching
-        )   
-
-        # Create the DataLoader
+        # Validation is infrequent and its per-batch tensors are large
+        # (val_batch_size patches at ~roi³). Use fewer workers, default
+        # prefetch, and NO persistent_workers so memory is reclaimed
+        # between validations — otherwise val workers hold GBs of prefetch
+        # idle for all the training epochs between val_interval runs.
+        val_nw = max(1, train_nw // 4)
         val_loader = DataLoader(
-            val_ds, batch_size=val_batch_size, 
-            shuffle=False, num_workers=0, 
+            val_ds, batch_size=val_batch_size,
+            shuffle=False, num_workers=val_nw,
+            persistent_workers=False,
+            collate_fn=pad_list_data_collate,
             pin_memory=torch.cuda.is_available()
         )
 
@@ -365,7 +384,7 @@ class MultiCopickDataModule:
         num_samples: int = 64,
         train_transforms: Compose = None,
         val_transforms: Compose = None,
-        val_batch_size: int = 1,
+        val_batch_size: int = 64,
         ):
         """
         Create the training and validation datasets and return the DataLoaders.
@@ -395,19 +414,28 @@ class MultiCopickDataModule:
         self.train_ds = SmartCacheDataset(
             data=train_files,                
             transform=train_transforms,
-            cache_num=self.tomo_batch_size,  # e.g. 8–64 volumes
-            replace_rate=0.3,                # e.g. 0.2–0.3
+            cache_num=self.tomo_batch_size,  
+            replace_rate=0.15,               
             num_init_workers=8,
             num_replace_workers=8,
             shuffle=False,
         )
 
         # Create the DataLoader
+        #
+        # persistent_workers=False is deliberate: with CacheDataset the
+        # tomogram cache lives in the main process and is shared to workers
+        # via copy-on-write. Over many epochs, workers drift toward their
+        # own full copy of the cache (~cache_size per worker), which can
+        # OOM on large worker counts. Re-forking each epoch resets COW.
+        train_nw = utils.auto_num_workers()
         train_loader = DataLoader(
-            self.train_ds, batch_size=1, 
-            shuffle=True, num_workers=8, 
+            self.train_ds, batch_size=1,
+            shuffle=True, num_workers=train_nw,
+            persistent_workers=False,
+            prefetch_factor=4 if train_nw > 0 else None,
             pin_memory=torch.cuda.is_available()
-        )         
+        )
 
         # Create the list of validation files
         val_files = [
@@ -420,22 +448,29 @@ class MultiCopickDataModule:
             for alg in algs                
         ]
 
-        # Default Val Transforms for Particle Picking
-        if val_transforms is None:
-            val_transforms = augment.get_transforms()
+        # Load full volumes, then GridPatchDataset yields one patch at a time
+        # so the DataLoader can batch val_batch_size patches per iteration.
+        # PatchIterd yields (patch_dict, coords) tuples as GridPatchDataset expects.
+        roi = max(128, crop_size)
+        base_val_ds = CacheDataset(data=val_files, transform=augment.get_transforms(), cache_rate=1.0, num_workers=4)
+        patch_iter = PatchIterd(
+            keys=["image", "label"],
+            patch_size=(roi, roi, roi),
+            mode="constant"
+        )
+        val_ds = GridPatchDataset(data=base_val_ds, patch_iter=patch_iter, with_coordinates=False)
 
-        # Create the CacheDataset
-        val_ds = CacheDataset(
-            data=val_files,                
-            transform=val_transforms,
-            cache_rate=1.0,          # cache all val items
-            num_workers=8,           # threads for initial caching
-        )   
-
-        # Create the DataLoader
+        # Validation is infrequent and its per-batch tensors are large
+        # (val_batch_size patches at ~roi³). Use fewer workers, default
+        # prefetch, and NO persistent_workers so memory is reclaimed
+        # between validations — otherwise val workers hold GBs of prefetch
+        # idle for all the training epochs between val_interval runs.
+        val_nw = max(1, train_nw // 4)
         val_loader = DataLoader(
-            val_ds, batch_size=val_batch_size, 
-            shuffle=False, num_workers=0, 
+            val_ds, batch_size=val_batch_size,
+            shuffle=False, num_workers=val_nw,
+            persistent_workers=False,
+            collate_fn=pad_list_data_collate,
             pin_memory=torch.cuda.is_available()
         )
 

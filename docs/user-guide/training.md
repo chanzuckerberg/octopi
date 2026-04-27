@@ -81,6 +81,9 @@ Octopi supports two complementary workflows:
             | `--background-ratio` | Foreground/background crop sampling ratio. | `0.0` |
             | `--tversky-alpha` | Alpha parameter for the Tversky loss (foreground weighting). | `0.3` |
 
+            !!! tip "Choosing `--ncache-tomos`"
+                Use this parameter when your dataset has more tomograms than can fit into memory at once — only the cached subset is loaded per epoch, keeping memory usage bounded. Values between **8 and 32** are recommended. Higher values expose the model to more diversity per epoch and improve training throughput, but require more RAM.
+
         === "UNet Architecture"
 
             | Parameter | Description | Default |
@@ -163,9 +166,12 @@ Octopi supports two complementary workflows:
             | `--model-type` | Model family used for exploration. | `Unet` | Options: `unet`, `attentionunet`, `mednext`, `segresnet` |
             | `--num-epochs` | Number of epochs per trial. | `1000` | Consider fewer epochs for quick sweeps |
             | `--val-interval` | Validation frequency (every N epochs). | `10` | Smaller = more frequent metrics |
-            | `--ncache-tomos` | Number of tomograms cached per epoch (SmartCache window size). | `15` | Higher may improve throughput if memory allows |
+            | `--ncache-tomos` | Number of tomograms cached per epoch (SmartCache window size). | `15` | Higher values improve throughput but require more memory |
             | `--best-metric` | Metric used to select the best checkpoint (supports `fBetaN`). | `avg_f1` | Example: `fBeta3` emphasizes recall |
             | `--background-ratio` | Foreground/background crop sampling ratio. | `0.0` | `1.0` → 50/50; `<1.0` biases toward foreground |
+
+            !!! tip "Choosing `--ncache-tomos`"
+                Use this parameter when your dataset has more tomograms than can fit into memory at once — only the cached subset is loaded per epoch, keeping memory usage bounded. Values between **8 and 32** are recommended. Higher values expose the model to more diversity per epoch and improve training throughput, but require more RAM.
 
         === "Search / Reproducibility"
 
@@ -390,6 +396,142 @@ Weights are applied in two places:
 
     !!! tip
         Weights only affect the validation metric used for checkpoint selection and the aggregate evaluation score — the loss function and per-class metrics are unaffected.
+
+---
+
+## Compute & Performance
+
+This section covers practical recommendations for allocating compute, diagnosing bottlenecks, and recovering from out-of-memory (OOM) errors. If you're just getting started, the defaults work on most hardware — come back here if you need to tune throughput or hit an OOM.
+
+### Requesting resources
+
+Octopi auto-scales at runtime: it reads `os.sched_getaffinity(0)` to match SLURM's `--cpus-per-task`, detects GPU VRAM and compute capability for mixed precision, and picks between `CacheDataset` and `SmartCacheDataset` based on `--ncache-tomos`. The main lever is **what you ask SLURM for**.
+
+=== "HPC / GPU cluster"
+
+    ```bash
+    #SBATCH --cpus-per-task=16
+    #SBATCH --mem-per-cpu=12G
+    #SBATCH --gpus=1
+    #SBATCH --constraint=[h100|h200|a100]
+    ```
+
+    **16 CPUs** saturates the DataLoader worker pool (cap is 16). **12 GB/CPU → 192 GB total** leaves comfortable headroom for worker copy-on-write drift on large caches. Drop to `8G` if your cluster is tight and you cache fewer than ~15 tomograms.
+
+=== "Workstation (24 GB class GPU)"
+
+    Local workstation with RTX 3090/4090, A5000, etc.:
+
+    - **8–12 CPUs** is enough worker throughput for most datasets.
+    - **64–96 GB system RAM** — budget ~1–2 GB per worker plus ~0.5–2 GB per cached tomogram.
+
+=== "Laptop / small GPU"
+
+    Limited to 8–16 GB VRAM, 16–32 GB system RAM:
+
+    - Lower `--ncache-tomos` so the training cache fits in RAM.
+    - Lower `--batch-size` from 16 → 8 to fit the GPU.
+    - Drop `--dim-in` from 96 → 64 for another ~3.4× activation-memory reduction.
+
+### Recommended knobs by GPU tier
+
+| GPU tier | Examples | `--batch-size` | Mixed precision (auto) | System RAM |
+|---|---|---:|---|---|
+| ≤ 12 GB | RTX 4070, 3060 12 GB, T4 | 8 | fp16 + GradScaler | 16–32 GB |
+| 16 GB | RTX A4000, 4060 Ti 16 GB, V100, L4 | 16 | fp16 / bf16 | 32–64 GB |
+| 24 GB | RTX 4090, 3090, A5000 | 16–32 | bf16 | 64–128 GB |
+| 40–48 GB | A100 40 GB, A6000, L40 | 32–48 | bf16 | 128 GB |
+| ≥ 80 GB | A100 80 GB, H100, H200 | 48–64 | bf16 | 128–192 GB |
+
+Octopi selects mixed precision automatically:
+
+- **bf16** on Ampere and newer (RTX 30xx/40xx, A100, H100, H200) — no gradient scaler needed.
+- **fp16 + `GradScaler`** on Volta/Turing (V100, T4, RTX 20xx).
+- **fp32** on Pascal and older, or on CPU.
+
+### Where memory goes
+
+!!! info "System RAM breakdown"
+
+    | Component | Rough cost | Notes |
+    |---|---|---|
+    | Main process (Python + PyTorch + CUDA) | ~3 GB | Fixed |
+    | Cached training tomograms | ~500 MB – 2 GB each | Depends on volume size and dtype |
+    | Cached validation tomograms | ~500 MB – 2 GB each | Usually 2–6 val tomograms |
+    | Each DataLoader training worker | ~1–2 GB overhead | × `num_workers` |
+    | Worker copy-on-write drift | up to cache size per worker | Accumulates during an epoch, resets when the worker dies |
+    | Validation prefetch | ~1–2 GB × `val_workers` × 2 | Only during validation |
+    | Matplotlib training-curve figure | ~0.5–2 GB | Grows slowly across validations |
+
+    Worst-case RAM peak is usually right *after* the first validation, when validation-only allocations are still resident and training workers re-fork for the next epoch. Size the cgroup for this peak.
+
+!!! info "GPU VRAM breakdown (default UNet at 96³)"
+
+    | Component | Rough cost |
+    |---|---|
+    | CUDA context | ~0.5 GB |
+    | Model weights | 0.05–0.2 GB |
+    | Optimizer state (AdamW, fp32) | 2× model weights |
+    | Activations (bf16, batch 16) | ~3–5 GB |
+    | Activations (bf16, batch 32) | ~8–10 GB |
+    | Validation forward (64 patches at 128³) | ~2 GB transient |
+
+### Diagnosing CPU-bound vs GPU-bound
+
+Run `nvidia-smi dmon -s u -d 2 -c 20` in a second terminal during a training epoch (skip the first — `cudnn.benchmark` autotune and cache init make it unrepresentative).
+
+| `sm` utilization | Interpretation | What to try |
+|---|---|---|
+| >85% sustained | **GPU-bound** — GPU is the limit | Larger `--batch-size`; future `torch.compile` or `channels_last_3d` support |
+| 40–70% with regular dips | **Partially data-bound** — workers can't keep GPU fed | More CPUs, higher `--ncache-tomos` |
+| <30% | **Severely data-bound** | More CPUs, bigger cache, or match your CPU/GPU budget better |
+
+!!! tip "Same epoch time on different GPUs?"
+    If training takes the same wall-clock on an A6000 and an H100, you're definitely data-bound — the GPU never gets a chance to differentiate itself. This is a clean diagnostic.
+
+### Troubleshooting OOMs
+
+=== "RAM OOM"
+
+    Symptoms: `Detected N oom_kill events in StepId=...` from `slurmstepd`, or `DataLoader worker (pid N) killed by signal: Killed` after a few epochs.
+
+    In order of preference:
+
+    1. **Bump `--mem-per-cpu`** — e.g., `8G → 12G` on a 16-CPU allocation adds 64 GB. Cheapest fix.
+    2. **Lower `--ncache-tomos`** — each cached tomogram is copy-on-write-shared to every worker; cache size × worker count is the worst-case drift.
+    3. **Lower `val_batch_size`** — the `CopickDataModule.create` default is 64; drop to 32 if validation OOMs.
+    4. **Lower the training-worker cap** — in `octopi/datasets/helpers.py`, adjust `auto_num_workers(cap=...)` from 16 → 12 → 8. Costs ~15% on epoch throughput but significantly reduces peak RAM.
+    5. **Enable glibc trim** in your SLURM script:
+       ```bash
+       export MALLOC_TRIM_THRESHOLD_=0
+       export MALLOC_ARENA_MAX=2
+       ```
+       Forces the C allocator to return freed memory to the OS more aggressively.
+
+=== "GPU OOM"
+
+    Symptoms: `CUDA out of memory. Tried to allocate ...`.
+
+    In order of preference:
+
+    1. **Lower `--batch-size`** (crops per tomogram) — the biggest GPU VRAM lever. Drop 32 → 16 → 8.
+    2. **Lower `--dim-in`** (crop size) — 96 → 64 cuts activation memory ~3.4×.
+    3. **Lower `val_batch_size`** — from 128 → 64 → 32.
+    4. **Disable EMA** (`use_ema=False` in the API) — saves one model-sized shadow copy.
+    5. **Shrink the model** — e.g., `--channels 32,64,80,80` instead of larger variants.
+
+!!! warning "OOMs that first appear around `val_interval`"
+    The first validation adds a persistent ~5–10 GB baseline (MONAI transform caches, matplotlib figure, larger CUDA pool) that is not released. If you survive epochs 0..N and crash shortly after the first validation at epoch `val_interval`, you're pressing against the cgroup limit. Either bump `--mem-per-cpu` or reduce `val_batch_size`.
+
+### Why memory drifts over epochs
+
+A short explanation of what you're fighting when you hit RAM OOMs after running fine for many epochs:
+
+- **Copy-on-write drift.** When PyTorch forks DataLoader workers, each shares the main-process memory via copy-on-write. Reads are "free" — except in Python, even *reading* an object increments a reference count, which writes to memory. So workers slowly accumulate private copies of the cached tomogram pages they touch. Over one epoch each worker can drift by up to the training cache size. Workers dying at the end of each epoch reclaims it (octopi uses `persistent_workers=False` deliberately for this reason).
+- **Python and glibc keep freed memory.** Freed allocations go to allocator pools, not back to the kernel. From the cgroup's perspective, RSS is roughly monotonically non-decreasing until peak usage.
+- **Validation adds a sticky baseline.** First-time validation expands the CUDA caching allocator, imports code paths for the first time, creates a long-lived matplotlib figure, and builds class-index caches. None of this is released.
+
+Together, these mean main-process RAM grows over the first few epochs and then plateaus. If that plateau + per-epoch worker drift ≈ cgroup limit, you OOM. The fix is more RAM, less drift (fewer workers, smaller cache), or less baseline (smaller `val_batch_size`).
 
 ---
 

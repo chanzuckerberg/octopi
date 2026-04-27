@@ -302,15 +302,27 @@ class SubmititExplorer(ExploreSubmitter):
         log_dir = os.path.join(submit_kwargs["output"], self.submitit_folder)
         os.makedirs(log_dir, exist_ok=True)
         executor = submitit.AutoExecutor(folder=log_dir)
+
+        # When submitting from inside a SLURM allocation (interactive/compute node),
+        # parent env vars leak into child jobs and can conflict with srun.
+        inside_allocation = "SLURM_JOB_ID" in os.environ
+        setup = [
+            "unset SLURM_MEM_PER_GPU SLURM_MEM_PER_NODE",
+            "unset SLURM_NTASKS SLURM_NTASKS_PER_NODE SLURM_TASKS_PER_NODE",
+            "export SLURM_EXPORT_ENV=ALL",
+        ] if inside_allocation else []
+
         executor.update_parameters(
             slurm_partition="gpu",
-            slurm_use_srun = False,
+            slurm_use_srun=True,
             slurm_job_name=study_name,
             timeout_min=self.slurm_timeout_min,
             cpus_per_task=self.slurm_cpus_per_task,
             slurm_mem_per_cpu=f"{self.mem_per_cpu_gb}G",
+            slurm_setup=setup,
             slurm_additional_parameters={
                 "gpus": "1",
+                "signal": "USR1@180", # SIGUSR1 3 min before timeout (for graceful shutdown)
             },
         )
         if self.gpu_constraint: # Optional GPU Constraint

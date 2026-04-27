@@ -55,7 +55,7 @@ class ModelExplorer:
         sizes = [64, 80, 96, 112, 128, 144, 160]
         self.sampling = {
             'crop_size': trial.suggest_categorical("crop_size", sizes),
-            'num_samples': trial.suggest_categorical("num_samples", [2, 4, 8, 16])
+            'num_samples': trial.suggest_categorical("num_samples", [4, 8, 16, 24, 32, 48])
         }
         self.config['dim_in'] = self.sampling['crop_size']
 

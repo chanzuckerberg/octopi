@@ -1,5 +1,6 @@
 from octopi.utils import visualization_tools as viz
 from monai.inferers import sliding_window_inference
+from octopi.pytorch.train_helper import auto_amp
 from octopi.utils import stopping_criteria
 import torch, os, mlflow, re, optuna, time
 from monai.transforms import AsDiscrete
@@ -39,6 +40,16 @@ class ModelTrainer:
         if self.ema_experiment:
             self.ema_handler = ema.ExponentialMovingAverage(self.model.parameters(), decay=0.995)
 
+        # Mixed precision: bf16 on Ampere+, fp16+GradScaler on Volta/Turing, off otherwise.
+        self.amp_enabled, self.amp_dtype, self.scaler = auto_amp(self.device)
+
+        # Let TF32 accelerate fp32 matmuls on Ampere+, and let cuDNN pick the
+        # fastest conv algorithm for this input shape (shapes are fixed here
+        # since we crop to a constant patch size).
+        if self.device.type == "cuda":
+            torch.set_float32_matmul_precision("high")
+            torch.backends.cudnn.benchmark = True
+
         # Initialize Figure and Axes for Plotting
         self.fig = None; self.axs = None
 
@@ -61,13 +72,25 @@ class ModelTrainer:
         self.model.train()
         for batch_data in self.train_loader:
             step += 1
-            inputs = batch_data["image"].to(self.device)  # Shape: [B, C, H, W, D]
-            labels = batch_data["label"].to(self.device)  # Shape: [B, C, H, W, D]
-            self.optimizer.zero_grad()
-            outputs = self.model(inputs)    # Output shape: [B, num_classes, H, W, D] 
-            loss = self.loss_function(outputs, labels)
-            loss.backward()
-            self.optimizer.step()
+            inputs = batch_data["image"].to(self.device, non_blocking=True)  # [B, C, H, W, D]
+            labels = batch_data["label"].to(self.device, non_blocking=True)  # [B, C, H, W, D]
+            self.optimizer.zero_grad(set_to_none=True)
+
+            with torch.amp.autocast(
+                device_type=self.device.type,
+                dtype=self.amp_dtype,
+                enabled=self.amp_enabled,
+            ):
+                outputs = self.model(inputs)    # [B, num_classes, H, W, D]
+                loss = self.loss_function(outputs, labels)
+
+            if self.scaler is not None:
+                self.scaler.scale(loss).backward()
+                self.scaler.step(self.optimizer)
+                self.scaler.update()
+            else:
+                loss.backward()
+                self.optimizer.step()
 
             # Update EMA weights
             if self.ema_experiment:
@@ -83,52 +106,41 @@ class ModelTrainer:
     @torch.no_grad()
     def validate_update(self):
         """
-        Perform validation and compute metrics, including validation loss.
-        """        
-
-        # Set model to evaluation mode
+        Validate patch-by-patch. GridPatchDataset yields individual patches so
+        the DataLoader batches them directly — no manual sub-batching needed.
+        """
         self.model.eval()
         val_loss = 0
-        with torch.amp.autocast(device_type="cuda", dtype=torch.float16):
-            for val_data in self.val_loader:
-                val_inputs = val_data["image"].to(self.device)
-                val_labels = val_data["label"].to(self.device) 
-                
-                # Apply sliding window inference
-                roi = max(128, self.crop_size)  # try setting a set size of 128, 144 or 160?
-                val_outputs = sliding_window_inference(
-                    inputs=val_inputs, 
-                    roi_size=(roi, roi, roi),
-                    sw_batch_size=self.sw_bs,
-                    predictor=self.model, 
-                    overlap=self.overlap,
-                    sw_device=self.device,
-                    device=self.device
-                )
+        n_batches = 0
 
-                del val_inputs
+        for val_data in self.val_loader:
+            batch_in  = val_data["image"].to(self.device, non_blocking=True)
+            batch_lbl = val_data["label"].to(self.device, non_blocking=True)
 
-                # Compute the loss for this batch
-                loss = self.loss_function(val_outputs.float(), val_labels)  
-                val_loss += loss.item()  # Accumulate the loss                
+            with torch.amp.autocast(
+                device_type=self.device.type,
+                dtype=self.amp_dtype,
+                enabled=self.amp_enabled,
+            ):
+                batch_out = self.model(batch_in)
 
-                # Apply post-processing
-                metric_val_outputs = [self.post_pred(i) for i in decollate_batch(val_outputs)]
-                metric_val_labels = [self.post_label(i) for i in decollate_batch(val_labels)]                             
-                
-                # Compute metrics
-                self.metrics_function(y_pred=metric_val_outputs, y=metric_val_labels)             
+            # Keep loss computation on GPU: the old path did a round-trip to
+            # CPU per batch (~2-4 GB transfer) and forced a GPU sync, which
+            # was the dominant cost of validation. .float() upcasts bf16/fp16
+            # output to fp32 for numeric stability in TverskyLoss.
+            loss = self.loss_function(batch_out.float(), batch_lbl)
+            val_loss += loss.item()
+            n_batches += 1
 
-                del val_labels, val_outputs, metric_val_outputs, metric_val_labels
-            torch.cuda.empty_cache()
+            m_out = [self.post_pred(i) for i in decollate_batch(batch_out)]
+            m_lbl = [self.post_label(i) for i in decollate_batch(batch_lbl)]
+            self.metrics_function(y_pred=m_out, y=m_lbl)
 
-        # # Contains recall, precision, and f1 for each class
+            del batch_in, batch_lbl, batch_out, m_out, m_lbl
+
         metric_values = self.metrics_function.aggregate(reduction='mean_batch')
-
-        # Compute average validation loss and add to metrics dictionary
-        val_loss /= len(self.val_loader)
+        val_loss /= max(n_batches, 1)
         metric_values.append(val_loss)
-
         return metric_values
 
     def train(
