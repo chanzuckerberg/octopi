@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.5.1](https://github.com/chanzuckerberg/octopi/compare/octopi-v1.5.0...octopi-v1.5.1) (2026-04-27)
+
+
+### 🐞 Bug Fixes
+
+* Improve training and validation efficiency for large tomography datasets ([#64](https://github.com/chanzuckerberg/octopi/issues/64)) ([e3432b3](https://github.com/chanzuckerberg/octopi/commit/e3432b3e806ea9807dc8cc16e751d8b697c437eb))
+
 ## [1.5.0](https://github.com/chanzuckerberg/octopi/compare/octopi-v1.4.0...octopi-v1.5.0) (2026-04-13)
 
 
