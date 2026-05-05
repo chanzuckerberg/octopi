@@ -81,7 +81,12 @@ class ModelTrainer:
                 dtype=self.amp_dtype,
                 enabled=self.amp_enabled,
             ):
-                outputs = self.model(inputs)    # [B, num_classes, H, W, D]
+                outputs = self.model(inputs)
+                # Deep supervision: DynUNet returns (B, 1+N, C, ...) stacked
+                # tensor, SegResNetDS returns list[Tensor].  Unbind DynUNet's
+                # output into a list so DeepSupervisionLoss handles both.
+                if isinstance(outputs, torch.Tensor) and outputs.dim() == 6:
+                    outputs = list(torch.unbind(outputs, dim=1))
                 loss = self.loss_function(outputs, labels)
 
             if self.scaler is not None:
@@ -124,6 +129,11 @@ class ModelTrainer:
             ):
                 batch_out = self.model(batch_in)
 
+            # During eval, DS models already return a single tensor.
+            # Guard against any edge case where a list is returned.
+            if isinstance(batch_out, (list, tuple)):
+                batch_out = batch_out[0]
+
             # Keep loss computation on GPU: the old path did a round-trip to
             # CPU per batch (~2-4 GB transfer) and forced a GPU sync, which
             # was the dominant cost of validation. .float() upcasts bf16/fp16
@@ -151,7 +161,8 @@ class ModelTrainer:
         crop_size: int = 96,
         max_epochs: int = 100,
         val_interval: int = 15,
-        lr_scheduler_type: str = 'cosine', 
+        val_batch_size: int = 64,
+        lr_scheduler_type: str = 'cosine',
         best_metric: str = 'avg_f1',
         verbose: bool = False,
         trial: optuna.trial.Trial = None
@@ -198,7 +209,8 @@ class ModelTrainer:
 
         # Produce Dataloaders for the First Training Iteration
         self.train_loader, self.val_loader = data_load_gen.create(
-            crop_size=crop_size, num_samples=my_num_samples
+            crop_size=crop_size, num_samples=my_num_samples,
+            val_batch_size=val_batch_size
         )
         self.train_ds = getattr(data_load_gen, "train_ds", None)
         self.input_dim = data_load_gen.input_dim

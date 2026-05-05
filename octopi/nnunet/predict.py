@@ -14,7 +14,8 @@ Full CoPick project (auto multi-GPU):
 CLI:
     octopi nnunet segment -c config.json -p plans.json -d dataset.json -w checkpoint.pth -uri wbp@10.0 -n nnunet
 """
-import os, warnings
+import os, warnings, pprint
+from octopi.utils import io
 
 # nnunetv2 emits warnings when its path env-vars are unset; irrelevant for inference.
 warnings.filterwarnings("ignore", message="nnUNet_raw")
@@ -377,6 +378,49 @@ class nnUNetPredictor:
         """Predict segmentation for a single tomogram on cuda:0."""
         return self._get_single_predictor().predict(tomogram, voxel_size_angstrom)
 
+    def save_parameters(self, copick_config: str, tomogram_uri: str, seg_uri: str):
+        import copick, json
+
+        seg_name, rest = seg_uri.split(":")
+        user_id, session_id = rest.split("/")
+
+        with open(self.dataset_json) as f:
+            dataset_dict = json.load(f)
+
+        params = {
+            "inputs": {
+                "config": copick_config,
+                "tomo_uri": tomogram_uri,
+            },
+            "labels": dataset_dict.get("labels", {}),
+            "model": {
+                "plans": self.plans,
+                "dataset_json": self.dataset_json,
+                "weights": self.weights,
+            },
+            "outputs": {
+                "obj_name": seg_name,
+                "user_id": user_id,
+                "session_id": session_id,
+            },
+            "parameters": {
+                "tile_step_size": self.tile_step_size,
+                "use_mirroring": self.use_mirroring,
+            },
+        }
+
+        print("\nParameters for Inference (nnUNet Prediction):")
+        pprint.pprint(params); print()
+
+        root = copick.from_file(copick_config)
+        overlay_root = io.remove_prefix(root.config.overlay_root)
+        basepath = os.path.join(overlay_root, 'logs')
+        os.makedirs(basepath, exist_ok=True)
+        output_path = os.path.join(
+            basepath,
+            f'nnunet-{user_id}_{session_id}_{seg_name}.yaml')
+        io.save_parameters_yaml(params, output_path)
+
     def batch_predict(
         self,
         copick_config: str,
@@ -394,14 +438,18 @@ class nnUNetPredictor:
         run_ids : list[str] | None
             Specific run names to process.  None = all runs in the project.
         """
-        import torch
         import torch.multiprocessing as mp
-        import copick
+        import torch, copick
 
+        # Save parameters to the log directory
+        self.save_parameters(copick_config, tomogram_uri, seg_uri)
+
+        # Determine the number of available GPUs
         world_size = torch.cuda.device_count()
         if world_size < 1:
             raise RuntimeError("No CUDA GPUs available.")
 
+        # If no run IDs are provided, use all runs in the project
         if run_ids is None:
             root    = copick.from_file(copick_config)
             run_ids = [r.name for r in root.runs]
@@ -439,7 +487,6 @@ class nnUNetPredictor:
         mp.spawn(_nnunet_worker, args=(jobs,), nprocs=world_size, join=True)
         print("Done writing predictions to CoPick.")
 
-
 # ── CLI ───────────────────────────────────────────────────────────────────────
 
 @click.command("segment", no_args_is_help=True)
@@ -453,7 +500,7 @@ class nnUNetPredictor:
 @click.option("--run-ids", '-runs', type=str, default=None,
               help="CoPick run IDs to predict (as comma-separated list).")
 # Output Arguments
-@click.option('-suri', '--seg-uri', type=str, default='predict:nnunet/1', help="Segmentation URI to write")
+@click.option('-suri', '--seg-uri', type=str, default='predict:nnunet/1', help="Segmentation URI to write (name:user_id/session_id)")
 def cli(config, plans, dataset, tomo_uri, weights, tta, run_ids, seg_uri):
     """Run nnUNet inference on CoPick tomograms and write predictions back."""
     

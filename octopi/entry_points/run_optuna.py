@@ -8,7 +8,7 @@ import rich_click as click
               help="Random seed for reproducibility")
 @common.train_parameters(octopi=True)
 # Model Arguments
-@click.option('--model-type', type=click.Choice(['Unet', 'AttentionUnet', 'MedNeXt', 'SegResNet'], case_sensitive=False),
+@click.option('--model-type', type=click.Choice(['Unet', 'SwinUNETR', 'DynUNet', 'SegResNet'], case_sensitive=False),
               default='Unet',
               help="Model type to use for training")
 # Input Arguments

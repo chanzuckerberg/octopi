@@ -44,7 +44,7 @@ class _MedNeXtTrainerBase(nnUNetTrainer):
     """
 
     def set_deep_supervision_enabled(self, enabled: bool):
-        self.network.deep_supervision = enabled
+        self.network.do_ds = enabled
 
 
 # ── Small (S) ────────────────────────────────────────────────────────────────
