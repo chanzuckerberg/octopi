@@ -60,6 +60,10 @@ dev = [
 docs = [
     "zensical==0.0.31",
 ]
+nnunet = [
+    "nnunetv2",
+    "SimpleITK"
+]
 
 [project.scripts]
 octopi = "octopi.main:routines"

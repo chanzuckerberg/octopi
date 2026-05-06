@@ -1,92 +1,79 @@
 from monai.networks.nets import SegResNetDS
-import torch.nn as nn
-import torch
+
 
 class mySegResNet:
     def __init__(self):
-        # Placeholder for the model and config
         self.model = None
         self.config = None
 
-    def build_model(
-        self,
-        config: dict
-    ):
+    def build_model(self, config: dict):
         """
         Creates the SegResNetDS model based on provided parameters.
-        
+
         Args:
-            init_filters (int): Number of output channels for the initial convolution.
-            blocks_down (tuple): Tuple defining the number of blocks at each downsampling stage.
-            dsdepth (int): Depth for deep supervision (number of output scales).
-            act (str): Activation type.
-            norm (str): Normalization type.
-            blocks_up (tuple or None): Number of upsample blocks (if None, uses default behavior).
-            upsample_mode (str): Upsampling mode, e.g. 'deconv' or 'trilinear'.
-            resolution (optional): If provided, adjusts non-isotropic kernels to isotropic spacing.
-            preprocess (callable or None): Optional preprocessing function for the input.
-        
-        Returns:
-            torch.nn.Module: The instantiated SegResNetDS model on the specified device.
+            config (dict): Must contain:
+                num_classes    (int)        : Number of output segmentation classes.
+                init_filters   (int)        : Output channels for the initial convolution.
+                blocks_down    (tuple)      : Number of residual blocks per downsampling stage.
+                dsdepth        (int)        : Deep supervision depth (1 = no DS).
+                act            (str)        : Activation type, e.g. 'relu'.
+                norm           (str)        : Normalization type, e.g. 'batch'.
+                blocks_up      (tuple|None) : Number of upsample blocks (None = mirror blocks_down).
+                upsample_mode  (str)        : Upsampling method: 'deconv', 'nontrainable', 'pixelshuffle'.
+                resolution     (tuple|None) : Input voxel spacing for anisotropic kernel support.
         """
+        self.config = config
         self.model = SegResNetDS(
             spatial_dims=3,
             init_filters=config['init_filters'],
             in_channels=1,
             out_channels=config['num_classes'],
-            act=config['act'],
-            norm=config['norm'],
-            blocks_down=config['blocks_down'],
-            blocks_up=config['blocks_up'],
-            dsdepth=config['dsdepth'],
-            preprocess=config['preprocess'],
-            upsample_mode=config['upsample_mode'],
-            resolution=config['resolution']
+            act=config.get('act', 'prelu'),
+            norm=config.get('norm', 'instance'),
+            blocks_down=config.get('blocks_down', (1, 2, 2, 4)),
+            blocks_up=config.get('blocks_up'),
+            dsdepth=config.get('dsdepth', 1),
+            upsample_mode=config.get('upsample_mode', 'deconv'),
+            resolution=config.get('resolution'),
         )
-        return self.model.to(self.device)
-    
-    def bayesian_search(self, trial):
+        return self.model
+
+    def bayesian_search(self, trial, num_classes: int):
         """
-        Defines the Bayesian optimization search space and builds the model with suggested parameters.
-        
-        Args:
-            trial (optuna.trial.Trial): An Optuna trial object.
-        
-        Returns:
-            torch.nn.Module: The model built with hyperparameters suggested by the trial.
+        Optuna search space for SegResNetDS.
+
+        Model size is driven by init_filters and blocks_down.
+        Capped at init_filters=32 to fit comfortably on 32GB GPUs (A6000, etc.).
+        Deep supervision depth is searched from 1 (off) to 3.
         """
-        # Define search space parameters
-        init_filters = trial.suggest_categorical("init_filters", [16, 32, 64])
+        init_filters = trial.suggest_categorical("init_filters", [16, 32])
         dsdepth = trial.suggest_int("dsdepth", 1, 3)
-        blocks_down = trial.suggest_categorical("blocks_down", [(1, 2, 2, 4), (1, 2, 2, 2), (1, 1, 2, 2)])
-        act = trial.suggest_categorical("act", ['relu', 'leaky_relu', "LeakyReLU", "PReLU", "GELU", "ELU"])
-        norm = trial.suggest_categorical("norm", ['batch', 'instance'])
-        upsample_mode = trial.suggest_categorical("upsample_mode", ['deconv', 'trilinear'])
-        
+        # Optuna's CategoricalDistribution only supports primitive types
+        # (None/bool/int/float/str). Tuples round-trip through the trial DB
+        # as lists and break the distribution-compatibility check.
+        blocks_down_choices = {
+            "1-2-2-4": (1, 2, 2, 4),
+            "1-2-2-2": (1, 2, 2, 2),
+            "1-1-2-2": (1, 1, 2, 2),
+        }
+        blocks_down_key = trial.suggest_categorical("blocks_down", list(blocks_down_choices.keys()))
+        blocks_down = blocks_down_choices[blocks_down_key]
         self.config = {
+            'architecture': 'SegResNet',
+            'num_classes': num_classes,
             'init_filters': init_filters,
             'blocks_down': blocks_down,
             'dsdepth': dsdepth,
-            'act': act,
-            'norm': norm,
-            'blocks_up': None,  # using default upsampling blocks
-            'upsample_mode': upsample_mode,
+            'act': 'prelu',
+            'norm': 'instance',
+            'blocks_up': (1, 1, 1),
+            'upsample_mode': 'deconv',
             'resolution': None,
-            'preprocess': None
         }
         return self.build_model(self.config)
 
     def get_model_parameters(self):
-        """
-        Retrieve stored model parameters.
-        
-        Returns:
-            dict: A dictionary of key model parameters.
-        
-        Raises:
-            ValueError: If the model has not been built yet.
-        """
+        """Retrieve stored model parameters."""
         if self.model is None:
-            raise ValueError("Model has not been initialized yet. Call build_model() or bayesian_search() first.")
-        
+            raise ValueError("Model has not been initialized. Call build_model() or bayesian_search() first.")
         return self.config

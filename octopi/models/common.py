@@ -1,7 +1,7 @@
-from monai.losses import FocalLoss, TverskyLoss
+from monai.losses import FocalLoss, TverskyLoss, DeepSupervisionLoss
 from octopi.utils import losses
 from octopi.models import (
-    Unet, AttentionUnet, MedNeXt, SegResNet
+    Unet, SwinUNETR, DynUnet, SegResNet
 )
 
 def get_model(architecture):
@@ -9,23 +9,27 @@ def get_model(architecture):
     # Initialize model based on architecture
     if architecture == "Unet":
         model = Unet.myUNet()
-    elif architecture == "AttentionUnet":
-        model = AttentionUnet.myAttentionUnet()
-    elif architecture == "MedNeXt":
-        model = MedNeXt.myMedNeXt()
+    elif architecture == "SwinUNETR":
+        model = SwinUNETR.mySwinUNETR()
+    elif architecture == "DynUNet":
+        model = DynUnet.myDynUNet()
     elif architecture == "SegResNet":
         model = SegResNet.mySegResNet()
     else:
-        raise ValueError(f"Model type {architecture} not supported!\nPlease use one of the following: Unet, AttentionUnet, MedNeXt, SegResNet")
+        raise ValueError(
+            f"Model type {architecture} not supported!\n"
+            "Please use one of the following: Unet, SwinUNETR, DynUNet, SegResNet"
+        )
 
     return model
+
 
 def get_loss_function(trial, loss_name = None):
 
     # Loss function selection
     if loss_name is None:
         loss_name = trial.suggest_categorical(
-            "loss_function", 
+            "loss_function",
             ["FocalLoss", "WeightedFocalTverskyLoss", 'FocalTverskyLoss'])
 
     if loss_name == "FocalLoss":
@@ -57,18 +61,42 @@ def get_loss_function(trial, loss_name = None):
     return loss_function
 
 def get_default_unet_params() -> dict:
-    """    
+    """
     Returns the default parameters for a UNet model.
     """
     model_config = {
         'architecture': 'Unet',
-        'dim_in': 80,
         'strides': [2, 2, 1],
         'channels': [48, 64, 80, 80],
         'dropout': 0.0, 'num_res_units': 1,
     }
     return model_config
 
-#### TODO : Models to try Adding? 
-# 1. Swin UNETR 
-# 2. Swin-Conv-UNet
+
+####################### Deep Supervision Utility Functions #######################
+
+def uses_deep_supervision(model_config: dict) -> bool:
+    """Check whether a model config enables deep supervision."""
+    arch = model_config.get('architecture', '')
+    if arch == 'DynUNet':
+        return model_config.get('deep_supervision', False)
+    if arch == 'SegResNet':
+        return model_config.get('dsdepth', 1) > 1
+    return False
+
+
+def wrap_loss_for_ds(loss_function, model_config: dict, weight_mode: str = "exp"):
+    """Wrap a loss function with DeepSupervisionLoss if the model uses DS.
+
+    Args:
+        loss_function: Base loss function.
+        model_config: Model configuration dict.
+        weight_mode: Weighting scheme for DS levels ('exp', 'same', 'two').
+
+    Returns:
+        The original loss_function (unchanged) if DS is off, or a
+        DeepSupervisionLoss wrapper if DS is on.
+    """
+    if not uses_deep_supervision(model_config):
+        return loss_function
+    return DeepSupervisionLoss(loss=loss_function, weight_mode=weight_mode)

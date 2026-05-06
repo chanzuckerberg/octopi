@@ -2,6 +2,7 @@ from octopi.extract.localize import process_localization
 import octopi.processing.evaluate as octopi_evaluate
 from monai.metrics import ConfusionMatrixMetric
 from octopi.models import common as builder
+from octopi.models.common import wrap_loss_for_ds
 from octopi.pytorch import segmentation
 from octopi.pytorch import trainer 
 from octopi.utils import io
@@ -52,13 +53,16 @@ def train(data_generator, loss_function, batch_size = 16,
     model_builder = builder.get_model(model_config['architecture'])
     model = model_builder.build_model(model_config)
 
-    # Load the Model Weights if Provided 
+    # Wrap loss with DeepSupervisionLoss if the model uses deep supervision
+    loss_function = wrap_loss_for_ds(loss_function, model_config)
+
+    # Load the Model Weights if Provided
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    if model_weights: 
+    if model_weights:
         print(f'Loading Model Weights from: {model_weights}\n')
         state_dict = torch.load(model_weights, map_location=device, weights_only=True)
-        model.load_state_dict(state_dict)     
-    model.to(device) 
+        model.load_state_dict(state_dict)
+    model.to(device)
 
     # Optimizer
     optimizer = torch.optim.AdamW(
@@ -67,7 +71,7 @@ def train(data_generator, loss_function, batch_size = 16,
 
     # Create UNet-Trainer
     model_trainer = trainer.ModelTrainer(
-        model, device, loss_function, metrics_function, 
+        model, device, loss_function, metrics_function,
         optimizer, use_ema = use_ema
     )
     model_trainer.sw_bs = sw_bs

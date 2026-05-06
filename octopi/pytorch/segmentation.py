@@ -28,7 +28,7 @@ warnings.filterwarnings(
 
 # Single GPU Inference Support
 class Predictor:
-    def __init__(self, 
+    def __init__(self,
                  config: str,
                  model_config: Union[str, List[str]],
                  model_weights: Union[str, List[str]],
@@ -36,7 +36,8 @@ class Predictor:
                  overlap: float = 0.5,
                  ntta: int = 4,
                  device: Optional[str] = None,
-                 rank: int = 0
+                 rank: int = 0,
+                 compile_model: bool = False,
         ):
         """
         Predictor class for single GPU inference with optional test-time augmentation (TTA) 
@@ -92,11 +93,12 @@ class Predictor:
             raise ValueError("Number of model configs must match number of model weights.")
         self.model_config = model_config            
 
-        # Diagnostics 
+        # Diagnostics
         self.rank = rank
+        self.compile_model = compile_model
 
         # Load the model(s)
-        self._load_models(model_config, model_weights)        
+        self._load_models(model_config, model_weights)
     
         # Force CPU Assembly
         self._force_cpu_assembly = False
@@ -149,7 +151,13 @@ class Predictor:
             model.load_state_dict(state_dict)
             model.to(self.device)
             model.eval()
-            
+
+            if self.compile_model and self.device.type == "cuda":
+                try:
+                    model = torch.compile(model, mode="default")
+                except Exception as e:
+                    self._print(f"[WARNING] torch.compile failed ({e}); running uncompiled.")
+
             self.models.append(model)
         
         # For backward compatibility, also set self.model to the first model
@@ -238,7 +246,6 @@ class Predictor:
 
             # cleanup
             del predictions, logits, inv_logits, aug_sample
-            torch.cuda.empty_cache()
 
         # average logits across TTA variants
         acc_logits = acc_logits / len(self.tta_transforms)
@@ -279,7 +286,6 @@ class Predictor:
                 # accumulate logits from this model
                 acc_logits += model_logits
                 del model_logits
-                torch.cuda.empty_cache()
 
             # average logits across models
             acc_logits = acc_logits / len(self.models)
@@ -293,9 +299,8 @@ class Predictor:
 
             # cleanup
             del acc_logits, probs, discrete_pred
-            torch.cuda.empty_cache()
 
-        return results                  
+        return results
 
     def predict(self, input_data):
         """Run Prediction from an Input Tomogram.
@@ -499,6 +504,7 @@ class _JobSpec:
     sw_bs: int
     overlap: float
     ntta: int
+    compile_model: bool
 
     runIDs: List[str]
     num_tomos_per_batch: int
@@ -541,7 +547,8 @@ def _worker_process(
         overlap=job.overlap,
         ntta=job.ntta,
         device=device,
-        rank=local_rank
+        rank=local_rank,
+        compile_model=job.compile_model,
     )
 
     # Run inference on this shard only
@@ -576,6 +583,7 @@ class MultiGpuPredictor:
         overlap: float = 0.5,
         ntta: int = 4,
         device: Optional[str] = None,  # ignored; we choose per-process cuda device
+        compile_model: bool = False,
     ):
         self.config = config
         self.root = copick.from_file(config)
@@ -585,6 +593,7 @@ class MultiGpuPredictor:
 
         self.sw_bs = sw_bs
         self.overlap = overlap
+        self.compile_model = compile_model
 
     def batch_predict(
         self,
@@ -619,6 +628,7 @@ class MultiGpuPredictor:
                 overlap=self.overlap,
                 ntta=self.ntta,
                 device=torch.device("cuda:0"),
+                compile_model=self.compile_model,
             )
             predictor.batch_predict(
                 num_tomos_per_batch=num_tomos_per_batch,
@@ -643,6 +653,7 @@ class MultiGpuPredictor:
                     ntta=self.ntta,
                     sw_bs=self.sw_bs,
                     overlap=self.overlap,
+                    compile_model=self.compile_model,
                     runIDs=shard,
                     num_tomos_per_batch=num_tomos_per_batch,
                     tomo_algorithm=tomo_algorithm,
@@ -651,7 +662,7 @@ class MultiGpuPredictor:
                     userid=userid,
                     sessionid=sessionid,
                 )
-            )  
+            )
 
         # IMPORTANT: use spawn (not fork) for CUDA safety
         mp.spawn(_spawn_entry, args=(jobs,), nprocs=world_size, join=True)

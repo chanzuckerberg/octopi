@@ -1,12 +1,9 @@
 from scipy.sparse.csgraph import connected_components
-# from skimage.morphology import binary_opening, ball
-from skimage.morphology import opening, ball
 from skimage.segmentation import watershed
 from scipy.sparse import coo_matrix
 from scipy.spatial import cKDTree
 
 from typing import List, Optional, Tuple
-from skimage.measure import regionprops_table
 from copick_utils.io import readers
 import scipy.ndimage as ndi
 from tqdm import tqdm
@@ -171,57 +168,58 @@ def extract_particle_centroids_via_watershed(
     min_sz = FOUR_THIRDS_PI * (min_particle_radius ** 3)
     max_sz = FOUR_THIRDS_PI * (max_particle_radius ** 3)
 
-    # boolean mask; early exit
+    # boolean mask + bbox in one pass; find_objects avoids np.where's index arrays
     mask = (segmentation == segmentation_idx)
-    if not mask.any():
+    slices = ndi.find_objects(mask.view(np.uint8))
+    if not slices or slices[0] is None:
         print(f"No segmentation with label {segmentation_idx} found.")
         return []
+    sl = slices[0]
+    z0, y0, x0 = sl[0].start, sl[1].start, sl[2].start
+    mask_c = mask[sl].copy()  # contiguous crop, lets us free the full-volume mask
+    del mask
 
-    # --- crop to bbox to shrink problem size ---
-    z, y, x = np.where(mask)
-    z0, z1 = z.min(), z.max() + 1
-    y0, y1 = y.min(), y.max() + 1
-    x0, x1 = x.min(), x.max() + 1
-    mask_c = mask[z0:z1, y0:y1, x0:x1]
-
-    # --- single-pass morphology (speeds + denoise speckles) ---
-    opened = opening(mask_c, ball(1))  # bool in, bool out
+    # single-pass morphology (denoise speckles); 6-conn structure == ball(1)
+    structure = ndi.generate_binary_structure(3, 1)
+    opened = ndi.binary_opening(mask_c, structure=structure)
+    del mask_c
     if not opened.any():
         return []
 
-    # --- EDT on bool, result as float32 ---
+    # EDT on bool, result as float32
     dist = ndi.distance_transform_edt(opened).astype(np.float32, copy=False)
 
-    # --- fast local maxima via maximum_filter ---
-    fp = np.ones((maxima_filter_size,)*3, dtype=bool)
-    local_max = (dist == ndi.maximum_filter(dist, footprint=fp))
+    # local maxima: size= triggers SciPy's separable 1D path (much faster than footprint=)
+    local_max = (dist == ndi.maximum_filter(dist, size=maxima_filter_size))
     local_max &= opened  # restrict to mask; avoids borders/zeros
 
-    # markers
     markers, _ = ndi.label(local_max)
-    if markers.max() == 0:
+    n_markers = int(markers.max())
+    if n_markers == 0:
         return []
 
-    # --- watershed on cropped ROI ---
-    # connectivity=1 (6-neigh) is a bit faster; adjust if you relied on 26-neigh
-    labels_ws = watershed(-dist, markers=markers, mask=opened)
+    # negate in place to skip an extra float32 ROI allocation for watershed input
+    np.negative(dist, out=dist)
+    labels_ws = watershed(dist, markers=markers, mask=opened)
 
-    # --- vectorized properties & size filter ---
-    props = regionprops_table(labels_ws, properties=("area", "centroid"))
-    area = np.asarray(props["area"])
-    cz = np.asarray(props["centroid-0"])
-    cy = np.asarray(props["centroid-1"])
-    cx = np.asarray(props["centroid-2"])
-
-    keep = (area >= min_sz) & (area <= max_sz)
+    # size filter via bincount, then centroid only for kept labels
+    n_labels = int(labels_ws.max())
+    if n_labels == 0:
+        return []
+    sizes = np.bincount(labels_ws.ravel(), minlength=n_labels + 1)[1:]
+    keep = (sizes >= min_sz) & (sizes <= max_sz)
     if not np.any(keep):
         return []
 
-    # add back the crop offset; output as (z,y,x) to match your downstream swap
-    cz += z0
-    cy += y0
-    cx += x0
-    return list(zip(cz[keep], cy[keep], cx[keep]))
+    kept_indices = np.flatnonzero(keep) + 1  # labels are 1..n_labels
+    coms = np.asarray(
+        ndi.center_of_mass(labels_ws, labels=labels_ws, index=kept_indices),
+        dtype=np.float64,
+    )
+    coms[:, 0] += z0
+    coms[:, 1] += y0
+    coms[:, 2] += x0
+    return list(map(tuple, coms))
 
 def extract_particle_centroids_via_com(
         segmentation,

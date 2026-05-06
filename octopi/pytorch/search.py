@@ -41,8 +41,9 @@ class ModelExplorer:
         self.model = self.model_builder.model.to(self.device)
         self.config = self.model_builder.config
 
-        # Define loss function
+        # Define loss function (wrap with DeepSupervisionLoss if needed)
         self.loss_function = common.get_loss_function(trial)
+        self.loss_function = common.wrap_loss_for_ds(self.loss_function, self.config)
 
         # Define metrics
         self.metrics_function = ConfusionMatrixMetric(
@@ -52,10 +53,29 @@ class ModelExplorer:
         )
 
         # Sample crop size and num_samples
-        sizes = [64, 80, 96, 112, 128, 144, 160]
+        # SwinUNETR requires spatial dims divisible by 2**5 = 32
+        # SwinUNETR also needs tighter crop/num_samples limits to fit on 32GB GPUs
+        if self.model_type == "SwinUNETR":
+            sizes = [64, 96, 128]
+            num_samples_choices = [4, 8, 16]
+            val_batch_size = 4
+        elif self.model_type == "DynUNet":
+            # 48 GB GPU budget. Empirical OOM data on a 47.65 GB A6000:
+            #   crop=112, ns=8, 3stage_s22 → OOM at ~11.2M voxels.
+            # crop=128 has no combinations that fit at 48 GB so it is excluded.
+            # _enforce_dynunet_memory_budget prunes the residual oversized combos
+            # (e.g. crop=112 ns=8, crop=96 ns=16 on 4-stage topologies).
+            sizes = [64, 80, 96, 112]
+            num_samples_choices = [4, 8, 16]
+            val_batch_size = 16
+        else:
+            sizes = [64, 80, 96, 112, 128, 144, 160]
+            num_samples_choices = [4, 8, 16, 24, 32, 48]
+            val_batch_size = 64
         self.sampling = {
             'crop_size': trial.suggest_categorical("crop_size", sizes),
-            'num_samples': trial.suggest_categorical("num_samples", [4, 8, 16, 24, 32, 48])
+            'num_samples': trial.suggest_categorical("num_samples", num_samples_choices),
+            'val_batch_size': val_batch_size,
         }
         self.config['dim_in'] = self.sampling['crop_size']
 
@@ -63,10 +83,9 @@ class ModelExplorer:
         # Define optimizer
         lr0 = trial.suggest_float("lr", 1e-4, 1e-3, log=True)
         wd = trial.suggest_float("weight_decay", 1e-4, 1e-2, log=True)
-        self.optimizer = torch.optim.AdamW(self.model.parameters(), lr=lr0, weight_decay=wd)              
-        # self.optimizer = torch.optim.AdamW(self.model.parameters(), lr=1e-3, weight_decay=1e-4)      
+        self.optimizer = torch.optim.AdamW(self.model.parameters(), lr=lr0, weight_decay=wd)
 
-    def _train_model(self, trial, model_trainer, epochs, val_interval, crop_size, num_samples, best_metric):
+    def _train_model(self, trial, model_trainer, epochs, val_interval, crop_size, num_samples, val_batch_size, best_metric):
         """Handles model training and error handling."""
         try:
             results = model_trainer.train(
@@ -76,6 +95,7 @@ class ModelExplorer:
                 max_epochs=epochs,
                 val_interval=val_interval,
                 my_num_samples=num_samples,
+                val_batch_size=val_batch_size,
                 best_metric=best_metric,
                 verbose=False,
                 trial=trial
@@ -121,9 +141,9 @@ class ModelExplorer:
 
             # Train model and evaluate score
             score = self._train_model(
-                trial, model_trainer, epochs, val_interval, 
-                self.sampling['crop_size'], self.sampling['num_samples'], 
-                best_metric)
+                trial, model_trainer, epochs, val_interval,
+                self.sampling['crop_size'], self.sampling['num_samples'],
+                self.sampling['val_batch_size'], best_metric)
 
             # Save best model
             self._save_best_model(trial, model_trainer, score)
