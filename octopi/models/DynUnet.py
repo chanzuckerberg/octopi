@@ -88,7 +88,11 @@ class myDynUNet:
         }
         topo = topologies[topology]
 
-        deep_supr_num = trial.suggest_int("deep_supr_num", 0, 2)
+        # MONAI requires deep_supr_num < number of upsample layers, so the
+        # upper bound depends on the chosen topology (3stage has 2 upsamples → max 1;
+        # 4stage variants have 3 upsamples → max 2).
+        max_deep_supr_num = len(topo['upsample_kernel_size']) - 1
+        deep_supr_num = trial.suggest_int("deep_supr_num", 0, max_deep_supr_num)
         deep_supervision = deep_supr_num > 0
         dropout = trial.suggest_float("dropout", 0.0, 0.3)
 
