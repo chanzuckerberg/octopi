@@ -29,6 +29,11 @@ def save_parameters_yaml(params: dict, output_path: str):
         params (dict): The parameters to save.
         output_path (str): The path to save the parameters to.
     """
+    # Ensure the parent directory exists
+    parent = os.path.dirname(output_path)
+    if parent:
+        os.makedirs(parent, exist_ok=True)
+
     with open(output_path, "w") as f:
         yaml.dump(
             params,
