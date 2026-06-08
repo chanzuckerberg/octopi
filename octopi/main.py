@@ -26,6 +26,12 @@ routines.add_command(model_explore)
 routines.add_command(evaluate)
 routines.add_command(mb_extract)
 
+try: 
+    from octopi.mcp.cli import mcp_cli
+    routines.add_command(mcp_cli)
+except ImportError:
+    pass
+
 @click.group(context_settings=cli_context)
 def slurm_routines():
     """Slurm-Octopi 🐙: 🛠️ Tools for Finding Proteins in 🧊 cryo-ET data"""

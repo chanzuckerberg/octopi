@@ -60,9 +60,8 @@ dev = [
 docs = [
     "zensical==0.0.31",
 ]
-nnunet = [
-    "nnunetv2",
-    "SimpleITK"
+mcp = [
+    "copick-mcp",
 ]
 
 [project.scripts]

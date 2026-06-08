@@ -24,6 +24,7 @@ nav = [
         {"Create Target Labels" = "user-guide/labels.md"},
         {"Train Models" = "user-guide/training.md"},
         {"Inference" = "user-guide/inference.md"},
+        {"Claude Code / MCP" = "user-guide/claude-code-mcp.md"},
     ]},
     {"📦 API Reference" = [
         {"Overview" = "api/index.md"},
