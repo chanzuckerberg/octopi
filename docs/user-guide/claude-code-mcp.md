@@ -6,18 +6,51 @@
 
 ## What Claude Can Do
 
-Once connected, Claude has access to the full octopi CLI through these tools:
+Once connected, you can describe what you want in plain language and Claude handles the rest:
 
-| Tool | Purpose |
-|------|---------|
-| `list_octopi_commands` | Browse all exposed commands and their descriptions |
-| `get_command_help` | Fetch the full `--help` output for any command |
-| `run_octopi_command` | Execute an octopi command directly |
+<div class="grid cards" markdown>
 
-!!! info "Default behaviour: suggest, not run"
-    By default Claude will give you the exact command to copy and paste — you stay in control of what runs and when. If you'd prefer Claude to run a command directly, just ask: *"go ahead and run it"*.
+-   :material-sitemap:{ .lg .middle } **Guide the full workflow**
 
-    For long-running GPU jobs (`train`, `model-explore`, `segment`), Claude always hands off to you regardless — it prints the command for you to run, with all flags filled in.
+    ---
+
+    Walks you through create-targets → train/model-explore → segment → localize → evaluate, asking only for what it needs.
+
+-   :material-flag-checkered:{ .lg .middle } **Fill in the flags**
+
+    ---
+
+    Looks up the correct options for every command so you don't have to memorise them.
+
+-   :material-link-variant:{ .lg .middle } **Understand URI shorthand**
+
+    ---
+
+    Accepts tomogram, segmentation, and pick URIs directly in your prompt and translates them to the right CLI flags.
+
+-   :material-lightning-bolt:{ .lg .middle } **Run fast steps for you**
+
+    ---
+
+    Executes `create-targets`, `localize`, `evaluate`, and `membrane-extract` directly and reports back.
+
+-   :material-chip:{ .lg .middle } **Hand off GPU jobs**
+
+    ---
+
+    For `train`, `model-explore`, and `segment`, prints a ready-to-run command block for you to submit yourself.
+
+</div>
+
+!!! info "You stay in control"
+    Claude suggests commands rather than running them by default — you copy, review, and paste. For fast, non-destructive commands you can say *"go ahead and run it"* to skip the copy-paste step. GPU-intensive jobs (`train`, `model-explore`, `segment`) are always handed off regardless.
+
+??? note "MCP tools used under the hood"
+    | Tool | Purpose |
+    |------|---------|
+    | `list_octopi_commands` | Browse all exposed commands and their descriptions |
+    | `get_command_help` | Fetch the full `--help` output for any command |
+    | `run_octopi_command` | Execute an octopi command directly |
 
 ---
 
@@ -81,20 +114,35 @@ A full particle picking run — from coordinates to evaluated picks — guided b
 
 **Step 1 — Create segmentation targets**
 
-> *"Create segmentation targets from my CoPick project. Config is at /data/config.json, particle name is ribosome."*
+> *"Help me create segmentation targets from my CoPick project at /data/config.json. I want targets for ribosome:manual/1, virus-like-particle:tm/2, and membranes:membrane-seg/1."*
 
 Claude suggests (or runs):
 
 ```bash
 octopi create-targets \
     --config /data/config.json \
-    --target ribosome \
+    --target ribosome,manual,1 \
+    --target virus-like-particle,tm,2 \
+    --target membranes,membrane-seg,1 \
     --voxel-size 10
 ```
 
+??? tip "URI shorthand for tomograms, segmentations, and picks"
+    Throughout the workflow you can refer to data resources using compact URI strings rather than spelling out individual flags. Claude understands both formats.
+
+    | Resource | URI format | Example |
+    |----------|-----------|---------|
+    | Tomogram | `algorithm@voxel_spacing` | `wbp@10.0` |
+    | Segmentation | `name:user_id/session_id` | `predict:octopi/1` |
+    | Picks / targets | `name:user_id/session_id` | `ribosome:manual/1` |
+
+    Multiple picks or segmentation targets can be listed together:
+
+    > *"… targets for ribosome:manual/1, virus-like-particle:tm/2, and membranes:membrane-seg/1"*
+
 **Step 2 — Explore model architectures**
 
-> *"Run a Bayesian architecture search. I have 4 GPUs available."*
+> *"Run a Bayesian architecture search on those targets (targets:octopi/1). I'm on a SLURM cluster — distribute 50 trials across 5 jobs, constrained to a6000 GPUs."*
 
 Claude suggests:
 
@@ -105,15 +153,15 @@ octopi model-explore \
     --voxel-size 10 \
     --model-type Unet \
     --num-trials 50 \
-    --output explore_results
+    --output explore_results \
+    --submitit \
+    --njobs 5 \
+    --gpu-constraint a6000
 ```
-
-!!! tip "SLURM support"
-    Add `--submitit --njobs 5 --gpu-constraint a6000` to distribute trials across SLURM nodes instead of running them locally.
 
 **Step 3 — Segment tomograms**
 
-> *"Segment all my tomograms using the best model from the search."*
+> *"Segment all tomograms (wbp@10.0) with the best model from the search. Save predictions as predict:octopi/1."*
 
 Claude suggests:
 
@@ -122,29 +170,28 @@ octopi segment \
     --config /data/config.json \
     --model-config explore_results/best_model_config.yaml \
     --model-weights explore_results/best_model.pt \
-    --voxel-size 10 \
-    --seg-info predict,octopi,1
+    --tomo-uri wbp@10.0 \
+    --seg-uri predict:octopi/1
 ```
 
 **Step 4 — Localize particles**
 
-> *"Extract coordinates from the segmentation."*
+> *"Extract particle coordinates from predict:octopi/1 using watershed. Save picks with session 2."*
 
 Claude suggests (or runs):
 
 ```bash
 octopi localize \
     --config /data/config.json \
-    --seg-info predict,octopi,1 \
-    --voxel-size 10 \
+    --seg-uri predict:octopi/1 \
     --method watershed \
     --pick-user-id octopi \
-    --pick-session-id 1
+    --pick-session-id 2
 ```
 
 **Step 5 — Evaluate (optional)**
 
-> *"Evaluate against ground truth from user 'expert'."*
+> *"Evaluate my picks (octopi, session 1) against the ground truth annotations from user 'expert'."*
 
 Claude runs:
 

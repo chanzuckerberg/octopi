@@ -23,10 +23,27 @@ mcp = FastMCP(
 
 Always begin by asking the user what they want to do before proceeding. The typical workflow runs in this order:
 
+URI FORMATS
+  Users express resources using short URI notation. Translate these to CLI flags as follows:
+
+  Tomogram URI  "algorithm@voxel_spacing"   e.g. "wbp@10.0"
+    → --tomo-alg wbp --voxel-size 10.0
+
+  Segmentation URI  "name:user_id/session_id"   e.g. "predict:octopi/1"
+    → --seg-info predict,octopi,1  (comma-separated: name,user_id,session_id)
+
+  Pick/Target URI  "name:user_id/session_id"   e.g. "ribosome:manual/1"
+    → --target ribosome,manual,1  (for create-targets source picks)
+    → --picks-info ribosome,manual,1  (for membrane-extract)
+    → --pick-user-id manual --pick-session-id 1  (for localize output)
+
+  Multiple URIs of the same type are passed as repeated flags, e.g.:
+    --target ribosome,manual,1 --target virus-like-particle,tm,2
+
 STEP 1 — create-targets
   Convert pick coordinates from a CoPick project into 3D segmentation masks (Zarr).
   This is a fast command — you can run it directly.
-  Key params: --config, --target (name or name,user_id,session_id), --voxel-size, --radius-scale
+  Key params: --config, --target (pick URI → name,user_id,session_id), --voxel-size, --radius-scale
 
 STEP 2 — train OR model-explore
   train: Train a 3D U-Net model on tomogram/segmentation pairs. GPU-intensive, takes hours.
@@ -34,19 +51,19 @@ STEP 2 — train OR model-explore
     Supports --submitit for SLURM job submission (njobs concurrent trials).
   IMPORTANT: For train and model-explore, ALWAYS suggest the command as a copy-pasteable block.
   NEVER call run_octopi_command for these unless the user says "run it", "go ahead", or "execute it".
-  Key params for both: --config, --voxel-size, --target-info, --tomo-alg, --output
+  Key params for both: --config, --voxel-size, --target-info (seg URI → name,user_id,session_id), --tomo-alg, --output
   Key params for model-explore: --model-type, --num-trials, --submitit, --njobs, --gpu-constraint
 
 STEP 3 — segment
   Run sliding-window inference on tomograms to produce probability maps.
   Supports model ensembling (comma-separated --model-config and --model-weights paths).
   GPU-intensive — always suggest rather than run unless the user explicitly asks.
-  Key params: --config, --model-config, --model-weights, --voxel-size, --seg-info
+  Key params: --config, --model-config, --model-weights, --tomo-uri (tomo URI), --seg-uri (seg URI)
 
 STEP 4 — localize
   Convert segmentation probability maps to 3D particle coordinates using watershed or center-of-mass.
   This is a fast command — you can run it directly.
-  Key params: --config, --seg-info, --voxel-size, --method, --pick-user-id, --pick-session-id
+  Key params: --config, --seg-uri (seg URI), --method, --pick-user-id, --pick-session-id
 
 STEP 5 (optional) — evaluate
   Measure Precision, Recall, and F1 against ground truth annotations.
@@ -56,7 +73,7 @@ STEP 5 (optional) — evaluate
 STEP 6 (optional) — membrane-extract
   Split picks by proximity to a membrane or organelle segmentation.
   Fast command — can run directly.
-  Key params: --config, --picks-info, --seg-info, --threshold, --save-session-id
+  Key params: --config, --picks-info (pick URI), --seg-info (seg URI), --threshold, --save-session-id
 
 HOW TO RESPOND
 - Use get_command_help to look up flags before suggesting a command.
