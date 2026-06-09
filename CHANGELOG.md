@@ -1,5 +1,28 @@
 # Changelog
 
+## [1.6.0](https://github.com/chanzuckerberg/octopi/compare/octopi-v1.5.0...octopi-v1.6.0) (2026-06-09)
+
+
+### ✨ Features
+
+* Add MCP server for Claude integration ([#68](https://github.com/chanzuckerberg/octopi/issues/68)) ([d8d57be](https://github.com/chanzuckerberg/octopi/commit/d8d57bede28b7922f97fc59121f11e4122baf8b6))
+* New models ([#66](https://github.com/chanzuckerberg/octopi/issues/66)) ([a5d8b06](https://github.com/chanzuckerberg/octopi/commit/a5d8b0632262abe52c7e1c4716522efae6c7c84f))
+
+
+### 🐞 Bug Fixes
+
+* Improve training and validation efficiency for large tomography datasets ([#64](https://github.com/chanzuckerberg/octopi/issues/64)) ([e3432b3](https://github.com/chanzuckerberg/octopi/commit/e3432b3e806ea9807dc8cc16e751d8b697c437eb))
+
+
+### 📝 Documentation
+
+* update the docs with more details ([#69](https://github.com/chanzuckerberg/octopi/issues/69)) ([0558808](https://github.com/chanzuckerberg/octopi/commit/0558808379a4cdf602577de9cef5ad2a143b18ea))
+
+
+### 🧹 Miscellaneous Chores
+
+* remove nnunet workflow from octopi ([#67](https://github.com/chanzuckerberg/octopi/issues/67)) ([f68b3f3](https://github.com/chanzuckerberg/octopi/commit/f68b3f3bcbbaf9bb950114e14f4d8f68f1edc9be))
+
 ## [1.5.0](https://github.com/chanzuckerberg/octopi/compare/octopi-v1.4.0...octopi-v1.5.0) (2026-04-13)
 
 
