@@ -6,7 +6,10 @@ import subprocess
 import sys
 from typing import Any
 
-from fastmcp import FastMCP
+try: 
+  from fastmcp import FastMCP
+except ImportError:
+  raise ImportError("MCP server is not installed. Please install it with `pip install octopi[mcp]`.")
 
 logger = logging.getLogger("octopi-mcp")
 handler = logging.StreamHandler(sys.stderr)

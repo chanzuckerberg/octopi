@@ -11,7 +11,7 @@ from octopi import cli_context
 
 @click.group(context_settings=cli_context, name="mcp")
 def mcp_cli():
-    """Manage the octopi MCP server and Claude configuration."""
+    """Octopi MCP server and Claude configuration."""
     pass
 
 
@@ -55,20 +55,20 @@ def _target_display(target: str) -> str:
 
 @mcp_cli.command("install")
 @click.option(
-    "--target",
+    "--target", "-t",
     type=click.Choice(["desktop", "code-global", "code-project"]),
     default="code-project",
     show_default=True,
     help="Where to register: Claude Desktop, global Claude Code, or project-specific",
 )
 @click.option(
-    "--project-path",
+    "--project-path", "-p",
     type=click.Path(exists=True, file_okay=False, dir_okay=True, path_type=Path),
     help="Project directory for --target code-project (defaults to cwd)",
 )
-@click.option("--server-name", default="octopi", show_default=True, help="Name for the MCP server entry")
-@click.option("--python-path", default=None, help="Path to Python executable (defaults to current Python)")
-@click.option("--force", is_flag=True, help="Overwrite existing entry if present")
+@click.option("--server-name", "-n", default="octopi", show_default=True, help="Name for the MCP server entry")
+@click.option("--python-path", "-py", default=None, help="Path to Python executable (defaults to current Python)")
+@click.option("--force", "-f", is_flag=True, help="Overwrite existing entry if present")
 def mcp_install(target: str, project_path: Optional[Path], server_name: str, python_path: Optional[str], force: bool) -> None:
     """Register octopi as an MCP server in Claude Desktop or Claude Code."""
     config_path = _get_config_path(target, project_path)
