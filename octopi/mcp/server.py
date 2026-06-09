@@ -9,7 +9,7 @@ from typing import Any
 try: 
   from fastmcp import FastMCP
 except ImportError:
-  raise ImportError("MCP server is not installed. Please install it with `pip install octopi[mcp]`.")
+  raise ImportError("MCP server is not installed. Please install it with `pip install copick-mcp`.")
 
 logger = logging.getLogger("octopi-mcp")
 handler = logging.StreamHandler(sys.stderr)

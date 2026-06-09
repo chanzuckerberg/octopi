@@ -93,6 +93,14 @@ Then run `octopi mcp install` once from the terminal. It automatically registers
 
     Restart Claude Desktop to pick up the change.
 
+!!! tip "Also install copick-mcp"
+    For the best experience, also install [copick-mcp](https://github.com/copick/copick-mcp). It gives Claude direct access to your CoPick project — runs, picks, segmentations, and tomograms — so it can inspect your data as it guides you through the workflow.
+
+    ```bash
+    copick setup mcp --target code-global   # all Claude Code sessions
+    copick setup mcp --target code-project  # current directory only
+    ```
+
 You can verify the registration at any time:
 
 ```bash
