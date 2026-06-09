@@ -56,13 +56,7 @@ Once connected, you can describe what you want in plain language and Claude hand
 
 ## Setup
 
-Install the `mcp` extras first:
-
-```bash
-pip install "octopi[mcp]"
-```
-
-Then run `octopi mcp install` once from the terminal. It automatically registers the server in the right config file — you never need to start the server manually.
+The MCP server ships with octopi — no extra install needed. Run `octopi mcp install` once to register it for your preferred destination. It writes to the right config file automatically and you never need to start the server manually.
 
 === "Claude Code (project)"
 
@@ -93,8 +87,8 @@ Then run `octopi mcp install` once from the terminal. It automatically registers
 
     Restart Claude Desktop to pick up the change.
 
-!!! tip "Also install copick-mcp"
-    For the best experience, also install [copick-mcp](https://github.com/copick/copick-mcp). It gives Claude direct access to your CoPick project — runs, picks, segmentations, and tomograms — so it can inspect your data as it guides you through the workflow.
+!!! tip "Also register copick-mcp"
+    [copick-mcp](https://github.com/copick/copick-mcp) is bundled with octopi and gives Claude direct access to your CoPick project — runs, picks, segmentations, and tomograms. Register it the same way:
 
     ```bash
     copick setup mcp --target code-global   # all Claude Code sessions
