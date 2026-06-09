@@ -44,6 +44,7 @@ dependencies = [
     "matplotlib",
     "ipywidgets",
     "rich-click",
+    "copick-mcp",
     "copick-utils",
     "multiprocess",
     "optuna-dashboard",
@@ -59,10 +60,6 @@ dev = [
 ]
 docs = [
     "zensical==0.0.31",
-]
-nnunet = [
-    "nnunetv2",
-    "SimpleITK"
 ]
 
 [project.scripts]
