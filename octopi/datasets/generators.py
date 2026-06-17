@@ -1,21 +1,20 @@
 from monai.data import (
     DataLoader, SmartCacheDataset, CacheDataset,
-    GridPatchDataset, PatchIterd, pad_list_data_collate
 )
 from octopi.datasets import helpers as utils
 from monai.transforms import Compose
 from octopi.datasets import augment
 from octopi.datasets import io
+from typing import List
 import torch
 
 class CopickDataModule:
     def __init__(self, 
                  config: str, 
-                 tomo_alg: str,
+                 tomo_uris: List[str],
                  name: str,
                  sessionid: str = None,
                  userid: str = None,
-                 voxel_size: float = 10, 
                  tomo_batch_size: int = 15,
                  bgr: float = 0.0,
                  verbose: bool = True
@@ -29,16 +28,17 @@ class CopickDataModule:
         self.target_name = name
         self.target_session_id = sessionid
         self.target_user_id = userid
-        self.voxel_size = voxel_size
-        self.tomo_alg = tomo_alg.split(",")
-        self.tomo_batch_size = tomo_batch_size        
+        self.tomo_batch_size = tomo_batch_size
         self.bgr = bgr
         self.verbose = verbose
 
-        # Construct the Target URI
-        self.target_uri = utils.build_target_uri(name, sessionid, userid, voxel_size)
+        # Parse tomogram URIs into (alg, voxel_size) resolution pairs. Each pair
+        # is an independent training source (multi-resolution training); the
+        # target segmentation voxel size is derived from each tomogram URI.
+        self.tomo_uris = tomo_uris
+        self.resolutions = utils.parse_resolution_uris(tomo_uris)
 
-        # Initialize the input dimensions   
+        # Initialize the input dimensions
         self.nx, self.ny, self.nz = None, None, None
 
         # Available Run IDs
@@ -53,27 +53,22 @@ class CopickDataModule:
         - Only includes runs that have at least one matching segmentation.
 
         Returns:
-            available_runIDs (list): List of run IDs with available segmentations.
+            available (dict): {run_id: [(alg, voxel_size), ...]} resolutions present per run.
         """
 
-        # Get the requested tomogram algorithms
-        requested_algs = set(self.tomo_alg) if self.tomo_alg else set()
- 
-        # Scan the Runs
-        available, runs_with_seg, algs_present = utils.scan_runs(
+        # Scan the Runs for each requested (alg, voxel_size) resolution
+        available, runs_with_seg, missing = utils.scan_runs(
             root=self.root,
+            resolutions=self.resolutions,
             target_name=self.target_name,
             target_session_id=self.target_session_id,
             target_user_id=self.target_user_id,
-            voxel_size=self.voxel_size,
-            requested_algs=requested_algs,
         )
 
-        # If There are Missing Tomogram Algorithms or Segmentations, Inform the User
-        missing = requested_algs - algs_present
+        # If There are Missing Resolutions or Segmentations, Inform the User
         if runs_with_seg == 0:
             utils.missing_segmentations(self.target_name, self.target_session_id, self.target_user_id)
-        elif missing: 
+        elif missing:
             utils.missing_tomograms(missing)
 
         return available
@@ -94,10 +89,11 @@ class CopickDataModule:
             train_ratio, val_ratio, test_ratio, create_test_dataset
         )
 
-        # Get Class Info from the Training Dataset
+        # Get Class Info from the Training Dataset (classes are identical across
+        # resolutions, so read from the first requested voxel size).
         target_info = (self.target_name, self.target_session_id, self.target_user_id)
         self.Nclasses, self.class_names = utils.get_class_info(
-            self.config, self.myRunIDs['train'].keys(), target_info, self.voxel_size )
+            self.config, self.myRunIDs['train'].keys(), target_info, self.resolutions[0][1] )
 
         return self.myRunIDs
     
@@ -123,13 +119,15 @@ class CopickDataModule:
         # Define the Input Dimensions
         self.input_dim = crop_size, crop_size, crop_size
 
-        # Create the list of training files
+        # Create the list of training files. One entry per (run, resolution):
+        # each (alg, voxel_size) pair is loaded at its native spacing with its
+        # own matching target, so the model trains across all resolutions.
         train_files = [
-            { 'run': run_name, 'root': self.config, 
-                'vol_uri': f'{alg}@{self.voxel_size}', 
-                'target_uri': self.target_uri }
-            for run_name, algs in self.myRunIDs['train'].items()
-            for alg in algs
+            { 'run': run_name, 'root': self.config,
+                'vol_uri': f'{alg}@{vs}',
+                'target_uri': utils.build_target_uri(self.target_name, self.target_session_id, self.target_user_id, vs) }
+            for run_name, pairs in self.myRunIDs['train'].items()
+            for (alg, vs) in pairs
         ]
 
         # Default Train Transforms for Particle Picking
@@ -173,44 +171,39 @@ class CopickDataModule:
             pin_memory=torch.cuda.is_available()
         )
 
-        # Create the list of validation files
+        # Create the list of validation files (one entry per run × resolution).
         val_files = [
-            { 'run': run_name, 'root': self.config, 
-                'vol_uri': f'{alg}@{self.voxel_size}', 
-                'target_uri': self.target_uri }
-            for run_name, algs in self.myRunIDs['validate'].items()
-            for alg in algs
+            { 'run': run_name, 'root': self.config,
+                'vol_uri': f'{alg}@{vs}',
+                'target_uri': utils.build_target_uri(self.target_name, self.target_session_id, self.target_user_id, vs) }
+            for run_name, pairs in self.myRunIDs['validate'].items()
+            for (alg, vs) in pairs
         ]
 
-        # Load full volumes, then GridPatchDataset yields one patch at a time
-        # so the DataLoader can batch val_batch_size patches per iteration.
-        # PatchIterd yields (patch_dict, coords) tuples as GridPatchDataset expects.
-        roi = max(128, crop_size)
-        base_val_ds = CacheDataset(data=val_files, transform=augment.get_transforms(), cache_rate=1.0, num_workers=4)
-        patch_iter = PatchIterd(
-            keys=["image", "label"],
-            patch_size=(roi, roi, roi),
-            mode="constant"
-        )
-        val_ds = GridPatchDataset(data=base_val_ds, patch_iter=patch_iter, with_coordinates=False)
+        # Cache the FULL validation volumes (one item per run). The trainer
+        # runs sliding_window_inference over each volume so the validation
+        # metric matches inference-time behavior (overlap + Gaussian blending)
+        # instead of scoring independent, zero-padded patches — the latter
+        # systematically underestimates F1 by splitting particles at patch
+        # boundaries. GPU memory stays bounded by the trainer's sw_batch_size
+        # (only a few ROI windows resident at once), not by the volume size.
+        val_ds = CacheDataset(data=val_files, transform=augment.get_transforms(), cache_rate=1.0, num_workers=4)
 
-        # Validation is infrequent and its per-batch tensors are large
-        # (val_batch_size patches at ~roi³). Use fewer workers, default
-        # prefetch, and NO persistent_workers so memory is reclaimed
-        # between validations — otherwise val workers hold GBs of prefetch
-        # idle for all the training epochs between val_interval runs.
+        # batch_size=1: validation is per full volume (volumes differ in shape
+        # and cannot be stacked). Throughput is governed by the trainer's
+        # sw_batch_size, not this loader. Few workers / no persistent_workers
+        # so the cache RAM is reclaimed between infrequent validations.
         val_nw = max(1, train_nw // 4)
         val_loader = DataLoader(
-            val_ds, batch_size=val_batch_size,
+            val_ds, batch_size=1,
             shuffle=False, num_workers=val_nw,
             persistent_workers=False,
-            collate_fn=pad_list_data_collate,
             pin_memory=torch.cuda.is_available()
         )
 
         # Print the data splits
         if self.verbose:
-            utils.print_splits(self.myRunIDs, train_files, val_files)        
+            utils.print_splits(self.myRunIDs, train_files, val_files)
 
         return train_loader, val_loader
 
@@ -225,11 +218,10 @@ class CopickDataModule:
 class MultiCopickDataModule:
     def __init__(self,
                  configs: dict[str, str],
-                 tomo_alg: str,
+                 tomo_uris,
                  name: str,
                  sessionid: str = None,
                  userid: str = None,
-                 voxel_size: float = 10,
                  tomo_batch_size: int = 15,
                  bgr: float = 0.0,
                  verbose: bool = True
@@ -239,6 +231,7 @@ class MultiCopickDataModule:
 
         Args:
             configs (list): List of config file paths.
+            tomo_uris: Tomogram URI(s) (``alg@voxel_size``) for multi-resolution training.
             Other arguments are inherited from TrainLoaderManager.
         """
         # Read Copick Projects
@@ -249,16 +242,15 @@ class MultiCopickDataModule:
         self.target_name = name
         self.target_session_id = sessionid
         self.target_user_id = userid
-        self.voxel_size = voxel_size
-        self.tomo_alg = tomo_alg.split(",")
         self.tomo_batch_size = tomo_batch_size
         self.bgr = bgr
         self.verbose = verbose
-        
-        # Construct the Target URI
-        self.target_uri = utils.build_target_uri(name, sessionid, userid, voxel_size)
 
-        # Initialize the input dimensions   
+        # Parse tomogram URIs into (alg, voxel_size) resolution pairs.
+        self.tomo_uris = tomo_uris
+        self.resolutions = utils.parse_resolution_uris(tomo_uris)
+
+        # Initialize the input dimensions
         self.nx, self.ny, self.nz = None, None, None
 
         # Available Run IDs
@@ -268,56 +260,54 @@ class MultiCopickDataModule:
         """
         Identify and return a list of run IDs that have segmentations available for the target.
         """
-        requested_algs = {a.strip() for a in self.tomo_alg if a.strip()}
-        all_available: dict[str, dict[str, list[str]]] = {}
+        requested = {(a, float(v)) for a, v in self.resolutions}
+        all_available: dict[str, dict[str, list[tuple[str, float]]]] = {}
 
         total_runs_with_seg = 0
-        algs_present_global: set[str] = set()
+        resolutions_present_global: set[tuple[str, float]] = set()
 
         # Track per-session diagnostics
         session_runs_with_seg: dict[str, int] = {}
-        session_algs_present: dict[str, set[str]] = {}
+        session_resolutions_present: dict[str, set[tuple[str, float]]] = {}
 
         for session_key, root in self.roots.items():
-            available, runs_with_seg, algs_present = utils.scan_runs(
+            available, runs_with_seg, missing = utils.scan_runs(
                 root=root,
+                resolutions=self.resolutions,
                 target_name=self.target_name,
                 target_session_id=self.target_session_id,
                 target_user_id=self.target_user_id,
-                voxel_size=self.voxel_size,
-                requested_algs=requested_algs,
             )
 
-            # `available` here is {run_id: [algs]} for that root
+            # `available` here is {run_id: [(alg, voxel_size), ...]} for that root
             if available:
                 all_available[session_key] = available
 
             total_runs_with_seg += runs_with_seg
-            algs_present_global |= algs_present
+            present_here = requested - missing
+            resolutions_present_global |= present_here
 
             session_runs_with_seg[session_key] = runs_with_seg
-            session_algs_present[session_key] = algs_present
+            session_resolutions_present[session_key] = present_here
 
         # 1) No segmentations anywhere => hard error
         if total_runs_with_seg == 0:
             utils.missing_segmentations(self.target_name, self.target_session_id, self.target_user_id)
 
-        # 2) Requested tomograms missing globally => warning
-        if requested_algs:
-            missing_global = requested_algs - algs_present_global
-            if missing_global:
-                utils.missing_tomograms(missing_global)
+        # 2) Requested resolutions missing globally => warning
+        missing_global = requested - resolutions_present_global
+        if missing_global:
+            utils.missing_tomograms(missing_global)
 
-            # 3) Helpful per-session warnings
-            for session_key, runs_with_seg in session_runs_with_seg.items():
-                # Only warn if that session actually had segs (otherwise it's not a tomo-alg issue)
-                if runs_with_seg > 0:
-                    missing_here = requested_algs - session_algs_present[session_key]
-                    if missing_here == requested_algs:
-                        print(
-                            f"\n[Warning] Config '{session_key}' has matching segmentations, "
-                            f"but none of the requested tomo algs are present: {sorted(requested_algs)}\n"
-                        )
+        # 3) Helpful per-session warnings
+        for session_key, runs_with_seg in session_runs_with_seg.items():
+            # Only warn if that session actually had segs (otherwise it's not a resolution issue)
+            if runs_with_seg > 0 and not session_resolutions_present[session_key]:
+                pretty = ", ".join(f"{a}@{v}" for a, v in sorted(requested))
+                print(
+                    f"\n[Warning] Config '{session_key}' has matching segmentations, "
+                    f"but none of the requested resolutions are present: {pretty}\n"
+                )
 
         return all_available
 
@@ -373,9 +363,10 @@ class MultiCopickDataModule:
         first_session = next(iter(self.config.keys()))
         config_path = self.config[first_session]
 
-        # Get Class Info from the Training Dataset
+        # Get Class Info from the Training Dataset (classes identical across
+        # resolutions, so read from the first requested voxel size).
         self.Nclasses, self.class_names = utils.get_class_info(
-            config_path, self.myRunIDs['train'][first_session].keys(), target_info, self.voxel_size )
+            config_path, self.myRunIDs['train'][first_session].keys(), target_info, self.resolutions[0][1] )
 
         return self.myRunIDs
 
@@ -392,15 +383,15 @@ class MultiCopickDataModule:
         # Define the Input Dimensions
         self.input_dim = crop_size, crop_size, crop_size
 
-        # Create the list of training files
+        # Create the list of training files (one entry per session × run × resolution).
         train_files = [
-            { 'run': run_id, 
-               "root": self.config[session_key], 
-              'vol_uri': f'{alg}@{self.voxel_size}', 
-              'target_uri': self.target_uri }
+            { 'run': run_id,
+               "root": self.config[session_key],
+              'vol_uri': f'{alg}@{vs}',
+              'target_uri': utils.build_target_uri(self.target_name, self.target_session_id, self.target_user_id, vs) }
             for session_key, runmap in self.myRunIDs["train"].items()
-            for run_id, algs in runmap.items()
-            for alg in algs
+            for run_id, pairs in runmap.items()
+            for (alg, vs) in pairs
         ]
 
         # Default Train Transforms for Particle Picking
@@ -437,40 +428,35 @@ class MultiCopickDataModule:
             pin_memory=torch.cuda.is_available()
         )
 
-        # Create the list of validation files
+        # Create the list of validation files (one entry per session × run × resolution).
         val_files = [
-            { 'run': run_id, 
-              'root': self.config[session_key], 
-              'vol_uri': f'{alg}@{self.voxel_size}', 
-              'target_uri': self.target_uri }
+            { 'run': run_id,
+              'root': self.config[session_key],
+              'vol_uri': f'{alg}@{vs}',
+              'target_uri': utils.build_target_uri(self.target_name, self.target_session_id, self.target_user_id, vs) }
             for session_key, runmap in self.myRunIDs["validate"].items()
-            for run_id, algs in runmap.items()
-            for alg in algs                
+            for run_id, pairs in runmap.items()
+            for (alg, vs) in pairs
         ]
 
-        # Load full volumes, then GridPatchDataset yields one patch at a time
-        # so the DataLoader can batch val_batch_size patches per iteration.
-        # PatchIterd yields (patch_dict, coords) tuples as GridPatchDataset expects.
-        roi = max(128, crop_size)
-        base_val_ds = CacheDataset(data=val_files, transform=augment.get_transforms(), cache_rate=1.0, num_workers=4)
-        patch_iter = PatchIterd(
-            keys=["image", "label"],
-            patch_size=(roi, roi, roi),
-            mode="constant"
-        )
-        val_ds = GridPatchDataset(data=base_val_ds, patch_iter=patch_iter, with_coordinates=False)
+        # Cache the FULL validation volumes (one item per run). The trainer
+        # runs sliding_window_inference over each volume so the validation
+        # metric matches inference-time behavior (overlap + Gaussian blending)
+        # instead of scoring independent, zero-padded patches — the latter
+        # systematically underestimates F1 by splitting particles at patch
+        # boundaries. GPU memory stays bounded by the trainer's sw_batch_size
+        # (only a few ROI windows resident at once), not by the volume size.
+        val_ds = CacheDataset(data=val_files, transform=augment.get_transforms(), cache_rate=1.0, num_workers=4)
 
-        # Validation is infrequent and its per-batch tensors are large
-        # (val_batch_size patches at ~roi³). Use fewer workers, default
-        # prefetch, and NO persistent_workers so memory is reclaimed
-        # between validations — otherwise val workers hold GBs of prefetch
-        # idle for all the training epochs between val_interval runs.
+        # batch_size=1: validation is per full volume (volumes differ in shape
+        # and cannot be stacked). Throughput is governed by the trainer's
+        # sw_batch_size, not this loader. Few workers / no persistent_workers
+        # so the cache RAM is reclaimed between infrequent validations.
         val_nw = max(1, train_nw // 4)
         val_loader = DataLoader(
-            val_ds, batch_size=val_batch_size,
+            val_ds, batch_size=1,
             shuffle=False, num_workers=val_nw,
             persistent_workers=False,
-            collate_fn=pad_list_data_collate,
             pin_memory=torch.cuda.is_available()
         )
 

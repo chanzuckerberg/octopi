@@ -17,7 +17,7 @@ class ExploreSubmitter:
         self,
         copick_config: str,
         target_name: str, target_user_id: str, target_session_id: str,
-        tomo_algorithm: str, voxel_size: float,
+        tomo_uris,
         model_type: str, best_metric: str = 'avg_f1',
         num_epochs: int = 1000, num_trials: int = 100,
         data_split: str = 0.8, random_seed: int = 42,
@@ -35,8 +35,7 @@ class ExploreSubmitter:
             target_name (str): Name of the target for segmentation.
             target_user_id (str): Optional user ID for tracking.
             target_session_id (str): Optional session ID for tracking.
-            tomo_algorithm (str): Tomogram algorithm to use.
-            voxel_size (float): Voxel size for tomograms.
+            tomo_uris: Tomogram URI(s) ('alg@voxel_size') for multi-resolution training.
             model_type (str): Type of model to use.
             random_seed (int): Seed for reproducibility.
             num_epochs (int): Number of epochs per trial.
@@ -55,8 +54,7 @@ class ExploreSubmitter:
         self.target_name = target_name
         self.target_user_id = target_user_id
         self.target_session_id = target_session_id
-        self.tomo_algorithm = tomo_algorithm
-        self.voxel_size = voxel_size
+        self.tomo_uris = tomo_uris
         self.model_type = model_type
         self.random_seed = random_seed
         self.num_epochs = num_epochs
@@ -222,7 +220,7 @@ class ExploreSubmitter:
         return dict(
             config=self.copick_config,
             name=self.target_name,user_id=self.target_user_id, session_id=self.target_session_id,
-            tomo_algorithm=self.tomo_algorithm, voxel_size=self.voxel_size,
+            tomo_uris=self.tomo_uris,
             model_type=self.model_type, best_metric=self.best_metric, num_epochs=self.num_epochs,
             num_trials=self.num_trials, background_ratio=self.background_ratio,
             data_split=self.data_split, random_seed=self.random_seed,
@@ -239,8 +237,8 @@ class ExploreSubmitter:
         target_info = [self.target_name, self.target_user_id, self.target_session_id]
         output_params = {
             'input': {
-                'config': self.copick_config, 'target_info': target_info, 
-                'tomo_algorithm': self.tomo_algorithm, 'voxel_size': self.voxel_size },
+                'config': self.copick_config, 'target_info': target_info,
+                'tomo_uris': self.tomo_uris },
             'optimization': {
                 'model_type': self.model_type, 'random_seed': self.random_seed, 
                 'num_trials': self.num_trials, 'best_metric': self.best_metric },

@@ -22,47 +22,113 @@ def auto_num_workers(cap: int = 16, min_workers: int = 1) -> int:
         n = 4 # default to small number on non-slurm platforms
     return max(min_workers, min(cap, n))
 
+def parse_resolution_uris(tomo_uris) -> list[tuple[str, float]]:
+    """
+    Parse tomogram URIs of the form ``alg@voxel_size`` into ``(alg, voxel_size)``
+    resolution pairs for multi-resolution training.
+
+    Accepts a single string, a comma-separated string, or a list/tuple of either,
+    e.g. ``"wbp@10.0"``, ``"wbp@10.0,wbp@5.0"``, or ``["wbp@10.0", "wbp@5.0"]``.
+    Duplicate pairs are removed while preserving first-seen order.
+    """
+    if isinstance(tomo_uris, str):
+        items = [tomo_uris]
+    else:
+        items = list(tomo_uris)
+
+    resolutions: list[tuple[str, float]] = []
+    seen: set[tuple[str, float]] = set()
+    for item in items:
+        for part in str(item).split(','):
+            part = part.strip()
+            if not part:
+                continue
+            if '@' not in part:
+                raise ValueError(
+                    f"Invalid tomogram URI '{part}': expected 'alg@voxel_size' (e.g. 'wbp@10.0')."
+                )
+            alg, vs = part.rsplit('@', 1)
+            alg = alg.strip()
+            try:
+                vs = float(vs)
+            except ValueError:
+                raise ValueError(
+                    f"Invalid voxel size in tomogram URI '{part}': '{vs}' is not a number."
+                )
+            key = (alg, vs)
+            if key not in seen:
+                seen.add(key)
+                resolutions.append(key)
+
+    if not resolutions:
+        raise ValueError("No valid tomogram URIs provided (expected 'alg@voxel_size').")
+    return resolutions
+
 def scan_runs(
     *,
     root,
-    voxel_size: float,
+    resolutions: list[tuple[str, float]],
     target_name: str,
     target_session_id: str | None,
     target_user_id: str | None,
-    requested_algs: set[str],
-) -> tuple[dict[str, list[str]], int, set[str]]:
+) -> tuple[dict[str, list[tuple[str, float]]], int, set[tuple[str, float]]]:
     """
-    Scan a single CoPick root and return:
-      - available: {run_id: [matched_algs]}
-      - runs_with_seg: number of runs that had matching segmentation
-      - algs_present: union of matched algs across available runs (for warnings)
+    Scan a single CoPick root for the requested (alg, voxel_size) resolutions and
+    return only those where BOTH a matching target segmentation and the tomogram
+    algorithm exist at that voxel size.
+
+    Args:
+        resolutions: list of (alg, voxel_size) pairs to look for.
+
+    Returns:
+      - available: {run_id: [(alg, voxel_size), ...]} resolutions present for that run
+      - runs_with_seg: number of runs with >=1 matching segmentation (at any requested vs)
+      - missing: set of (alg, voxel_size) pairs requested but never found anywhere
     """
-    available: dict[str, list[str]] = {}
+    available: dict[str, list[tuple[str, float]]] = {}
     runs_with_seg = 0
+    found: set[tuple[str, float]] = set()
 
-    runIDs = [run.name for run in root.runs]
-    for runID in runIDs:
-        run = root.get_run(runID)
+    requested = {(a, float(v)) for a, v in resolutions}
 
-        seg = run.get_segmentations(
-            name=target_name,
-            session_id=target_session_id,
-            user_id=target_user_id,
-            voxel_size=float(voxel_size),
-        )
-        if len(seg) == 0:
-            continue
-        runs_with_seg += 1
+    for run in root.runs:
+        run_pairs: list[tuple[str, float]] = []
+        had_seg = False
 
-        tomos = run.get_voxel_spacing(voxel_size).tomograms
-        run_algs = {t.tomo_type for t in tomos}
+        # Cache per-voxel-size lookups so each (run, vs) is queried only once,
+        # while still iterating `resolutions` in input order for determinism.
+        has_seg_at: dict[float, bool] = {}
+        algs_at: dict[float, set[str]] = {}
 
-        matched = sorted(requested_algs & run_algs) if requested_algs else sorted(run_algs)
-        if matched:
-            available[runID] = matched
+        for alg, vs in resolutions:
+            vs = float(vs)
+            if vs not in has_seg_at:
+                seg = run.get_segmentations(
+                    name=target_name,
+                    session_id=target_session_id,
+                    user_id=target_user_id,
+                    voxel_size=vs,
+                )
+                has_seg_at[vs] = len(seg) > 0
+                if has_seg_at[vs]:
+                    vs_obj = run.get_voxel_spacing(vs)
+                    algs_at[vs] = {t.tomo_type for t in vs_obj.tomograms} if vs_obj is not None else set()
+                else:
+                    algs_at[vs] = set()
 
-    algs_present = set().union(*available.values()) if available else set()
-    return available, runs_with_seg, algs_present
+            if has_seg_at[vs]:
+                had_seg = True
+                if alg in algs_at[vs]:
+                    run_pairs.append((alg, vs))
+                    found.add((alg, vs))
+
+        if had_seg:
+            runs_with_seg += 1
+        if run_pairs:
+            available[run.name] = run_pairs
+
+    missing = requested - found
+    return available, runs_with_seg, missing
 
 def missing_segmentations(target_name, target_session_id, target_user_id):
     raise RuntimeError(
@@ -72,11 +138,16 @@ def missing_segmentations(target_name, target_session_id, target_user_id):
         f"Please check the target name, user ID, and session ID.\n"
     )
 
-def missing_tomograms(algorithms):
+def missing_tomograms(missing):
+    """
+    Warn about requested resolutions that were never found. ``missing`` is a set
+    of (alg, voxel_size) pairs.
+    """
+    pretty = ", ".join(f"{a}@{v}" for a, v in sorted(missing)) if missing else ""
     print(
-        f"\n[Warning] The following tomogram algorithms are not present in the Copick Project:\n"
-        f"\t\t{algorithms}\n"
-        f"These tomogram algorithms will be ignored.\n"
+        f"\n[Warning] The following tomogram/target resolutions are not present in the Copick Project:\n"
+        f"\t\t{pretty}\n"
+        f"These resolutions will be ignored.\n"
     )
 
 def get_data_splits(
@@ -232,11 +303,23 @@ def get_parameters(datamodule):
     this is a single-config or multi-config datamodule.
     """
 
+    # Multi-resolution: a list of (alg, voxel_size) pairs. Record the full set
+    # of training URIs plus representative scalars (first resolution) for any
+    # downstream consumer that still expects a single voxel_size / algorithm.
+    resolutions = datamodule.resolutions
+    tomo_uris = [f"{alg}@{vs}" for alg, vs in resolutions]
+    unique_vss = sorted({vs for _, vs in resolutions})
+
     base = {
-        "target_uri": build_target_uri(datamodule.target_name, datamodule.target_session_id, datamodule.target_user_id, datamodule.voxel_size),
         "target_info": [datamodule.target_user_id, datamodule.target_session_id, datamodule.target_name],
-        "voxel_size": datamodule.voxel_size,
-        "tomo_algorithm": datamodule.tomo_alg,
+        "tomo_uris": tomo_uris,
+        "target_uris": [
+            build_target_uri(datamodule.target_name, datamodule.target_session_id, datamodule.target_user_id, vs)
+            for vs in unique_vss
+        ],
+        # Representative scalars (first resolution) for backward compatibility.
+        "voxel_size": resolutions[0][1],
+        "tomo_algorithm": sorted({alg for alg, _ in resolutions}),
         "background_ratio": datamodule.bgr,
     }
 

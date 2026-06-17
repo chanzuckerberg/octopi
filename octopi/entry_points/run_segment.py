@@ -61,12 +61,16 @@ def inference(
 # Model Arguments
 @common.inference_model_parameters()
 # Input Arguments
-@common.config_parameters(single_config=True)
-def cli(config, voxel_size,
-        model_config, model_weights,
-        tomo_alg, seg_info, run_ids,
-        sliding_window_batch_size, overlap, ntta
-        ):
+@click.option(
+    "-c", "--config", type=click.Path(exists=True), required=True,
+    help="Path to copick configuration file" )
+@click.option(
+    "-uri", "--tomo-uri", type=str, required=False, default='wbp@10.0',
+    help="Tomogram URI for Inference (tomo-alg@voxel-size)" 
+)
+def cli(config, tomo_uri,
+        model_config, model_weights, seg_uri, run_ids,
+        sliding_window_batch_size, overlap, ntta):
     """
     Segment volumes using trained neural network models.
     
@@ -81,29 +85,37 @@ def cli(config, voxel_size,
     Examples:
       # Segment with a single model
       octopi segment -c config.json \\
+        --tomo-uri wbp@10.0 \\
         --model-config model.yaml --model-weights model.pth \\
-        --seg-info predictions,octopi,1
-    
+        --seg-uri predictions:octopi/1
+
     \b
       # Segment with model ensemble (comma-separated)
       octopi segment -c config.json \\
+        --tomo-uri wbp@10.0 \\
         --model-config model1.yaml,model2.yaml \\
         --model-weights model1.pth,model2.pth \\
-        --seg-info ensemble,octopi,1
+        --seg-uri ensemble:octopi/1
     
     \b
       # Segment specific runs only
       octopi segment -c config.json \\
+        --tomo-uri wbp@10.0 \\
         --model-config model.yaml --model-weights model.pth \\
         --run-ids TS_001,TS_002,TS_003
     """
     
     # Set default values if not provided
-    seg_info = list(seg_info)  # Convert tuple to list
+    seg_info = list(seg_uri)  # Convert parsed (name, user, session) tuple to list
     if seg_info[1] is None:
         seg_info[1] = "octopi"
     if seg_info[2] is None:
         seg_info[2] = "1"
+
+    # Parse the tomogram URI
+    if '@' not in tomo_uri:
+        raise ValueError("Tomogram URI must contain '@' for voxel size.")
+    tomo_alg, voxel_size = tomo_uri.split('@')
 
     # Call the inference function with parsed arguments
     print('\n🚀 Starting inference with Octopi...\n')
@@ -112,7 +124,7 @@ def cli(config, voxel_size,
         model_weights=model_weights,
         model_config=model_config,
         seg_info=seg_info,
-        voxel_size=voxel_size,
+        voxel_size=float(voxel_size),
         tomo_algorithm=tomo_alg,
         run_ids=run_ids,
         swbs=sliding_window_batch_size,

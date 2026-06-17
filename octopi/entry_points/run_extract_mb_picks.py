@@ -77,17 +77,17 @@ def save_parameters( params_dict: dict, output_path: str ):
 @click.option('-rids','--runIDs', type=str, default=None,
               callback=lambda ctx, param, value: parsers.parse_list(value) if value else None,
               help="List of run IDs to process")
-@click.option('-si','--seg-info', type=str, default=None,
+@click.option('-suri','--seg-uri', type=str, default=None,
               callback=lambda ctx, param, value: parsers.parse_target(value) if value else None,
-              help='Query for the membrane segmentation (e.g., "name" or "name,user_id,session_id")')
-@click.option('-pi','--picks-info', type=str, required=True,
+              help='Query for the membrane segmentation as "name", "name:user_id", or "name:user_id/session_id".')
+@click.option('-puri','--picks-uri', type=str, required=True,
               callback=lambda ctx, param, value: parsers.parse_target(value),
-              help='Query for the picks (e.g., "name" or "name,user_id,session_id")')
+              help='Query for the picks as "name", "name:user_id", or "name:user_id/session_id".')
 @click.option('-vs', '--voxel-size', type=float, default=10,
               help="Voxel size")
 @click.option('-c', '--config', type=click.Path(exists=True), required=True,
               help="Path to the configuration file")
-def cli(config, voxel_size, picks_info, seg_info, runids,
+def cli(config, voxel_size, picks_uri, seg_uri, runids,
         threshold, n_procs,
         save_user_id, save_session_id):
     """
@@ -117,15 +117,15 @@ def cli(config, voxel_size, picks_info, seg_info, runids,
 
     # Extract membrane-bound picks with default distance threshold (1–10 voxels)
     octopi membrane-extract -c config.json \\
-        --picks-info predictions,octopi,1 \\
-        --seg-info membrane,membrain-seg,1 \\
+        --picks-uri predictions:octopi/1 \\
+        --seg-uri membrane:membrain-seg/1 \\
         --save-user-id octopi \\
         --save-session-id 1
 
     # Use a custom distance range (2–6 voxels)
     octopi membrane-extract -c config.json \\
-        --picks-info predictions,octopi,1 \\
-        --seg-info membrane,membrain-seg,1 \\
+        --picks-uri predictions:octopi/1 \\
+        --seg-uri membrane:membrain-seg/1 \\
         --threshold 2,6 \\
         --save-user-id octopi \\
         --save-session-id 3
@@ -133,7 +133,7 @@ def cli(config, voxel_size, picks_info, seg_info, runids,
 
     run_mb_extract(
         config, voxel_size,
-        picks_info, seg_info,
+        picks_uri, seg_uri,
         runids, threshold, n_procs,
         save_user_id, save_session_id
     )

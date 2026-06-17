@@ -38,22 +38,42 @@ def string2bool(value: str):
 
 def parse_target(value: str) -> Tuple[str, Union[str, None], Union[str, None]]:
     """
-    Parse a single target string.
-    Expected formats:
+    Parse a target / segmentation query into (name, user_id, session_id).
+
+    Accepts the copick URI grammar (preferred):
       - "name"
+      - "name:user_id"
+      - "name:user_id/session_id"
+    and the legacy comma form for backward compatibility:
       - "name,user_id,session_id"
+
+    The voxel size is NOT part of this query (it is taken from --tomo-uri), so a
+    trailing '@voxel_size' is rejected.
     """
-    parts = value.split(',')
-    if len(parts) == 1:
-        obj_name = parts[0]
-        return obj_name, None, None
-    elif len(parts) == 3:
-        obj_name, user_id, session_id = parts
-        return obj_name, user_id, session_id
-    else:
+    # Legacy comma form (unambiguous: ':' / '/' never appear in the comma form).
+    if ',' in value:
+        parts = value.split(',')
+        if len(parts) == 1:
+            return parts[0], None, None
+        elif len(parts) == 3:
+            obj_name, user_id, session_id = parts
+            return obj_name, user_id, session_id
+        else:
+            raise argparse.ArgumentTypeError(
+                f"Invalid target format: '{value}'. Expected 'name' or 'name,user_id,session_id'."
+            )
+
+    # URI form: name[:user_id[/session_id]]
+    if '@' in value:
         raise argparse.ArgumentTypeError(
-            f"Invalid target format: '{value}'. Expected 'name' or 'name,user_id,session_id'."
+            f"Invalid query '{value}': do not include '@voxel_size' here; the voxel size "
+            f"is derived from --tomo-uri."
         )
+    name, sep, rest = value.partition(':')
+    if not sep:
+        return name, None, None
+    user_id, _, session_id = rest.partition('/')
+    return name, (user_id or None), (session_id or None)
 
 
 def parse_seg_target(value: str) -> List[Tuple[str, Union[str, None], Union[str, None]]]:

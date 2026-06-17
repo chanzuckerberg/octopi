@@ -1,14 +1,12 @@
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, Union
 from octopi.entry_points import common
 from octopi.utils import parsers
-from octopi import cli_context
 import rich_click as click
 
 def train_model(
     copick_config_path: str,
     target_info: Tuple[str, str, str],
-    tomo_algorithm: str = 'wbp',
-    voxel_size: float = 10,
+    tomo_uris: Union[List[str], str],
     trainRunIDs: List[str] = None,
     validateRunIDs: List[str] = None,    
     model_config: str = None,
@@ -33,16 +31,14 @@ def train_model(
     matplotlib.use("Agg", force=True)
 
     from octopi.datasets.config import DataGeneratorConfig
-    from octopi.datasets import generators
     from monai.losses import TverskyLoss
-    from octopi.utils import parsers, io
     from octopi.workflows import train
 
     # Create a data generator 
     cfg = DataGeneratorConfig(
         config=copick_config_path,
         name=target_info[0], user_id=target_info[1], session_id=target_info[2],
-        voxel_size=voxel_size, tomo_algorithm=tomo_algorithm, ntomo_cache=ncache_tomos,
+        tomo_uris=tomo_uris, ntomo_cache=ncache_tomos,
         background_ratio=background_ratio, data_split=data_split,
         trainRunIDs=trainRunIDs, validateRunIDs=validateRunIDs
     )
@@ -105,34 +101,36 @@ def get_model_config(channels, strides, res_units, dim_in):
 @click.option('-truns', "--trainRunIDs", type=str, default=None,
               callback=lambda ctx, param, value: parsers.parse_list(value) if value else None,
               help="List of training run IDs, e.g., run1,run2,run3")
-@click.option('-alg',"--tomo-alg", type=str, default='wbp',
-              help="Tomogram algorithm used for training, provide a comma-separated list of algorithms for multiple options. (e.g., 'denoised,wbp')")
-@click.option('-tinfo', "--target-info", type=str, default="targets,octopi,1",
+@click.option('-turi', "--target-uri", type=str, default="targets:octopi/1",
               callback=lambda ctx, param, value: parsers.parse_target(value),
-              help="Target information, e.g., 'name' or 'name,user_id,session_id'. Default is 'targets,octopi,1'.")
+              help="Target query as 'name', 'name:user_id', or 'name:user_id/session_id'. Default 'targets:octopi/1'.")
 @common.config_parameters(single_config=False)
 def cli(
-    config, voxel_size, target_info, tomo_alg, trainrunids, validaterunids, data_split,
+    config, tomo_uris, target_uri, trainrunids, validaterunids, data_split,
     model_config, model_weights,
     channels, strides, res_units, dim_in,
-    num_epochs, val_interval, ncache_tomos, best_metric, 
+    num_epochs, val_interval, ncache_tomos, best_metric,
     batch_size, lr, tversky_alpha, background_ratio, output):
     """
     Train 3D CNN U-Net models for Cryo-ET semantic segmentation.
     """
 
     print('\n🚀 Training a New Octopi Model...\n')
-    run_train(config, voxel_size, target_info, tomo_alg, trainrunids, validaterunids, data_split,
+    # click `multiple=True` yields a tuple; normalize to a list for downstream use.
+    tomo_uris = list(tomo_uris)
+    run_train(config, tomo_uris, target_uri,  trainrunids, validaterunids, data_split,
         model_config, model_weights,
         channels, strides, res_units, dim_in,
         num_epochs, val_interval, ncache_tomos, best_metric, 
         batch_size, lr, tversky_alpha, background_ratio, output)
 
-def run_train(config, voxel_size, target_info, tomo_alg, trainrunids, validaterunids, data_split,
-        model_config, model_weights,
-        channels, strides, res_units, dim_in,
-        num_epochs, val_interval, ncache_tomos, best_metric, 
-        batch_size, lr, tversky_alpha, background_ratio, output):
+def run_train(
+    config, tomo_uris, target_info, trainrunids, validaterunids, data_split,
+    model_config, model_weights,
+    channels, strides, res_units, dim_in,
+    num_epochs, val_interval, ncache_tomos, best_metric, 
+    batch_size, lr, tversky_alpha, background_ratio, output
+    ):
     """
     Run the training model.
     """
@@ -154,8 +152,7 @@ def run_train(config, voxel_size, target_info, tomo_alg, trainrunids, validateru
     train_model(
         copick_config_path=copick_configs, 
         target_info=target_info,
-        tomo_algorithm=tomo_alg,
-        voxel_size=voxel_size,
+        tomo_uris=tomo_uris,
         model_config=model_config_dict,
         model_weights=model_weights,
         output=output,
