@@ -56,7 +56,14 @@ def train_model(
 
     # Read per-class score weights from copick config metadata (score_weight key)
     import copick as _copick
-    _config_path = copick_config_path if isinstance(copick_config_path, str) else copick_config_path[0]
+    if isinstance(copick_config_path, str):
+        _config_path = copick_config_path
+    elif isinstance(copick_config_path, dict):
+        # Multi-session training: parse_copick_configs returns {session_name: path}.
+        # Use the first config (score-weight metadata is shared across sessions).
+        _config_path = next(iter(copick_config_path.values()))
+    else:
+        _config_path = copick_config_path[0]
     _root = _copick.from_file(_config_path)
     class_weights = {
         obj.name: obj.metadata.get('weight', 1)
