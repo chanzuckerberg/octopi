@@ -2,6 +2,23 @@ from octopi.datasets import io as dio
 from collections.abc import Mapping
 from octopi.utils import io as io
 import os
+import zarr
+
+
+def _spatial_shape(obj):
+    """Best-effort (z, y, x) shape of a copick tomogram/segmentation, read lazily from its
+    zarr store (metadata only, no array load). Returns None if it can't be determined."""
+    try:
+        z = zarr.open(obj.zarr(), mode="r")
+        if hasattr(z, "shape"):            # a zarr array
+            shp = z.shape
+        elif "0" in z:                     # multiscale group: level 0 = full resolution
+            shp = z["0"].shape
+        else:
+            shp = z[next(iter(z.array_keys()))].shape
+        return tuple(int(x) for x in shp[-3:])
+    except Exception:
+        return None
 
 def auto_num_workers(cap: int = 16, min_workers: int = 1) -> int:
     """
@@ -88,6 +105,7 @@ def scan_runs(
     available: dict[str, list[tuple[str, float]]] = {}
     runs_with_seg = 0
     found: set[tuple[str, float]] = set()
+    shape_skipped: list[str] = []
 
     requested = {(a, float(v)) for a, v in resolutions}
 
@@ -99,6 +117,8 @@ def scan_runs(
         # while still iterating `resolutions` in input order for determinism.
         has_seg_at: dict[float, bool] = {}
         algs_at: dict[float, set[str]] = {}
+        seg_shape_at: dict[float, tuple] = {}
+        tomo_by_alg_at: dict[float, dict] = {}
 
         for alg, vs in resolutions:
             vs = float(vs)
@@ -111,14 +131,25 @@ def scan_runs(
                 )
                 has_seg_at[vs] = len(seg) > 0
                 if has_seg_at[vs]:
+                    seg_shape_at[vs] = _spatial_shape(seg[0])
                     vs_obj = run.get_voxel_spacing(vs)
-                    algs_at[vs] = {t.tomo_type for t in vs_obj.tomograms} if vs_obj is not None else set()
+                    toms = vs_obj.tomograms if vs_obj is not None else []
+                    algs_at[vs] = {t.tomo_type for t in toms}
+                    tomo_by_alg_at[vs] = {t.tomo_type: t for t in toms}
                 else:
                     algs_at[vs] = set()
 
             if has_seg_at[vs]:
                 had_seg = True
                 if alg in algs_at[vs]:
+                    # Skip (run, alg) pairs whose tomogram shape disagrees with the target
+                    # segmentation shape at this voxel size -- they cannot be cropped together
+                    # (mirrors the old prep-multiscale lazy shape check).
+                    seg_shp = seg_shape_at.get(vs)
+                    tomo_shp = _spatial_shape(tomo_by_alg_at[vs].get(alg))
+                    if seg_shp is not None and tomo_shp is not None and seg_shp != tomo_shp:
+                        shape_skipped.append(f"{run.name} {alg}@{vs}: tomo {tomo_shp} != seg {seg_shp}")
+                        continue
                     run_pairs.append((alg, vs))
                     found.add((alg, vs))
 
@@ -126,6 +157,12 @@ def scan_runs(
             runs_with_seg += 1
         if run_pairs:
             available[run.name] = run_pairs
+
+    if shape_skipped:
+        print(
+            "\n[Warning] Skipped tomogram/target pairs with mismatched shapes "
+            f"({len(shape_skipped)}):\n\t\t" + "\n\t\t".join(shape_skipped) + "\n"
+        )
 
     missing = requested - found
     return available, runs_with_seg, missing

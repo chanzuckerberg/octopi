@@ -32,9 +32,10 @@ def train_model(
 
     from octopi.datasets.config import DataGeneratorConfig
     from monai.losses import TverskyLoss
+    from octopi.models import common as model_common
     from octopi.workflows import train
 
-    # Create a data generator 
+    # Create a data generator
     cfg = DataGeneratorConfig(
         config=copick_config_path,
         name=target_info[0], user_id=target_info[1], session_id=target_info[2],
@@ -45,10 +46,35 @@ def train_model(
     data_generator = cfg.create_data_generator()
     model_config['num_classes'] = data_generator.Nclasses
 
-    # Loss Functions
-    alpha = tversky_alpha
-    beta = 1 - alpha
-    loss_function = TverskyLoss(include_background=True, to_onehot_y=True, softmax=True, alpha=alpha, beta=beta)
+    # Loss Functions.
+    # If the model config records a base loss in its `optimizer:` block, rebuild that exact loss
+    # (e.g. a FocalLoss/gamma chosen by model-explore). Otherwise default to TverskyLoss(alpha).
+    opt = model_config.get('optimizer', {}) if isinstance(model_config, dict) else {}
+    cfg_loss = opt.get('loss_function')
+    if cfg_loss and cfg_loss != 'TverskyLoss' and cfg_loss != 'DeepSupervisionLoss':
+        loss_function = model_common.get_loss_function(
+            loss_name=cfg_loss,
+            gamma=opt.get('gamma'), alpha=opt.get('alpha'),
+            weight_tversky=opt.get('weight_tversky'),
+        )
+        print(f"Using loss from model config: {cfg_loss} "
+              f"(gamma={opt.get('gamma')}, alpha={opt.get('alpha')}, "
+              f"weight_tversky={opt.get('weight_tversky')})")
+    else:
+        if cfg_loss == 'DeepSupervisionLoss':
+            print(
+                "[Warning] model_config records loss_function: DeepSupervisionLoss -- a legacy "
+                "save-path artifact that lost the base loss and its gamma/alpha. The original loss "
+                "cannot be rebuilt from this config; falling back to TverskyLoss. Re-run "
+                "`octopi model-explore` to regenerate the config if you need the exact loss."
+            )
+        if cfg_loss == 'TverskyLoss' and opt.get('alpha') is not None:
+            alpha = opt['alpha']
+        else:
+            alpha = tversky_alpha
+        beta = 1 - alpha
+        loss_function = TverskyLoss(include_background=True, to_onehot_y=True, softmax=True, alpha=alpha, beta=beta)
+        print(f"Using TverskyLoss (alpha={alpha})")
 
     # Read per-class score weights from copick config metadata (score_weight key)
     import copick as _copick

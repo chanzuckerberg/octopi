@@ -140,13 +140,20 @@ class CopickDataModule:
         # Use SmartCacheDataset if the number of training files exceeds the tomo_batch_size
         if len(train_files) > self.tomo_batch_size:
             self.train_ds = SmartCacheDataset(
-                data=train_files,                
+                data=train_files,
                 transform=train_transforms,
-                cache_num=self.tomo_batch_size,  
-                replace_rate=0.15,               
+                cache_num=self.tomo_batch_size,
+                replace_rate=0.15,
                 num_init_workers=8,
                 num_replace_workers=8,
-                shuffle=False,
+                # shuffle=True so the cached window is a random mix of datasets rather than a
+                # contiguous dataset-grouped sweep (train_files is grouped by run/dataset). With
+                # shuffle=False the cache window slides through one acquisition at a time, the model
+                # over-fits each in turn and partially forgets the rest -> a periodic sawtooth in
+                # loss/val metrics (period ~= n_train_files / (replace_rate*cache_num)). The
+                # DataLoader's shuffle only reorders WITHIN the small cached window, not which
+                # tomograms are cached, so it does not substitute for this.
+                shuffle=True,
             )
         else:
             self.train_ds = CacheDataset(
@@ -401,15 +408,17 @@ class MultiCopickDataModule:
                 augment.get_random_transforms(self.input_dim, num_samples, self.Nclasses, self.bgr)
             ])
 
-        # Create the SmartCacheDataset
+        # Create the SmartCacheDataset.
+        # shuffle=True so the cached window is a random mix of datasets, not a contiguous
+        # dataset-grouped sweep (see the note in CopickDataModule.create).
         self.train_ds = SmartCacheDataset(
-            data=train_files,                
+            data=train_files,
             transform=train_transforms,
-            cache_num=self.tomo_batch_size,  
-            replace_rate=0.15,               
+            cache_num=self.tomo_batch_size,
+            replace_rate=0.15,
             num_init_workers=8,
             num_replace_workers=8,
-            shuffle=False,
+            shuffle=True,
         )
 
         # Create the DataLoader

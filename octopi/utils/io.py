@@ -96,28 +96,32 @@ def get_optimizer_parameters(trainer):
     """
     Extract optimizer parameters from a trainer object.
     """
+    # Unwrap DeepSupervisionLoss so we record the BASE loss (e.g. FocalLoss + gamma) rather than
+    # the wrapper — the wrapper has no alpha/gamma and would otherwise drop those params on save.
+    base_loss = getattr(trainer.loss_function, 'loss', trainer.loss_function)
+
     optimizer_parameters = {
-        'my_num_samples': trainer.num_samples,  
+        'my_num_samples': trainer.num_samples,
         'val_interval': trainer.val_interval,
         'lr': trainer.lr0,
         'optimizer': trainer.optimizer.__class__.__name__,
         'metrics_function': trainer.metrics_function.__class__.__name__,
-        'loss_function': trainer.loss_function.__class__.__name__,
+        'loss_function': base_loss.__class__.__name__,
         'metric': trainer.best_metric
     }
 
-    # Log Tversky Loss Parameters
-    if trainer.loss_function.__class__.__name__ == 'TverskyLoss':
-        optimizer_parameters['alpha'] = trainer.loss_function.alpha
-    elif trainer.loss_function.__class__.__name__ == 'FocalLoss':
-        optimizer_parameters['gamma'] = trainer.loss_function.gamma
-    elif trainer.loss_function.__class__.__name__ == 'WeightedFocalTverskyLoss':
-        optimizer_parameters['alpha'] = trainer.loss_function.alpha
-        optimizer_parameters['gamma'] = trainer.loss_function.gamma
-        optimizer_parameters['weight_tversky'] = trainer.loss_function.weight_tversky
-    elif trainer.loss_function.__class__.__name__ == 'FocalTverskyLoss':
-        optimizer_parameters['alpha'] = trainer.loss_function.alpha
-        optimizer_parameters['gamma'] = trainer.loss_function.gamma
+    # Log Loss-specific Parameters
+    if base_loss.__class__.__name__ == 'TverskyLoss':
+        optimizer_parameters['alpha'] = base_loss.alpha
+    elif base_loss.__class__.__name__ == 'FocalLoss':
+        optimizer_parameters['gamma'] = base_loss.gamma
+    elif base_loss.__class__.__name__ == 'WeightedFocalTverskyLoss':
+        optimizer_parameters['alpha'] = base_loss.alpha
+        optimizer_parameters['gamma'] = base_loss.gamma
+        optimizer_parameters['weight_tversky'] = base_loss.weight_tversky
+    elif base_loss.__class__.__name__ == 'FocalTverskyLoss':
+        optimizer_parameters['alpha'] = base_loss.alpha
+        optimizer_parameters['gamma'] = base_loss.gamma
 
     # Include best trial information if available
     if trainer.best_trial:
