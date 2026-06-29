@@ -27,15 +27,17 @@ URI FORMATS
   Users express resources using short URI notation. Translate these to CLI flags as follows:
 
   Tomogram URI  "algorithm@voxel_spacing"   e.g. "wbp@10.0"
-    → --tomo-alg wbp --voxel-size 10.0
+    → --tomo-uri wbp@10.0
+    Repeat for multi-resolution training: --tomo-uri wbp@10.0 --tomo-uri wbp@5.0
 
   Segmentation URI  "name:user_id/session_id"   e.g. "predict:octopi/1"
-    → --seg-info predict,octopi,1  (comma-separated: name,user_id,session_id)
+    → --seg-uri predict:octopi/1
 
   Pick/Target URI  "name:user_id/session_id"   e.g. "ribosome:manual/1"
     → --target ribosome,manual,1  (for create-targets source picks)
-    → --picks-info ribosome,manual,1  (for membrane-extract)
+    → --picks-uri ribosome:manual/1  (for membrane-extract)
     → --pick-user-id manual --pick-session-id 1  (for localize output)
+    → --target-uri targets:octopi/1  (for train / model-explore target segmentation)
 
   Multiple URIs of the same type are passed as repeated flags, e.g.:
     --target ribosome,manual,1 --target virus-like-particle,tm,2
@@ -51,7 +53,7 @@ STEP 2 — train OR model-explore
     Supports --submitit for SLURM job submission (njobs concurrent trials).
   IMPORTANT: For train and model-explore, ALWAYS suggest the command as a copy-pasteable block.
   NEVER call run_octopi_command for these unless the user says "run it", "go ahead", or "execute it".
-  Key params for both: --config, --voxel-size, --target-info (seg URI → name,user_id,session_id), --tomo-alg, --output
+  Key params for both: --config, --tomo-uri (tomogram URI, repeatable for multi-resolution), --target-uri (target seg URI), --output
   Key params for model-explore: --model-type, --num-trials, --submitit, --njobs, --gpu-constraint
 
 STEP 3 — segment
@@ -73,7 +75,7 @@ STEP 5 (optional) — evaluate
 STEP 6 (optional) — membrane-extract
   Split picks by proximity to a membrane or organelle segmentation.
   Fast command — can run directly.
-  Key params: --config, --picks-info (pick URI), --seg-info (seg URI), --threshold, --save-session-id
+  Key params: --config, --picks-uri (pick URI), --seg-uri (seg URI), --threshold, --save-session-id
 
 HOW TO RESPOND
 - Use get_command_help to look up flags before suggesting a command.

@@ -36,8 +36,8 @@ octopi segment \
     --config config.json \
     --model-config best_model_config.yaml \
     --model-weights best_model.pth \
-    --voxel-size 10 --tomo-alg wbp \
-    --seg-info predict,unet,1
+    --tomo-uri wbp@10.0 \
+    --seg-uri predict:unet/1
 ```
 
 ??? info "`octopi segment -h`"
@@ -47,8 +47,7 @@ octopi segment \
         | Parameter | Description | Default | Notes |
         |----------|-------------|---------|------|
         | `--config` | Path to the CoPick configuration file. | – | Required |
-        | `--voxel-size` | Voxel size (Å) of tomograms used for inference. | `10` | Must match training |
-        | `--tomo-alg` | Tomogram reconstruction algorithm used for prediction. | `wbp` | Example: `denoised` |
+        | `--tomo-uri` | Tomogram URI in the form `alg@voxel_size`. Must match training. | `wbp@10.0` | Example: `denoised@10.0` |
 
     === "Model"
 
@@ -61,7 +60,7 @@ octopi segment \
 
         | Parameter | Description | Default | Notes |
         |----------|-------------|---------|------|
-        | `--seg-info` | Output segmentation identifier (`name,user_id,session_id`). | `predict,octopi,1` | Used to organize results |
+        | `--seg-uri` | Output segmentation URI (`name:user_id/session_id`). | `predict:octopi/1` | Used to organize results |
         | `--tomo-batch-size` | Number of tomograms processed concurrently. | `1` | One per GPU worker |
         | `--run-ids` | Specific run IDs to segment. | All runs | Example: `run1,run2` |
 
@@ -74,7 +73,7 @@ octopi segment \
     --config config.json \
     --model-config model1.yaml,model2.yaml \
     --model-weights model1.pth,model2.pth \
-    --seg-info ensemble,octopi,1
+    --seg-uri ensemble:octopi/1
 ```
 
 ---
@@ -86,7 +85,7 @@ Convert segmentation masks into 3D particle coordinates using peak detection.
 ```bash
 octopi localize \
     --config config.json \
-    --seg-info predict,unet,1 \
+    --seg-uri predict:unet/1 \
     --pick-session-id 1 --pick-user-id octopi
 ```
 
@@ -100,7 +99,7 @@ The localization algorithm uses **particle size information** from your copick c
         |----------|-------------|---------|------|
         | `--config` | Path to the CoPick configuration file. | – | Required |
         | `--method` | Localization algorithm to use. | `watershed` | Options: `watershed`, `com` |
-        | `--seg-info` | Segmentation input identifier (`name,user_id,session_id`). | `predict,octopi,1` | Must match segmentation output |
+        | `--seg-uri` | Segmentation input URI (`name:user_id/session_id`). | `predict:octopi/1` | Must match segmentation output |
         | `--voxel-size` | Voxel size (Å) for localization. | `10` | Must match segmentation |
         | `--runIDs` | Specific run IDs to localize. | All runs | Example: `run1,run2` |
 
