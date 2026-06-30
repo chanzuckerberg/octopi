@@ -5,9 +5,10 @@ from monai.transforms import (
     Orientationd, 
     RandRotate90d, 
     NormalizeIntensityd,
-    EnsureChannelFirstd, 
+    EnsureChannelFirstd,
     RandCropByPosNegLabeld,
     RandCropByLabelClassesd,
+    SpatialPadd,
     RandScaleIntensityd,
     RandShiftIntensityd,
     RandAdjustContrastd,
@@ -53,6 +54,12 @@ def get_random_transforms( input_dim, num_samples, Nclasses, bg_ratio: float = 0
         ratios = [bg_ratio] + [fg_ratio] * (Nclasses - 1)
     else:
         ratios = None  # equal sampling across all classes
+    # Pad volumes smaller than the crop up to the crop size so RandCropByLabelClassesd can always
+    # extract a full patch. This is a no-op for volumes already >= crop in every axis; it only
+    # zero-pads the short axis of thin tomograms (e.g. dataset 10006 at 20A, Z=68-92 < 96), with the
+    # label padded as background (0). Without it, thin volumes raise "ROI larger than image size".
+    pad = SpatialPadd(keys=["image", "label"], spatial_size=[input_dim[0], input_dim[1], input_dim[2]])
+
     crop = RandCropByLabelClassesd(
         keys=["image", "label"], label_key="label",
         spatial_size=[input_dim[0], input_dim[1], input_dim[2]],
@@ -69,7 +76,7 @@ def get_random_transforms( input_dim, num_samples, Nclasses, bg_ratio: float = 0
 
     return Compose([
         # Geometric augmentations
-        crop, rot,
+        pad, crop, rot,
         RandRotate90d(keys=["image", "label"], prob=0.5, spatial_axes=[1, 2], max_k=3),
         RandFlipd(keys=["image", "label"], prob=0.5, spatial_axis=0),
         RandFlipd(keys=["image", "label"], prob=0.5, spatial_axis=1),

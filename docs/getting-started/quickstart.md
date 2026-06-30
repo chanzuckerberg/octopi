@@ -69,8 +69,8 @@ Train a single 3D U-Net model:
 octopi train \
     --config experiment,config1.json \
     --config simulation,config2.json \
-    --voxel-size 10 --tomo-alg wbp \
-    --target-info targets,octopi,1
+    --tomo-uri wbp@10.0 \
+    --target-uri targets:octopi/1
 ```
 
 We can provide config files stemming from multiple copick projects. This would be relevenant in instances where you want to train a model that reflects multiple experimental acquisitions.
@@ -85,8 +85,8 @@ For optimal results, consider using Bayesian optimization to automatically disco
 octopi model-explore \
     --config experiment,config1.json \
     --config simulation,config2.json \
-    --voxel-size 10 --tomo-alg wbp \
-    --target-info targets,octopi,1
+    --tomo-uri wbp@10.0 \
+    --target-uri targets:octopi/1
 ```
 This approach automatically optimizes network architecture and hyperparameters, often achieving better performance than the default configuration. However, the exploration process can be lengthy taking up to a day to complete. 
 
@@ -99,13 +99,13 @@ Apply your trained model to new tomograms:
 ```bash
 octopi segment \
     --config config.json \
-    --seg-info predict,unet,1 \
     --model-weights results/best_model.pth \
     --model-config results/best_model_config.yaml \
-    --voxel-size 10 --tomo-alg wbp
+    --tomo-uri wbp@10.0 \
+    --seg-uri predict:unet/1
 ```
 
-This generates segmentation masks for your tomograms provided under the `--voxel-size` and `--tomo-alg` flags. The segmentation masks will be saved under the `--seg-info` flag. 
+This generates segmentation masks for your tomograms using the tomogram specified by `--tomo-uri`. The segmentation masks will be saved under the `--seg-uri` flag. 
 
 ### Step 4: Extract Particle Coordinates
 
@@ -114,7 +114,7 @@ Convert segmentation masks into precise 3D particle coordinates:
 ```bash
 octopi localize \
     --config config.json \
-    --seg-info predict,unet,1 \
+    --seg-uri predict:unet/1 \
     --pick-session-id 1 --pick-user-id unet
 ```
 

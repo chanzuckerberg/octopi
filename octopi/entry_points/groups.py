@@ -32,7 +32,7 @@ click.rich_click.OPTION_GROUPS = {
     "routines train": [
         {
             "name": "Input/Output Arguments",
-            "options": ["--config", "--voxel-size", "--target-info", "--tomo-alg", 
+            "options": ["--config", "--tomo-uri", "--target-uri",
                        "--trainRunIDs", "--validateRunIDs", "--data-split", "--output"]
         },
         {
@@ -67,7 +67,7 @@ click.rich_click.OPTION_GROUPS = {
     "routines segment": [
         {
             "name": "Input Arguments",
-            "options": ["--config", "--voxel-size", "--tomo-alg", "--run-ids"]
+            "options": ["--config", "--tomo-uri", "--run-ids"]
         },
         {
             "name": "Model Arguments",
@@ -75,13 +75,13 @@ click.rich_click.OPTION_GROUPS = {
         },
         {
             "name": "Inference Arguments",
-            "options": ["--seg-info", "--sliding-window-batch-size", "--overlap", "--ntta"]
+            "options": ["--seg-uri", "--sliding-window-batch-size", "--overlap", "--ntta"]
         }
     ],
     "routines localize": [
         {
             "name": "Input Arguments",
-            "options": ["--config", "--method", "--seg-info", "--voxel-size", "--runIDs"]
+            "options": ["--config", "--method", "--seg-uri", "--voxel-size", "--runIDs"]
         },
         {
             "name": "Localize Arguments",
@@ -96,7 +96,7 @@ click.rich_click.OPTION_GROUPS = {
     "routines model-explore": [
         {
             "name": "Input/Output Arguments",
-            "options": ["--config", "--voxel-size", "--target-info", "--tomo-alg", 
+            "options": ["--config", "--tomo-uri", "--target-uri",
                        "--trainRunIDs", "--validateRunIDs", "--data-split", "--output",  "--study-name",]
         },
         {
@@ -128,8 +128,8 @@ click.rich_click.OPTION_GROUPS = {
     "routines membrane-extract": [
         {
             "name": "Input Arguments",
-            "options": ["--config", "--voxel-size", "--picks-info", 
-                        "--seg-info", "--runIDs"]
+            "options": ["--config", "--voxel-size", "--picks-uri",
+                        "--seg-uri", "--runIDs"]
         },
         {
             "name": "Parameters",
@@ -152,49 +152,6 @@ click.rich_click.OPTION_GROUPS = {
         {
             "name": "Voxel Settings",
             "options": ["--input-voxel-size", "--output-voxel-size"]
-        }
-    ],
-    "routines nnunet prepare": [
-        {
-            "name": "Input Arguments",
-            "options": ["--config", "--voxel-size", "--tomo-alg", "--seg-info",
-                        "--train-run-ids", "--test-run-ids"]
-        },
-        {
-            "name": "Output Arguments",
-            "options": ["--dataset-id", "--dataset-name", "--raw"]
-        },
-        {
-            "name": "Parameters",
-            "options": ["--num-workers"]
-        }
-    ],
-    "routines nnunet train": [
-        {
-            "name": "Input/Output Arguments",
-            "options": ["--dataset-id", "--dataset-name", "--raw", "--preprocessed", "--results"]
-        },
-        {
-            "name": "Training Arguments",
-            "options": ["--configuration", "--folds", "--model", "--num-gpus"]
-        },
-        {
-            "name": "Options",
-            "options": ["--skip-preprocess"]
-        }
-    ],
-    "routines nnunet segment": [
-        {
-            "name": "Input Arguments",
-            "options": ["--config", "--tomo-uri", "--run-ids"]
-        },
-        {
-            "name": "Model Arguments",
-            "options": ["--plans", "--dataset", "--weights"]
-        },
-        {
-            "name": "Inference Arguments",
-            "options": ["--seg-uri", "--tta"]
         }
     ],
 }

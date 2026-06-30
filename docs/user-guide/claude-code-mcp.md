@@ -151,8 +151,8 @@ Claude suggests:
 ```bash
 octopi model-explore \
     --config /data/config.json \
-    --target-info targets,octopi,1 \
-    --voxel-size 10 \
+    --tomo-uri wbp@10.0 \
+    --target-uri targets:octopi/1 \
     --model-type Unet \
     --num-trials 50 \
     --output explore_results \

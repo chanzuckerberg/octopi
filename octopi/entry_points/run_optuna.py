@@ -22,11 +22,9 @@ import rich_click as click
               help="List of training run IDs, e.g., run1,run2 or [run1,run2]")
 @click.option('-n', '--study-name', type=str, default="model-search",
               help="Name of the Optuna/MLflow experiment")
-@click.option('-alg', '--tomo-alg', type=str, default='wbp',
-              help="Tomogram algorithm used for training, provide a comma-separated list of algorithms for multiple options. (e.g., 'denoised,wbp')")
-@click.option('-tinfo', '--target-info', type=str, default="targets,octopi,1",
+@click.option('-turi', '--target-uri', type=str, default="targets:octopi/1",
               callback=lambda ctx, param, value: parsers.parse_target(value),
-              help="Target information, e.g., 'name' or 'name,user_id,session_id'")
+              help="Target query as 'name', 'name:user_id', or 'name:user_id/session_id'. Default 'targets:octopi/1'.")
 @click.option('-o', '--output', type=str, default='explore_results',
               help="Name of the output directory")
 
@@ -43,7 +41,7 @@ import rich_click as click
               help="SLURM job timeout per trial when using submitit (hours)")
 @common.config_parameters(single_config=False)
 def cli(
-    config, voxel_size, target_info, tomo_alg, study_name, 
+    config, tomo_uris, target_uri, study_name,
     trainrunids, validaterunids, data_split, model_type, num_epochs, background_ratio,
     val_interval, ncache_tomos, best_metric, num_trials, random_seed, output,
     submitit, njobs, cpu_constraint, gpu_constraint, timeout):
@@ -52,14 +50,16 @@ def cli(
     """
 
     print('\n🚀 Starting a new Octopi Model Architecture Search...\n')
+    # click `multiple=True` yields a tuple; normalize to a list for downstream use.
+    tomo_uris = list(tomo_uris)
     run_model_explore(
-        config, voxel_size, target_info, tomo_alg, study_name, 
+        config, tomo_uris, target_uri, study_name,
         trainrunids, validaterunids, data_split, model_type, background_ratio,
         num_epochs, val_interval, ncache_tomos, best_metric, num_trials, random_seed, output,
         submitit=submitit, njobs=njobs, cpu_constraint=cpu_constraint, gpu_constraint=gpu_constraint, timeout=timeout,
     )
 
-def run_model_explore(config, voxel_size, target_info, tomo_alg, study_name, 
+def run_model_explore(config, tomo_uris, target_info, study_name, 
         trainrunids, validaterunids, data_split, model_type, background_ratio,
         num_epochs, val_interval, ncache_tomos, best_metric, num_trials, random_seed, 
         output, submitit, njobs, cpu_constraint, gpu_constraint, timeout):
@@ -84,8 +84,7 @@ def run_model_explore(config, voxel_size, target_info, tomo_alg, study_name,
         target_name=target_info[0],
         target_user_id=target_info[1],
         target_session_id=target_info[2],
-        tomo_algorithm=tomo_alg,
-        voxel_size=voxel_size,
+        tomo_uris=tomo_uris,
         model_type=model_type,
         random_seed=random_seed,
         num_epochs=num_epochs,

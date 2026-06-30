@@ -13,14 +13,16 @@ class DataGeneratorConfig:
     # Core data description
     config: Union[str, Dict[str, str]]
     name: str           # Name of the target for segmentation
-    voxel_size: float   # Voxel Size for training
+
+    # Tomogram URI(s) as 'alg@voxel_size'. A list (or comma string) enables
+    # multi-resolution training; the target voxel size is derived per URI.
+    tomo_uris: Union[str, List[str]] = "wbp@10.0"
 
     # Optional identifiers for the target query
     session_id: Optional[str] = None
     user_id: Optional[str] = None
 
-    # Tomogram + sampling
-    tomo_algorithm: Union[str, List[str]] = "wbp"
+    # Sampling
     ntomo_cache: int = 15
     background_ratio: float = 0.0
 
@@ -43,17 +45,6 @@ class DataGeneratorConfig:
         return cls(**filtered)
 
     # -------------------------
-    # Internal helpers
-    # -------------------------
-    def _normalize_tomo_algorithm(self) -> str:
-        """
-        Always return a comma-separated string for downstream code.
-        """
-        if isinstance(self.tomo_algorithm, list):
-            return ",".join(self.tomo_algorithm)
-        return self.tomo_algorithm
-
-    # -------------------------
     # Factory
     # -------------------------
     def create_data_generator(self, verbose: bool = True):
@@ -61,20 +52,18 @@ class DataGeneratorConfig:
         Create and initialize a Copick or MultiCopick data module.
         Safe to call inside a multiprocessing worker.
         """
-        tomo_alg = self._normalize_tomo_algorithm()
-
         if isinstance(self.config, dict):
             data_generator = generators.MultiCopickDataModule(
-                self.config, tomo_alg,
+                self.config, self.tomo_uris,
                 self.name, self.session_id, self.user_id,
-                self.voxel_size, self.ntomo_cache, self.background_ratio,
+                self.ntomo_cache, self.background_ratio,
                 verbose
             )
         else:
             data_generator = generators.CopickDataModule(
-                self.config, tomo_alg,
+                self.config, self.tomo_uris,
                 self.name, self.session_id, self.user_id,
-                self.voxel_size, self.ntomo_cache, self.background_ratio,
+                self.ntomo_cache, self.background_ratio,
                 verbose
             )
 

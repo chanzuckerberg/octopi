@@ -93,32 +93,32 @@ def save_parameters(seg_info: Tuple[str, str, str],
               help="List of runIDs to run inference on, e.g., run1,run2,run3 or [run1,run2,run3]")
 @click.option('-vs', '--voxel-size', type=float, default=10,
               help="Voxel size for localization")
-@click.option('-sinfo', '--seg-info', type=str, default='predict,octopi,1',
+@click.option('-suri', '--seg-uri', type=str, default='predict:octopi/1',
               callback=lambda ctx, param, value: parsers.parse_target(value),
-              help='Query for the organelles segmentations (e.g., "name" or "name,user_id,session_id")')
+              help='Query for the organelle segmentations as "name", "name:user_id", or "name:user_id/session_id".')
 @click.option('-m', '--method', type=click.Choice(['watershed', 'com'], case_sensitive=False), 
               default='watershed',
               help="Localization method to use")
 @click.option('-c', '--config', type=click.Path(exists=True), required=True,
               help="Path to the CoPick configuration file")
-def cli(config, method, seg_info, voxel_size, runids,
+def cli(config, method, seg_uri, voxel_size, runids,
         radius_min_scale, radius_max_scale, filter_size, pick_objects, n_procs,
         pick_session_id, pick_user_id):
     """
-    Convert Segmentation Masks to 3D Particle Coordinates. 
+    Convert Segmentation Masks to 3D Particle Coordinates.
 
-    This command converts segmentation masks into 3D particle coordinates using size-based filtering. 
-    It supports two localization methods: watershed and center of mass. The resulting particle coordinates 
+    This command converts segmentation masks into 3D particle coordinates using size-based filtering.
+    It supports two localization methods: watershed and center of mass. The resulting particle coordinates
     in your copick project, organized by segmentation name, user ID, and session ID for easy tracking and comparison.
-    
+
     \b
     Examples:
       # Localize particles with default settings
-      octopi localize -c config.json --seg-info predict,octopi,1
+      octopi localize -c config.json --seg-uri predict:octopi/1
     """
 
     print('\n🚀 Localizing Segmentation Masks into 3D Coordinates...\n')
-    run_localize(config, method, seg_info, voxel_size, runids,
+    run_localize(config, method, seg_uri, voxel_size, runids,
         radius_min_scale, radius_max_scale, filter_size, pick_objects, n_procs,
         pick_session_id, pick_user_id)
     

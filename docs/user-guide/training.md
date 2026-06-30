@@ -36,9 +36,9 @@ Octopi supports two complementary workflows:
     ```bash
     octopi train \
         --config config.json \
-        --voxel-size 10 --tomo-alg wbp \
+        --tomo-uri wbp@10.0 \
         --tomo-batch-size 50 --val-interval 10 \
-        --target-info targets,octopi,1
+        --target-uri targets:octopi/1
     ```
 
     ### Fine Tuning Models
@@ -48,7 +48,7 @@ Octopi supports two complementary workflows:
     ```bash
     octopi train \
         --config config.json \
-        --voxel-size 10 --tomo-alg wbp \
+        --tomo-uri wbp@10.0 \
         --model-config results/model_config.yaml \
         --model-weights results/best_model_weights.pth
     ```
@@ -60,9 +60,8 @@ Octopi supports two complementary workflows:
             | Parameter | Description | Example |
             |----------|-------------|---------|
             | `--config` | One or more CoPick configuration files. Multiple entries may be provided as `session_name,path`. | `config.json` |
-            | `--voxel-size` | Voxel size (Å) of tomograms used for training. Must match the target segmentations. | `10` |
-            | `--target-info` | Target specification in the form `name` or `name,user_id,session_id`. | `targets,octopi,1` |
-            | `--tomo-alg` | Tomogram reconstruction algorithm(s). Multiple values may be comma-separated. | `wbp` or `denoised,wbp` |
+            | `--tomo-uri` | Tomogram URI in the form `alg@voxel_size`. Repeat the flag for multi-resolution training. | `wbp@10.0` |
+            | `--target-uri` | Target segmentation in the form `name`, `name:user_id`, or `name:user_id/session_id`. | `targets:octopi/1` |
             | `--trainRunIDs` | Explicit list of run IDs to use for training (overrides automatic splitting). | `run1,run2` |
             | `--validateRunIDs` | Explicit list of run IDs to use for validation. | `run3,run4` |
             | `--data-split` | Train/validation(/test) split. Single value → train/val, two values → train/val/test. | `0.8` or `0.7,0.1` |
@@ -134,8 +133,8 @@ Octopi supports two complementary workflows:
     ```bash
     octopi model-explore \
         --config config.json \
-        --target-info targets,octopi,1 \
-        --voxel-size 10 --tomo-alg denoised \
+        --tomo-uri denoised@10.0 \
+        --target-uri targets:octopi/1 \
         --data-split 0.7 --model-type Unet \
         --num-trials 100 --best-metric fBeta3 \
         --study-name my-explore-job
@@ -150,9 +149,8 @@ Octopi supports two complementary workflows:
             | Parameter | Description | Default | Notes |
             |----------|-------------|---------|------|
             | `--config` | One or more CoPick config paths. Multiple entries may be provided as `session_name,path`. | – | Use multiple `--config` entries to combine sessions |
-            | `--voxel-size` | Voxel size (Å) of tomograms used. | `10` | Must match target segmentations |
-            | `--target-info` | Target specification: `name` or `name,user_id,session_id`. | `targets,octopi,1` | From the label preparation step |
-            | `--tomo-alg` | Tomogram reconstruction algorithm(s). Comma-separated values enable multi-alg training. | `wbp` | Example: `denoised,wbp` |
+            | `--tomo-uri` | Tomogram URI in the form `alg@voxel_size`. Repeat the flag for multi-resolution training. | `wbp@10.0` | Example: `--tomo-uri wbp@10.0 --tomo-uri wbp@5.0` |
+            | `--target-uri` | Target segmentation: `name`, `name:user_id`, or `name:user_id/session_id`. | `targets:octopi/1` | From the label preparation step |
             | `--trainRunIDs` | Explicit list of run IDs to use for training (overrides automatic splitting). | – | Example: `run1,run2` |
             | `--validateRunIDs` | Explicit list of run IDs to use for validation. | – | Example: `run3,run4` |
             | `--data-split` | Train/val(/test) split. Single value → train/val, two values → train/val/test. | `0.8` | Example: `0.7,0.1` → 70/10/20 |

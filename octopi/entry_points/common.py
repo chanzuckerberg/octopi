@@ -65,8 +65,11 @@ def train_parameters(octopi: bool = False):
 def config_parameters(single_config: bool):
     """Decorator for adding config parameters"""
     def decorator(f):
-        f = click.option("-vs", "--voxel-size", type=float, default=10,
-                        help="Voxel size of tomograms used")(f)
+        f = click.option("-uri", "--tomo-uri", "tomo_uris", type=str, multiple=True,
+                        default=("wbp@10.0",),
+                        help="Tomogram URI(s) as 'alg@voxel_size'. Repeat the flag for "
+                             "multi-resolution training, e.g. --tomo-uri wbp@10.0 --tomo-uri wbp@5.0. "
+                             "The target segmentation voxel size is derived from each URI.")(f)
         if single_config:
             f = click.option("-c", "--config", type=click.Path(exists=True), required=True,
                             help="Path to the configuration file")(f)
@@ -82,11 +85,9 @@ def inference_parameters():
         f = click.option('-runs', "--run-ids", type=str, default=None,
                         callback=lambda ctx, param, value: parsers.parse_list(value) if value else None,
                         help="List of run IDs for prediction, e.g., run1,run2 or [run1,run2]. If not provided, all available runs will be processed.")(f)
-        f = click.option('-seginfo', "--seg-info", type=str, default='predict,octopi,1',
+        f = click.option('-suri', "--seg-uri", type=str, default='predict:octopi/1',
                         callback=lambda ctx, param, value: parsers.parse_target(value) if value else value,
-                        help='Information Query to save Segmentation predictions under (e.g., "name" or "name,user_id,session_id" - Default UserID is octopi and SessionID is 1')(f)
-        f = click.option('-alg', "--tomo-alg", type=str, default='wbp',
-                        help="Tomogram algorithm used for produces segmentation prediction masks")(f)
+                        help='Information Query to save Segmentation predictions under (e.g., "name" or "name:user_id/session_id"')(f)
         f = click.option('-swbs', "--sliding-window-batch-size", default=4, type=IntRange(min=1),
                         help="Batch size for sliding window inference")(f)
         f = click.option('--overlap', '-o', default=0.5, type=FloatRange(0.0, 1.0),

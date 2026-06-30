@@ -3,6 +3,7 @@ from monai.inferers import sliding_window_inference
 from octopi.pytorch.train_helper import auto_amp
 from octopi.utils import stopping_criteria
 import torch, os, mlflow, re, optuna, time
+from contextlib import nullcontext
 from monai.transforms import AsDiscrete
 from monai.data import decollate_batch
 import torch_ema as ema
@@ -111,34 +112,54 @@ class ModelTrainer:
     @torch.no_grad()
     def validate_update(self):
         """
-        Validate patch-by-patch. GridPatchDataset yields individual patches so
-        the DataLoader batches them directly — no manual sub-batching needed.
+        Validate with full-volume sliding-window inference so the metric matches
+        inference-time behavior (overlap + Gaussian blending). Scoring independent,
+        zero-padded patches instead systematically underestimates F1 by splitting
+        particles at patch boundaries and losing edge context.
+
+        Memory: patch compute runs on self.device, but only sw_batch_size ROI
+        windows are resident there at once — the full volume never lands on the
+        GPU. The blended output is assembled on the CPU in the autocast dtype
+        (bf16/fp16), so the host buffer is a single 2-byte (Nclass, D, H, W)
+        volume, then upcast to fp32 only for the loss/metric math.
         """
         self.model.eval()
         val_loss = 0
         n_batches = 0
 
+        out_device = torch.device("cpu")
+        amp_ctx = (
+            torch.amp.autocast(device_type=self.device.type, dtype=self.amp_dtype)
+            if self.amp_enabled else nullcontext()
+        )
+
         for val_data in self.val_loader:
-            batch_in  = val_data["image"].to(self.device, non_blocking=True)
-            batch_lbl = val_data["label"].to(self.device, non_blocking=True)
+            # Keep the full volume on CPU; sliding_window_inference ships only
+            # ROI windows to sw_device, bounding GPU memory by sw_batch_size.
+            batch_in  = val_data["image"]
+            batch_lbl = val_data["label"]
 
-            with torch.amp.autocast(
-                device_type=self.device.type,
-                dtype=self.amp_dtype,
-                enabled=self.amp_enabled,
-            ):
-                batch_out = self.model(batch_in)
+            # Validation window with a 128³ floor (grows with crop_size if larger).
+            # A 3D U-Net is fully convolutional, so it accepts a window larger
+            # than the crop it trained on; 128 is divisible by 32 (safe for
+            # SwinUNETR).
+            roi = max(128, self.crop_size)
+            with amp_ctx:
+                batch_out = sliding_window_inference(
+                    inputs=batch_in,
+                    roi_size=(roi, roi, roi),
+                    sw_batch_size=self.sw_bs,
+                    predictor=self.model,
+                    overlap=self.overlap,
+                    mode="gaussian",
+                    sw_device=self.device,   # window compute
+                    device=out_device,       # output assembly (CPU)
+                )
 
-            # During eval, DS models already return a single tensor.
-            # Guard against any edge case where a list is returned.
-            if isinstance(batch_out, (list, tuple)):
-                batch_out = batch_out[0]
+            # Upcast the 2-byte assembly buffer to fp32 for stable loss/metric math.
+            batch_out = batch_out.float()
 
-            # Keep loss computation on GPU: the old path did a round-trip to
-            # CPU per batch (~2-4 GB transfer) and forced a GPU sync, which
-            # was the dominant cost of validation. .float() upcasts bf16/fp16
-            # output to fp32 for numeric stability in TverskyLoss.
-            loss = self.loss_function(batch_out.float(), batch_lbl)
+            loss = self.loss_function(batch_out, batch_lbl)
             val_loss += loss.item()
             n_batches += 1
 
