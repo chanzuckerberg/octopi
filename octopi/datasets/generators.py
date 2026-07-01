@@ -92,7 +92,7 @@ class CopickDataModule:
         # Get Class Info from the Training Dataset (classes are identical across
         # resolutions, so read from the first requested voxel size).
         target_info = (self.target_name, self.target_session_id, self.target_user_id)
-        self.Nclasses, self.class_names = utils.get_class_info(
+        self.Nclasses, self.class_names, self.label_space, self.model_labels = utils.get_class_info(
             self.config, self.myRunIDs['train'].keys(), target_info, self.resolutions[0][1] )
 
         return self.myRunIDs
@@ -119,6 +119,11 @@ class CopickDataModule:
         # Define the Input Dimensions
         self.input_dim = crop_size, crop_size, crop_size
 
+        # Build the global->dense compaction map once (shared by train/val transforms).
+        # Labels are painted with copick global values on disk; the model needs dense
+        # [0..K]. Identity-collapsing for legacy sequential data.
+        orig_labels, target_labels = utils.build_compaction_map(self.root, self.model_labels, self.label_space)
+
         # Create the list of training files. One entry per (run, resolution):
         # each (alg, voxel_size) pair is loaded at its native spacing with its
         # own matching target, so the model trains across all resolutions.
@@ -133,7 +138,7 @@ class CopickDataModule:
         # Default Train Transforms for Particle Picking
         if train_transforms is None:
             train_transforms = Compose([
-                augment.get_transforms(),
+                augment.get_transforms(orig_labels=orig_labels, target_labels=target_labels),
                 augment.get_random_transforms(self.input_dim, num_samples, self.Nclasses, self.bgr)
             ])
 
@@ -194,7 +199,7 @@ class CopickDataModule:
         # systematically underestimates F1 by splitting particles at patch
         # boundaries. GPU memory stays bounded by the trainer's sw_batch_size
         # (only a few ROI windows resident at once), not by the volume size.
-        val_ds = CacheDataset(data=val_files, transform=augment.get_transforms(), cache_rate=1.0, num_workers=4)
+        val_ds = CacheDataset(data=val_files, transform=augment.get_transforms(orig_labels=orig_labels, target_labels=target_labels), cache_rate=1.0, num_workers=4)
 
         # batch_size=1: validation is per full volume (volumes differ in shape
         # and cannot be stacked). Throughput is governed by the trainer's
@@ -372,8 +377,25 @@ class MultiCopickDataModule:
 
         # Get Class Info from the Training Dataset (classes identical across
         # resolutions, so read from the first requested voxel size).
-        self.Nclasses, self.class_names = utils.get_class_info(
+        self.first_session = first_session
+        self.Nclasses, self.class_names, self.label_space, self.model_labels = utils.get_class_info(
             config_path, self.myRunIDs['train'][first_session].keys(), target_info, self.resolutions[0][1] )
+
+        # A single shared compaction map is derived from the first session only, so every
+        # config must assign the same copick global label to each selected object. Fail loudly
+        # otherwise (per-config maps are out of scope). Only meaningful in copick label space.
+        if self.label_space == 'copick':
+            ref = {name: self.roots[first_session].get_object(name).label for name in self.class_names}
+            for session_key, root in self.roots.items():
+                other = {
+                    name: (root.get_object(name).label if root.get_object(name) is not None else None)
+                    for name in self.class_names
+                }
+                if other != ref:
+                    raise ValueError(
+                        f"Copick global labels disagree across configs: session '{first_session}' has "
+                        f"{ref} but session '{session_key}' has {other}. MultiCopickDataModule derives one "
+                        f"shared copick->model map from the first session; per-config maps are unsupported." )
 
         return self.myRunIDs
 
@@ -390,6 +412,12 @@ class MultiCopickDataModule:
         # Define the Input Dimensions
         self.input_dim = crop_size, crop_size, crop_size
 
+        # Build the copick->model compaction map once from the first session's root
+        # (all configs agree on the schema, asserted in get_data_splits). Shared by
+        # train/val transforms; (None, None) for legacy targets → no-op.
+        orig_labels, target_labels = utils.build_compaction_map(
+            self.roots[self.first_session], self.model_labels, self.label_space)
+
         # Create the list of training files (one entry per session × run × resolution).
         train_files = [
             { 'run': run_id,
@@ -404,7 +432,7 @@ class MultiCopickDataModule:
         # Default Train Transforms for Particle Picking
         if train_transforms is None:
             train_transforms = Compose([
-                augment.get_transforms(),
+                augment.get_transforms(orig_labels=orig_labels, target_labels=target_labels),
                 augment.get_random_transforms(self.input_dim, num_samples, self.Nclasses, self.bgr)
             ])
 
@@ -455,7 +483,7 @@ class MultiCopickDataModule:
         # systematically underestimates F1 by splitting particles at patch
         # boundaries. GPU memory stays bounded by the trainer's sw_batch_size
         # (only a few ROI windows resident at once), not by the volume size.
-        val_ds = CacheDataset(data=val_files, transform=augment.get_transforms(), cache_rate=1.0, num_workers=4)
+        val_ds = CacheDataset(data=val_files, transform=augment.get_transforms(orig_labels=orig_labels, target_labels=target_labels), cache_rate=1.0, num_workers=4)
 
         # batch_size=1: validation is per full volume (volumes differ in shape
         # and cannot be stacked). Throughput is governed by the trainer's

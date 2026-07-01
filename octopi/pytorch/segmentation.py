@@ -131,10 +131,12 @@ class Predictor:
         """Load a single model or multiple models for soup."""
         
         self.models = []
+        configs_meta = []
         for i, (config_path, weights_path) in enumerate(zip(model_config, model_weights)):
 
             # Load the Model Config and Model Builder
             current_modelconfig = io.load_yaml(config_path)
+            configs_meta.append((current_modelconfig.get('labels'), current_modelconfig.get('label_space')))
             model_builder = common.get_model(current_modelconfig['model']['architecture'])
 
             # Check if the weights file exists
@@ -164,13 +166,68 @@ class Predictor:
         self.model = self.models[0]
 
         # Set the Number of Classes and Input Dimensions - Assume All Models are the Same
-        self.Nclass = current_modelconfig['model']['num_classes']     
+        self.Nclass = current_modelconfig['model']['num_classes']
         self.dim_in = current_modelconfig['model']['dim_in']
         self.input_dim = None
+
+        # Build the dense->global expansion map (resolved by name against the target project).
+        self._build_dense_to_global(configs_meta)
 
         # Print a message if Model Soup is Enabled
         if self.apply_modelsoup:
             self._print(f'Model Soup is Enabled : {len(self.models)} models loaded for ensemble inference')
+
+    def _build_dense_to_global(self, configs_meta):
+        """
+        Build ``self.dense_to_global``: a lookup that expands the model's dense ``[0..K]``
+        predictions back into canonical copick GLOBAL labels of the TARGET project before writing.
+
+        In copick label space, the model config records ``{name: model_label}`` plus
+        ``label_space: copick``. Each channel is resolved BY OBJECT NAME against the target
+        project (``self.root``, from the ``-c <config>`` passed to ``octopi segment``):
+        ``dense_to_global[model_label] = self.root.get_object(name).label``. This makes a trained
+        model reusable across copick projects whose global labels differ.
+
+        Legacy (no ``label_space``) or label-less configs fall back to identity — predictions are
+        written in the model's dense space unchanged, exactly as before.
+
+        Args:
+            configs_meta: list of ``(labels, label_space)`` tuples, one per ensemble member.
+        """
+        # Ensemble: every model in the soup must share the same label schema + space.
+        ref = configs_meta[0]
+        for meta in configs_meta[1:]:
+            if meta != ref:
+                raise ValueError(
+                    f"Ensemble model configs disagree on labels/label_space: {ref} vs {meta}. "
+                    f"All models in a soup must share the same label schema." )
+        labels, label_space = ref
+
+        # Legacy / label-less -> identity: predictions written in dense space, unchanged.
+        if label_space != 'copick' or not labels:
+            self.dense_to_global = np.arange(self.Nclass, dtype=np.uint8)
+            return
+
+        if len(labels) != self.Nclass - 1:
+            raise ValueError(
+                f"Model config 'labels' has {len(labels)} objects but num_classes={self.Nclass} "
+                f"implies {self.Nclass - 1}. The label schema is inconsistent." )
+
+        dense_to_global = np.zeros(self.Nclass, dtype=np.uint8)  # background 0 -> 0
+        for name, model_label in labels.items():
+            model_label = int(model_label)
+            if not 0 < model_label < self.Nclass:
+                raise ValueError(
+                    f"Model label {model_label} for '{name}' is out of range [1, {self.Nclass - 1}]." )
+            obj = self.root.get_object(name)
+            if obj is None:
+                raise ValueError(
+                    f"Model predicts object '{name}' but it is not defined in the target copick "
+                    f"project ({self.config}); cannot assign it a global label. Run inference "
+                    f"against a project that defines '{name}', or add it to the project config." )
+            dense_to_global[model_label] = obj.label
+
+        self.dense_to_global = dense_to_global
     
     @torch.inference_mode()
     def _run_single_model_inference(self, model, input_data, out_device: torch.device):
@@ -399,6 +456,9 @@ class Predictor:
             # Write the Prediction to the corresponding runs
             for i in range(len(preds)):
                 pred = preds[i].cpu().numpy()
+                # Expand dense [0..K] -> canonical copick global labels for the target
+                # project, so the stored `predict` segmentation is ordinary multilabel copick.
+                pred = self.dense_to_global[pred]
                 run = self.root.get_run(data['runid'][i])
                 writers.segmentation(
                     run, pred,
@@ -456,14 +516,17 @@ class Predictor:
         # Load the model config
         model_config = io.load_yaml(self.model_config[0])
 
-        # Create parameters dictionary
+        # Mirror the model's label schema into segment-*.yaml: `labels` ({name: model_label})
+        # and, in copick label space, the `label_space` marker. Downstream `localize` reads
+        # these to interpret the predict seg (copick globals vs legacy model space).
         params = {
             "inputs": {
                 "config": self.config,
                 "tomo_alg": tomo_algorithm,
                 "voxel_size": voxel_size
             },
-            'labels': model_config['labels'],
+            'label_space': model_config.get('label_space'),
+            'labels': model_config.get('labels'),
             'model': {
                 'configs': self.model_config,
                 'weights': self.model_weights

@@ -8,27 +8,31 @@ def create_sub_train_targets(
     pick_targets: List[Tuple[str, Union[str, None], Union[str, None]]],
     seg_targets: List[Tuple[str, Union[str, None], Union[str, None]]],
     voxel_size: float,
-    radius_scale: float,    
+    radius_scale: float,
     tomogram_algorithm: str,
     target_segmentation_name: str,
     target_user_id: str,
     target_session_id: str,
-    run_ids: List[str],    
+    run_ids: List[str],
+    label_space: str = 'model',
+    from_model: str = None,
     ):
     import octopi.processing.create_targets_from_picks as create_targets
     import copick
 
-    # Load Copick Project 
+    # Load Copick Project
     root = copick.from_file(config)
 
     # Create empty dictionary for all targets
     train_targets = defaultdict(dict)
 
-    # Create dictionary for particle targets
-    value = 1 
+    # Create dictionary for particle targets. Labels are assigned sequentially in
+    # argument order (legacy model/dense space); `finalize_label_space` may re-express
+    # them in copick global space below when `--label-space copick` is requested.
+    value = 1
     for t in pick_targets:
         # Parse the target
-        obj_name, user_id, session_id = t 
+        obj_name, user_id, session_id = t
         obj = root.get_object(obj_name)
 
         # Check if the object is valid
@@ -39,9 +43,9 @@ def create_sub_train_targets(
         if obj_name in train_targets:
             print(f'Warning - Skipping Particle Target: "{obj_name}, {user_id}, {session_id}", as it has already been added to the target list.')
             continue
-        
-        # Get the label and radius of the object
-        label = value # Assign labels sequentially
+
+        # Assign labels sequentially
+        label = value
         info = {
             "label": label,
             "user_id": user_id,
@@ -52,13 +56,16 @@ def create_sub_train_targets(
         train_targets[obj_name] = info
         value += 1
 
-    # Create dictionary for segmentation targets
-    train_targets = add_segmentation_targets(root, seg_targets, train_targets, value)   
+    # Create dictionary for segmentation targets (sequential, continuing the count)
+    train_targets = add_segmentation_targets(root, seg_targets, train_targets, value)
+
+    # Optionally re-express targets in copick GLOBAL label space (explicit label_space).
+    label_space = finalize_label_space(root, train_targets, label_space, from_model)
 
     create_targets.generate_targets(
         config, train_targets, voxel_size, tomogram_algorithm, radius_scale,
-        target_segmentation_name, target_user_id, 
-        target_session_id, run_ids
+        target_segmentation_name, target_user_id,
+        target_session_id, run_ids, label_space=label_space,
     )
 
 
@@ -73,12 +80,14 @@ def create_all_train_targets(
     target_segmentation_name: str,
     target_user_id: str,
     target_session_id: str,
-    run_ids: List[str],    
-    ):     
+    run_ids: List[str],
+    label_space: str = 'model',
+    from_model: str = None,
+    ):
     import octopi.processing.create_targets_from_picks as create_targets
     import copick
 
-    # Load Copick Project 
+    # Load Copick Project
     root = copick.from_file(config)
 
     # Create empty dictionary for all targets
@@ -98,17 +107,20 @@ def create_all_train_targets(
     # Create dictionary for segmentation targets
     target_objects = add_segmentation_targets(root, seg_targets, target_objects)
 
+    # Optionally re-express targets in copick GLOBAL label space (explicit label_space).
+    label_space = finalize_label_space(root, target_objects, label_space, from_model)
+
     create_targets.generate_targets(
-        config, target_objects, voxel_size, tomogram_algorithm, 
-        radius_scale, target_segmentation_name, target_user_id, 
-        target_session_id, run_ids 
+        config, target_objects, voxel_size, tomogram_algorithm,
+        radius_scale, target_segmentation_name, target_user_id,
+        target_session_id, run_ids, label_space=label_space,
     )
 
 def add_segmentation_targets(
     root,
     seg_targets,
     train_targets: dict,
-    start_value: int = -1
+    start_value: int = -1,
     ):
 
     # Create dictionary for segmentation targets
@@ -117,7 +129,8 @@ def add_segmentation_targets(
         # Parse Segmentation Target
         obj_name, user_id, session_id = s
 
-        # Add Segmentation Target
+        # Assign a sequential label (continuing the particle count) or fall back to the
+        # object's global label; `finalize_label_space` re-expresses these when needed.
         if start_value > 0:
             value = start_value
             start_value += 1
@@ -129,8 +142,8 @@ def add_segmentation_targets(
                 "label": value,
                 "user_id": user_id,
                 "session_id": session_id,
-                "is_particle_target": False,                 
-                "radius": None,    
+                "is_particle_target": False,
+                "radius": None,
             }
             train_targets[obj_name] = info
 
@@ -138,7 +151,48 @@ def add_segmentation_targets(
         except:
             print(f'Warning - Skipping Segmentation Name: "{obj_name}", as it is not a valid object in the Copick project.')
 
-    return train_targets    
+    return train_targets
+
+
+def finalize_label_space(root, train_targets, label_space, from_model):
+    """
+    Optionally re-express the target labels in copick GLOBAL label space.
+
+    Default (``label_space='model'``): no-op — the recorded ``label`` stays the model/dense
+    value and is what gets painted into the segmentation (legacy behavior, unchanged).
+
+    ``label_space='copick'``: the segmentation is painted with each object's copick GLOBAL
+    label (``root.get_object(name).label``), while the recorded ``label`` becomes the
+    model's dense channel (``model_label``). Channels are minted by ascending global label,
+    or, with ``from_model``, inherited per-name from a pretrained model config so fine-tuning
+    keeps the pretrained channel<->object binding. Returns the marker to persist in the
+    targets YAML (``'copick'`` or ``None``).
+    """
+    if label_space != 'copick':
+        return None
+
+    from octopi.utils import io
+
+    names = list(train_targets.keys())
+    copick_labels = {n: root.get_object(n).label for n in names}
+
+    if from_model:
+        pretrained = io.load_yaml(from_model).get('labels') or {}
+        missing = [n for n in names if n not in pretrained]
+        if missing:
+            raise ValueError(
+                f"--from-model {from_model} does not define model labels for {missing}; cannot "
+                f"align channels for fine-tuning (fine-tuning onto a new object set is out of scope)." )
+        model_labels = {n: int(pretrained[n]) for n in names}
+    else:
+        # Mint contiguous dense channels 1..K by ascending copick global label.
+        order = sorted(names, key=lambda n: copick_labels[n])
+        model_labels = {n: i + 1 for i, n in enumerate(order)}
+
+    for n in names:
+        train_targets[n]['paint_label'] = copick_labels[n]   # canonical copick label on disk
+        train_targets[n]['label'] = model_labels[n]          # recorded model (dense) channel
+    return 'copick'
 
 
 @click.command('create-targets', no_args_is_help=True)
@@ -172,9 +226,17 @@ def add_segmentation_targets(
               help='Target specifications: "name" or "name,user_id,session_id"')
 @click.option('-c', '--config', type=click.Path(exists=True), required=True,
               help="Path to the CoPick configuration file")
+@click.option('--label-space', type=click.Choice(['model', 'copick']), default='model',
+              help="Label space of the persisted targets. 'model' (default): legacy dense/sequential "
+                   "labels. 'copick': paint canonical copick GLOBAL labels and record model channels "
+                   "(name -> model_label) plus a `label_space: copick` marker in the targets YAML.")
+@click.option('--from-model', type=click.Path(exists=True), default=None,
+              help="With --label-space copick: inherit each object's model channel from this pretrained "
+                   "model_config.yaml (by name) so fine-tuning keeps the pretrained channel binding.")
 def cli(config, target, picks_session_id, picks_user_id, seg_target, run_ids,
         tomo_alg, radius_scale, voxel_size,
-        target_segmentation_name, target_user_id, target_session_id):
+        target_segmentation_name, target_user_id, target_session_id,
+        label_space, from_model):
     """
     Generate segmentation targets from CoPick configurations.
 
@@ -215,6 +277,8 @@ def cli(config, target, picks_session_id, picks_user_id, seg_target, run_ids,
             target_user_id=target_user_id,
             target_session_id=target_session_id,
             run_ids=run_ids,
+            label_space=label_space,
+            from_model=from_model,
         )
     else:
         # If no --target is provided, call create_all_train_targets
@@ -230,6 +294,8 @@ def cli(config, target, picks_session_id, picks_user_id, seg_target, run_ids,
             target_user_id=target_user_id,
             target_session_id=target_session_id,
             run_ids=run_ids,
+            label_space=label_space,
+            from_model=from_model,
         )
 
 
