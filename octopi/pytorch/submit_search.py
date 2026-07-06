@@ -25,7 +25,10 @@ class ExploreSubmitter:
         ntomo_cache: int = 15,
         trainRunIDs: List[str] = None, validateRunIDs: List[str] = None,
         study_name: str = 'explore',
-        background_ratio: float = 0.0
+        background_ratio: float = 0.0,
+        db_backend: str = 'sqlite',
+        pg_dbname: str = 'optuna',
+        pg_port: int = None,
     ):
         """
         Initialize the ModelSearch class for architecture search with Optuna.
@@ -67,6 +70,34 @@ class ExploreSubmitter:
         self.validateRunIDs = validateRunIDs
         self.data_split = data_split
         self.background_ratio = background_ratio
+        self.db_backend = db_backend
+        self.pg_dbname = pg_dbname
+        self.pg_port = pg_port
+        self._pg_server = None  # set when db_backend == 'postgres'
+
+    def _resolve_storage_url(self, output: str) -> str:
+        """Return the Optuna storage URL, starting a Postgres server if requested.
+
+        - 'sqlite'   -> file DB at {output}/trials.db (fine for single-node runs).
+        - 'postgres' -> start a private PostgreSQL server on this (supervisor)
+                        node and return a TCP URL the worker nodes can reach.
+                        Required for multi-node submitit runs; SQLite locks on
+                        networked filesystems like Lustre.
+        """
+        if self.db_backend == "postgres":
+            from octopi.pytorch.pg_server import PostgresServer
+            self._pg_server = PostgresServer(
+                data_dir=os.path.join(output, "pgdata"),
+                dbname=self.pg_dbname,
+                port=self.pg_port,
+            ).start()
+            return self._pg_server.url
+        return f"sqlite:///{output}/trials.db"
+
+    def _stop_storage_server(self) -> None:
+        """Tear down the Postgres server (no-op for sqlite)."""
+        if self._pg_server is not None:
+            self._pg_server.stop()
 
     def _setup_study_and_storage(self, study_name: str, output: str):
         """Create output dir, Optuna study, and save parameters. Returns (storage_url, storage, study, submit_kwargs)."""
@@ -75,11 +106,34 @@ class ExploreSubmitter:
         submit_kwargs["output"] = output
         self.save_parameters(submit_kwargs, output)
         os.makedirs(output, exist_ok=True)
-        storage_url = f"sqlite:///{output}/trials.db"
+        storage_url = self._resolve_storage_url(output)
         storage = helper.make_storage(storage_url)
         study = helper.get_study(study_name, storage, self.val_interval, self.n_warmup_steps)
         mlflow.set_experiment(study_name)
         return storage_url, storage, study, submit_kwargs
+
+    def _snapshot_dashboard_db(self, storage_url: str, study_name: str, output: str) -> None:
+        """Refresh a local SQLite mirror of the study for the VS Code Optuna
+        Dashboard extension, which only opens local sqlite files (it runs
+        client-side via WASM with no TCP support, so it can't reach 'postgres'
+        directly). No-op for the sqlite backend, since trials.db is already a
+        file the extension can open. Writes to a temp file and atomically
+        renames it so a viewer never opens a half-written snapshot.
+        """
+        if self.db_backend != "postgres":
+            return
+        dest = os.path.join(output, "trails.db")
+        tmp_dest = dest + ".tmp"
+        if os.path.exists(tmp_dest):
+            os.remove(tmp_dest)
+        try:
+            optuna.copy_study(
+                from_study_name=study_name, from_storage=storage_url,
+                to_storage=f"sqlite:///{tmp_dest}",
+            )
+            os.replace(tmp_dest, dest)
+        except Exception as e:
+            print(f"[dashboard-snapshot] skipped (will retry): {e}", flush=True)
 
     def _run_worker_pool(
         self,
@@ -111,6 +165,7 @@ class ExploreSubmitter:
             start_worker(gid)
 
         last_db_check = 0.0
+        last_snapshot = 0.0
         storage = helper.make_storage(storage_url)
         try:
             while True:
@@ -133,6 +188,7 @@ class ExploreSubmitter:
                     last_db_check = now
                     try:
                         study = optuna.load_study(study_name=study_name, storage=storage)
+                        helper.reclaim_stale_trials(study)
                         done = helper.count_terminal_trials(study)
                         print(f"[supervisor] done={done}/{self.num_trials}", flush=True)
                         if done >= self.num_trials:
@@ -146,6 +202,10 @@ class ExploreSubmitter:
                             print("[supervisor] DB locked; will retry later.", flush=True)
                         else:
                             raise
+
+                if now - last_snapshot >= helper.SNAPSHOT_EVERY_S:
+                    last_snapshot = now
+                    self._snapshot_dashboard_db(storage_url, study_name, submit_kwargs["output"])
 
                 time.sleep(helper.POLL_S)
         except KeyboardInterrupt:
@@ -173,9 +233,16 @@ class ExploreSubmitter:
         storage_url, storage, _study, submit_kwargs = self._setup_study_and_storage(
             study_name, output
         )
-        self._run_worker_pool(storage_url, study_name, submit_kwargs)
-        study = optuna.load_study(study_name=study_name, storage=storage)
-        self.save_contour_plot_as_png(study, output)
+        try:
+            self._run_worker_pool(storage_url, study_name, submit_kwargs)
+            study = optuna.load_study(study_name=study_name, storage=storage)
+            self.save_contour_plot_as_png(study, output)
+            # Final snapshot so the dashboard file reflects the finished study,
+            # not just whatever the last periodic tick captured.
+            self._snapshot_dashboard_db(storage_url, study_name, output)
+        finally:
+            # Always shut down the Postgres server (no-op for sqlite).
+            self._stop_storage_server()
 
     def save_contour_plot_as_png(self, study, output):
         """
@@ -330,6 +397,8 @@ class SubmititExplorer(ExploreSubmitter):
 
         # Printing status every helper.PRINT_EVERY_S seconds
         last_print = 0
+        last_snapshot = 0
+        last_reclaim = 0
 
         # Start the submitit job pool
         storage = helper.make_storage(storage_url)
@@ -357,16 +426,29 @@ class SubmititExplorer(ExploreSubmitter):
 
             # Check study progress
             study = optuna.load_study(study_name=study_name, storage=storage)
+
+            # Reclaim trials whose job died without a heartbeat update (e.g.
+            # SIGKILL/timeout) so RetryFailedTrialCallback can requeue them.
+            # Runs on the supervisor's own cadence, independent of whether any
+            # worker happens to call ask() (which also reclaims on its own).
+            now = time.time()
+            if now - last_reclaim >= helper.CHECK_DB_EVERY_S:
+                last_reclaim = now
+                helper.reclaim_stale_trials(study)
+
             done_count = helper.count_terminal_trials(study)
 
             # Print status periodically
-            now = time.time()
             if now - last_print >= helper.PRINT_EVERY_S:
                 print(
                     f"[submitit] done={done_count}/{num_trials} running={len(running)}",
                     flush=True,
                 )
                 last_print = now
+
+            if now - last_snapshot >= helper.SNAPSHOT_EVERY_S:
+                last_snapshot = now
+                self._snapshot_dashboard_db(storage_url, study_name, submit_kwargs["output"])
 
             if done_count >= num_trials and not running:
                 break

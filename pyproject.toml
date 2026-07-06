@@ -33,6 +33,7 @@ dependencies = [
     "nibabel",
     "mlflow",
     "optuna",
+    "psycopg2-binary",
     "monai",
     "pandas",
     "plotly",

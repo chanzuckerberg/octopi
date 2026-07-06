@@ -7,6 +7,7 @@ import signal, threading, warnings, time
 import torch, mlflow, optuna, logging
 from sqlite3 import OperationalError
 from optuna.trial import TrialState
+from optuna.storages._heartbeat import get_heartbeat_thread, is_heartbeat_enabled
 from typing import Set, Tuple, List
 import torch.multiprocessing as mp
 from octopi.datasets import config
@@ -20,6 +21,7 @@ POLL_S = 5
 MAX_RESTARTS_PER_GPU = 25
 CHECK_DB_EVERY_S = 120 # 2 minutes, to detect external study changes
 PRINT_EVERY_S = 120 # print submitit once per minute
+SNAPSHOT_EVERY_S = 60 # refresh the local sqlite dashboard snapshot (postgres backend only)
 
 @dataclass
 class WorkerSpec:
@@ -69,20 +71,104 @@ TERMINAL_STATES = (TrialState.COMPLETE, TrialState.PRUNED, TrialState.FAIL)
 def count_terminal_trials(study) -> int:
     return len(study.get_trials(states=TERMINAL_STATES))
 
+def _finalize_stale_trial(study, trial_id: int) -> None:
+    """Close out one RUNNING trial that's actually dead (heartbeat stale, or
+    the process exited without ever calling tell()).
+
+    A walltime/SIGKILL is not a failure of the hyperparameters — the trial
+    usually already has a real, if incomplete, best intermediate score. We
+    record that as COMPLETE (tagged status=timed_out), matching the manual
+    convention used to reclassify the first batch of stuck trials, so the
+    sampler treats it as genuine data instead of poisoning history with FAIL.
+    Only a trial with zero intermediate values (died before any progress) has
+    no usable signal — that one is marked FAIL, and we invoke the storage's
+    failed_trial_callback ourselves (set_trial_state_values doesn't trigger
+    it) so RetryFailedTrialCallback can requeue it.
+    """
+    storage = study._storage
+    frozen = storage.get_trial(trial_id)
+    if frozen.state != TrialState.RUNNING:
+        return  # already finalized by another worker/process
+
+    if frozen.intermediate_values:
+        best_value = max(frozen.intermediate_values.values())
+        if storage.set_trial_state_values(trial_id, state=TrialState.COMPLETE, values=[best_value]):
+            storage.set_trial_user_attr(trial_id, "status", "timed_out")
+            storage.set_trial_user_attr(trial_id, "finalized_by", "auto-reclaim")
+            print(f"[reclaim] trial {frozen.number} timed out -> COMPLETE (value={best_value:.4f})", flush=True)
+    else:
+        if storage.set_trial_state_values(trial_id, state=TrialState.FAIL):
+            print(f"[reclaim] trial {frozen.number} died with no progress -> FAIL", flush=True)
+            callback = storage.get_failed_trial_callback()
+            if callback is not None:
+                callback(study, storage.get_trial(trial_id))
+
+def reclaim_stale_trials(study) -> None:
+    """Finalize any RUNNING trial whose heartbeat has gone stale (dead job).
+
+    optuna.storages.fail_stale_trials only runs automatically inside
+    study.optimize()'s internal loop (right before each ask()), and it always
+    marks stale trials FAIL. We use ask/tell directly, so nothing ever called
+    it — heartbeats were being recorded but never checked, and a killed job's
+    trial stayed RUNNING forever. We call the equivalent ourselves here, but
+    via _finalize_stale_trial so a genuine partial result isn't recorded as a
+    failure.
+    """
+    storage = study._storage
+    if not is_heartbeat_enabled(storage):
+        return
+    try:
+        stale_trial_ids = storage._get_stale_trial_ids(study._study_id)
+    except Exception as e:
+        print(f"[reclaim] could not list stale trials (will retry next cycle): {e}", flush=True)
+        return
+    for trial_id in stale_trial_ids:
+        try:
+            _finalize_stale_trial(study, trial_id)
+        except optuna.exceptions.UpdateFinishedTrialError:
+            continue  # race: another process already finalized it
+        except Exception as e:
+            print(f"[reclaim] error finalizing trial {trial_id}: {e}", flush=True)
+
+def finalize_trial_if_running(study, trial) -> None:
+    """Close out a trial still RUNNING when its process is exiting (e.g. a
+    graceful walltime signal). We use Optuna's ask/tell API, which — unlike
+    ``study.optimize`` — does not record heartbeats on its own, so without
+    this the trial would stay RUNNING forever. Cannot help a hard SIGKILL —
+    the heartbeat-based reclaim_stale_trials covers that case instead.
+    """
+    try:
+        _finalize_stale_trial(study, trial._trial_id)
+    except Exception as e:
+        # Best-effort cleanup; never mask the original exit path.
+        print(f"[finalize] could not finalize trial {getattr(trial, 'number', '?')}: {e}", flush=True)
+
 def make_storage(storage_url: str):
-    # For multi-worker: prefer Postgres/MySQL. SQLite can lock.
+    # Engine kwargs are dialect-specific: SQLite's connect_args (timeout /
+    # check_same_thread) are invalid for the psycopg2 driver, and vice versa.
+    # For multi-worker runs across nodes, prefer Postgres (SQLite locks on
+    # networked filesystems). See octopi.pytorch.pg_server.
+    if storage_url.startswith("postgresql") or storage_url.startswith("postgres"):
+        engine_kwargs = {
+            "pool_pre_ping": True,      # drop dead connections from the pool
+            "pool_size": 5,
+            "max_overflow": 10,
+            "connect_args": {"connect_timeout": 30},
+        }
+    else:  # sqlite (single-node / local runs)
+        engine_kwargs = {
+            "connect_args": {
+                "timeout": 300,  # 5 minutes to wait on a lock
+                "check_same_thread": False,  # allow multi-threaded access
+            },
+            "pool_pre_ping": True,
+        }
     return optuna.storages.RDBStorage(
         url=storage_url,
         heartbeat_interval=60,
         grace_period=600,
         failed_trial_callback=optuna.storages.RetryFailedTrialCallback(max_retry=1),
-        engine_kwargs={
-            "connect_args": {
-                "timeout": 300,  # 5 minutes timeout for lock acquisition
-                "check_same_thread": False  # Allow multi-threaded access
-            },
-            "pool_pre_ping": True  # Verify connections before using
-        }
+        engine_kwargs=engine_kwargs,
     )
 
 def get_sampler():
@@ -143,7 +229,8 @@ def gpu_worker_loop(
     # Main loop: keep asking for new trials until enough trials have been completed or something breaks
     while not stop_event.is_set():
         try:
-            # Ask for a new trial (retry on DB lock)
+            # Reclaim any trial whose job died without a heartbeat update, then ask (retry on DB lock)
+            reclaim_stale_trials(study)
             trial = _retry_optuna_db(study.ask)
 
             # Verbose to show data splits (# runs / tomograms) for only the first trial
@@ -156,15 +243,16 @@ def gpu_worker_loop(
             model_search = ModelExplorer(data_generator, submit_kwargs["model_type"], submit_kwargs["output"])            
 
             try:
-                value = model_search.objective(
-                    trial=trial,
-                    epochs=int(submit_kwargs.get("num_epochs", 100)),
-                    device=device,
-                    val_interval=int(submit_kwargs.get("val_interval", 10)),
-                    best_metric=str(submit_kwargs.get("best_metric", "avg_f1")),
-                )
-                _retry_optuna_db(study.tell, trial, value)
-                print(f"[worker {gpu_id}] COMPLETE trial={trial.number} value={value}", flush=True)
+                with get_heartbeat_thread(trial._trial_id, storage):
+                    value = model_search.objective(
+                        trial=trial,
+                        epochs=int(submit_kwargs.get("num_epochs", 100)),
+                        device=device,
+                        val_interval=int(submit_kwargs.get("val_interval", 10)),
+                        best_metric=str(submit_kwargs.get("best_metric", "avg_f1")),
+                    )
+                    _retry_optuna_db(study.tell, trial, value)
+                    print(f"[worker {gpu_id}] COMPLETE trial={trial.number} value={value}", flush=True)
 
             except optuna.TrialPruned:
                 _retry_optuna_db(study.tell, trial, state=TrialState.PRUNED)
@@ -188,6 +276,10 @@ def gpu_worker_loop(
                 except Exception:
                     pass
                 time.sleep(2)
+
+            finally:
+                # Ensure a killed/interrupted trial does not linger in RUNNING.
+                finalize_trial_if_running(study, trial)
 
         except Exception as e:
             # This catches Optuna/DB-level issues (e.g. sqlite lock)
@@ -235,6 +327,8 @@ def run_one_trial(storage_url: str, study_name: str, submit_kwargs: dict):
         val_interval=val_interval,
         n_warmup_steps=n_warmup_steps
     )
+    # Reclaim any trial whose job died without a heartbeat update, then ask for our own.
+    reclaim_stale_trials(study)
     trial = _retry_optuna_db(study.ask)
     trial_num = trial.number
     print(f"[Trial {trial_num}] START trial", flush=True)
@@ -253,17 +347,21 @@ def run_one_trial(storage_url: str, study_name: str, submit_kwargs: dict):
     print(f"[Trial {trial.number}] epochs={nepochs} val_interval={val_interval}", flush=True)
     print(f"[Trial {trial.number}] pruner={type(pr).__name__} - warmup={getattr(pr,'_n_warmup_steps',None)} - interval={getattr(pr,'_interval_steps',None)}", flush=True)
 
+    # Heartbeat thread keeps this RUNNING trial's heartbeat fresh so that a
+    # hard-killed job (SIGKILL / node loss) is reclaimed by fail_stale_trials
+    # after grace_period. ask/tell does not record heartbeats on its own.
     try:
-        value = model_search.objective(
-            trial=trial,
-            epochs=int(submit_kwargs.get("num_epochs", 100)),
-            device=device,
-            val_interval=int(submit_kwargs.get("val_interval", 10)),
-            best_metric=str(submit_kwargs.get("best_metric", "avg_f1")),
-        )
-        _retry_optuna_db(study.tell, trial, value)
-        print(f"[Trial {trial_num}] COMPLETE value={value}", flush=True)
-        return value
+        with get_heartbeat_thread(trial._trial_id, storage):
+            value = model_search.objective(
+                trial=trial,
+                epochs=int(submit_kwargs.get("num_epochs", 100)),
+                device=device,
+                val_interval=int(submit_kwargs.get("val_interval", 10)),
+                best_metric=str(submit_kwargs.get("best_metric", "avg_f1")),
+            )
+            _retry_optuna_db(study.tell, trial, value)
+            print(f"[Trial {trial_num}] COMPLETE value={value}", flush=True)
+            return value
     except optuna.TrialPruned:
         _retry_optuna_db(study.tell, trial, state=TrialState.PRUNED)
         print(f"[Trial {trial_num}] PRUNED", flush=True)
@@ -285,6 +383,11 @@ def run_one_trial(storage_url: str, study_name: str, submit_kwargs: dict):
         except Exception:
             pass
         raise
+    finally:
+        # Graceful-shutdown backstop: if a walltime signal ended training
+        # without any tell() path running, close the trial so it does not
+        # linger in RUNNING forever.
+        finalize_trial_if_running(study, trial)
 
 #--------------------------------
 # SLURM GPU Query Verification 

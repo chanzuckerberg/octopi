@@ -39,12 +39,16 @@ import rich_click as click
               help='GPU constraint to use for SLURM jobs (e.g., "a6000" or "l40,a6000")')
 @click.option('--timeout', type=int, default=4,
               help="SLURM job timeout per trial when using submitit (hours)")
+@click.option('--db-backend', type=click.Choice(['sqlite', 'postgres'], case_sensitive=False),
+              default=None,
+              help="Optuna storage backend. Default: 'postgres' with --submitit "
+                   "(safe for multi-node concurrent workers), else 'sqlite'.")
 @common.config_parameters(single_config=False)
 def cli(
     config, tomo_uris, target_uri, study_name,
     trainrunids, validaterunids, data_split, model_type, num_epochs, background_ratio,
     val_interval, ncache_tomos, best_metric, num_trials, random_seed, output,
-    submitit, njobs, cpu_constraint, gpu_constraint, timeout):
+    submitit, njobs, cpu_constraint, gpu_constraint, timeout, db_backend):
     """
     Perform model architecture search with Optuna.
     """
@@ -57,12 +61,13 @@ def cli(
         trainrunids, validaterunids, data_split, model_type, background_ratio,
         num_epochs, val_interval, ncache_tomos, best_metric, num_trials, random_seed, output,
         submitit=submitit, njobs=njobs, cpu_constraint=cpu_constraint, gpu_constraint=gpu_constraint, timeout=timeout,
+        db_backend=db_backend,
     )
 
-def run_model_explore(config, tomo_uris, target_info, study_name, 
+def run_model_explore(config, tomo_uris, target_info, study_name,
         trainrunids, validaterunids, data_split, model_type, background_ratio,
-        num_epochs, val_interval, ncache_tomos, best_metric, num_trials, random_seed, 
-        output, submitit, njobs, cpu_constraint, gpu_constraint, timeout):
+        num_epochs, val_interval, ncache_tomos, best_metric, num_trials, random_seed,
+        output, submitit, njobs, cpu_constraint, gpu_constraint, timeout, db_backend=None):
     """
     Run the model exploration (local GPUs or SLURM via submitit).
     """
@@ -78,8 +83,15 @@ def run_model_explore(config, tomo_uris, target_info, study_name,
     # Create the model exploration directory
     os.makedirs(output, exist_ok=True)
 
+    # Default storage: postgres for multi-node submitit runs (SQLite locks on
+    # networked filesystems), sqlite for single-node local runs.
+    if db_backend is None:
+        db_backend = 'postgres' if submitit else 'sqlite'
+    print(f"🗄️  Optuna storage backend: {db_backend}\n")
+
     # Base keyword arguments for both local and submitit explorers
     base_kwargs = dict(
+        db_backend=db_backend,
         copick_config=copick_configs,
         target_name=target_info[0],
         target_user_id=target_info[1],
