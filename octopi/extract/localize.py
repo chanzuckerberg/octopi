@@ -251,12 +251,11 @@ def extract_particle_centroids_via_com(
     # Filter the objects based on size
     valid_objects = np.where((object_sizes > min_particle_size) & (object_sizes < max_particle_size))[0]
 
-    # Estimate Coordiantes from CoM for LabelMaps
+    # Estimate Coordinates from CoM for LabelMaps.
     octopiCoords = []
     for object_num in tqdm(valid_objects):
         com = ndi.center_of_mass(label_objs == object_num)
-        swapped_com = (com[2], com[1], com[0])
-        octopiCoords.append(swapped_com)
+        octopiCoords.append(com)
 
     return octopiCoords
 
