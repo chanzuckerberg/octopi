@@ -60,6 +60,7 @@ def generate_targets(
     target_user_name: str = 'octopi',
     target_session_id: str = '1',
     run_ids: List[str] = None,
+    label_space: str = None,
     ):
     """
     Generate segmentation targets from picks in CoPick configuration.
@@ -130,9 +131,10 @@ def generate_targets(
                     voxel_size=voxel_size
                 )
 
-        # Add Segmentations to Target
+        # Add Segmentations to Target. Paint the value the seg should hold on disk:
+        # 'paint_label' (copick global) when in copick label space, else the recorded 'label'.
         for seg in query_seg:
-            classLabel = train_targets[seg.name]['label']
+            classLabel = train_targets[seg.name].get('paint_label', train_targets[seg.name]['label'])
             segvol = seg.numpy()
             if segvol.shape != target.shape:
                 try:
@@ -163,10 +165,11 @@ def generate_targets(
         # Add Picks to Target  
         for pick in query:
             numPicks += len(pick.points)
-            target = from_picks(pick, 
-                                target, 
-                                train_targets[pick.pickable_object_name]['radius'] * radius_scale,
-                                train_targets[pick.pickable_object_name]['label'],
+            pinfo = train_targets[pick.pickable_object_name]
+            target = from_picks(pick,
+                                target,
+                                pinfo['radius'] * radius_scale,
+                                pinfo.get('paint_label', pinfo['label']),
                                 voxel_size
                                 )
 
@@ -196,6 +199,7 @@ def generate_targets(
         "target_session_id": target_session_id,
         "voxel_size": voxel_size,
         "labels": labels,
+        "label_space": label_space,
     }
     target_query = f'{target_user_name}_{target_session_id}_{target_segmentation_name}'
     print(f'💾 Saving parameters to {basepath}/targets-{target_query}.yaml')
@@ -214,13 +218,17 @@ def save_parameters(args, basepath: str, target_query: str):
         basepath: Path to save the YAML file.
         target_query: Query string for target identification.
     """
-    # Prepare input group
+    # Prepare input group. `labels` records name -> recorded label (model channel in copick
+    # mode, sequential in legacy). The optional `label_space: copick` marker tells consumers the
+    # persisted seg holds copick GLOBAL labels and to remap copick<->model by name.
     keys = ['user_id', 'session_id']
     input_group = {
         "config": args['config'],
-        "labels": {name: info['label'] for name, info in args['train_targets'].items()},  # <-- Added comma here
+        "labels": {name: info['label'] for name, info in args['train_targets'].items()},
         "targets": {name: {k: info[k] for k in keys} for name, info in args['train_targets'].items()}
     }
+    if args.get('label_space'):
+        input_group['label_space'] = args['label_space']
         
     # Organize parameters into subgroups
     new_entry = {

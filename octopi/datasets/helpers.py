@@ -245,7 +245,7 @@ def get_data_splits(
 
     return myRunIDs
 
-def get_class_info(config, runIDs, target_info, voxel_size) -> tuple[int, list[str]]:
+def get_class_info(config, runIDs, target_info, voxel_size) -> tuple[int, list[str], str, dict]:
     """
     Get the number of classes and class names from a segmentation.
 
@@ -256,8 +256,10 @@ def get_class_info(config, runIDs, target_info, voxel_size) -> tuple[int, list[s
         voxel_size: The voxel size of the segmentation.
 
     Returns:
-        Nclasses: The number of classes.
-        class_names: The list of class names.
+        Nclasses: The number of classes (foreground objects + background).
+        class_names: The object names sorted by ascending recorded label (model channel).
+        label_space: 'copick' when the persisted seg holds copick global labels, else None.
+        model_labels: The recorded {name: model_label} map from the targets YAML.
     """
 
     # Load the Copick Config
@@ -285,14 +287,46 @@ def get_class_info(config, runIDs, target_info, voxel_size) -> tuple[int, list[s
             config, target_name, 'targets', 
             target_user_id, target_session_id
         )
-        class_names = target_config['input']['labels']
-        Nclasses = len(class_names) + 1
-        class_names = [name for name, idx in sorted(class_names.items(), key=lambda x: x[1])]
+        # `labels` maps name -> recorded label (model channel in copick space, else the
+        # legacy sequential value). `label_space` marks whether the seg holds copick globals.
+        model_labels = target_config['input']['labels']
+        label_space = target_config['input'].get('label_space')
+        Nclasses = len(model_labels) + 1
+        # Order object names by their model channel so class_names[i] aligns to channel i+1.
+        class_names = [name for name, _ in sorted(model_labels.items(), key=lambda kv: kv[1])]
 
         # We Only need to read One Segmentation to Get Class Info
-        break      
+        break
 
-    return Nclasses, class_names
+    return Nclasses, class_names, label_space, model_labels
+
+def build_compaction_map(root, model_labels, label_space):
+    """
+    Build the (orig_labels, target_labels) pair for MONAI's MapLabelValued that compacts the
+    persisted copick *global* labels into the model's dense channels, for ``label_space ==
+    'copick'`` targets. The mapping is read explicitly from the recorded ``model_labels``
+    ({name: model_label}) joined with the project config's global labels by name — no sorting.
+
+    Legacy targets (``label_space`` not 'copick') are already in model/dense space, so no remap
+    is needed and ``(None, None)`` is returned (``get_transforms`` then skips MapLabelValued).
+
+    In copick mode every project object's global label maps to its model channel; objects that
+    are painted but not selected as training targets fold to background 0 (safe — copick global
+    labels are unique). Background maps to background.
+
+    Args:
+        root: A copick root for the (training) project the labels are painted in.
+        model_labels: The recorded {name: model_label} map (from get_class_info).
+        label_space: 'copick' to build the map, otherwise legacy no-op.
+
+    Returns:
+        (orig_labels, target_labels) for ``MapLabelValued``, or (None, None) for legacy.
+    """
+    if label_space != 'copick':
+        return None, None
+    orig_labels = [0] + [o.label for o in root.pickable_objects]
+    target_labels = [0] + [model_labels.get(o.name, 0) for o in root.pickable_objects]
+    return orig_labels, target_labels
 
 def build_target_uri(name: str, sessionid: str | None, userid: str | None, voxel_size: float) -> str:
     """

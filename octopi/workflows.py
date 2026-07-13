@@ -210,14 +210,19 @@ def localize(config, voxel_size, seg_info, pick_user_id, pick_session_id, n_proc
         # Load the Model Output Configuration
         seg_config = io.get_config(config, seg_info[0], 'segment', seg_info[1], seg_info[2])
 
-        # sync labels from the model config and remove objects not in model labels
+        # Sync labels with the model config and drop objects the model does not predict.
+        # In copick label space the predict seg already holds copick GLOBAL labels (== obj.label),
+        # so no value remap is needed. In legacy space it holds the model's dense labels, so remap
+        # each object's global label to its model channel (old behavior).
         label_map = seg_config.get('labels', {})
+        label_space = seg_config.get('label_space')
         for row in objects.copy():  # avoid modifying the list while iterating
             name, label, radius = row
-            if name in label_map and label != label_map[name]:
-                row[1] = int(label_map[name])  # mutate in place
-            elif name not in label_map: # remove this entry from objects
+            if name not in label_map:  # object not predicted by the model -> drop it
                 objects.remove(row)
+                continue
+            if label_space != 'copick' and label != label_map[name]:
+                row[1] = int(label_map[name])  # legacy: remap global -> model dense label
 
     # Filter objects based on the provided list
     if pick_objects is not None:

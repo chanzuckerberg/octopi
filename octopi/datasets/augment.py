@@ -1,9 +1,10 @@
 from octopi.datasets.loader import LoadCopickd
+import numpy as np
 from monai.transforms import (
-    Compose, 
-    RandFlipd, 
-    Orientationd, 
-    RandRotate90d, 
+    Compose,
+    RandFlipd,
+    Orientationd,
+    RandRotate90d,
     NormalizeIntensityd,
     EnsureChannelFirstd,
     RandCropByPosNegLabeld,
@@ -13,21 +14,37 @@ from monai.transforms import (
     RandShiftIntensityd,
     RandAdjustContrastd,
     RandGaussianNoised,
-    ScaleIntensityRanged,  
+    ScaleIntensityRanged,
     RandomOrder,
     RandAffined,
+    MapLabelValued,
 )
 
-def get_transforms():
+def get_transforms(orig_labels=None, target_labels=None, label_dtype=np.uint8):
     """
     Returns non-random transforms.
+
+    When ``orig_labels``/``target_labels`` are provided, a MapLabelValued is inserted
+    right after loading to compact the persisted copick *global* labels into the model's
+    dense ``[0..K]`` space (the loss/metric/one-hot ops require dense, contiguous labels).
+    The map is identity-collapsing for legacy sequential data, so it is a no-op there.
     """
-    return Compose([
-        LoadCopickd(),
+    transforms = [LoadCopickd()]
+    if orig_labels is not None:
+        transforms.append(
+            MapLabelValued(
+                keys=["label"],
+                orig_labels=orig_labels,
+                target_labels=target_labels,
+                dtype=label_dtype,
+            )
+        )
+    transforms += [
         EnsureChannelFirstd(keys=["image", "label"], channel_dim="no_channel"),
         NormalizeIntensityd(keys="image"),
-        Orientationd(keys=["image", "label"], axcodes="RAS")
-    ])
+        Orientationd(keys=["image", "label"], axcodes="RAS"),
+    ]
+    return Compose(transforms)
 
 def get_random_transforms( input_dim, num_samples, Nclasses, bg_ratio: float = 0.0):
     """

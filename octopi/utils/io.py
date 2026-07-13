@@ -153,16 +153,20 @@ def save_parameters_to_yaml(model, trainer, dataloader, filename: str):
     # Check for the target configuration file for model labels
     target_config = check_target_config_path(dataloader)
     
-    # Extract and flatten parameters
+    # Extract and flatten parameters. Carry the `label_space` marker (when present) so the
+    # model config records that its `labels` are model channels over copick-global targets,
+    # which inference/fine-tuning/localize use to remap copick<->model by name.
     parameters = {
         'model': model.get_model_parameters(),
         'labels': target_config['input']['labels'],
         'optimizer': get_optimizer_parameters(trainer),
         'dataloader': dataloader.get_dataloader_parameters()
     }
+    if target_config['input'].get('label_space'):
+        parameters['label_space'] = target_config['input']['label_space']
 
     save_parameters_yaml(parameters, filename)
-    print(f"⚙️ Training Parameters saved to {filename}") 
+    print(f"⚙️ Training Parameters saved to {filename}")
 
 def flatten_params(params, parent_key=''):
     """
