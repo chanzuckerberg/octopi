@@ -6,7 +6,6 @@ from scipy.spatial import cKDTree
 from typing import List, Optional, Tuple
 from copick_utils.io import readers
 import scipy.ndimage as ndi
-from tqdm import tqdm
 import numpy as np
 
 FOUR_THIRDS_PI = 4.0/3.0 * np.pi  # reuse
@@ -249,16 +248,15 @@ def extract_particle_centroids_via_com(
     object_sizes = np.bincount(label_objs.flat)
 
     # Filter the objects based on size
-valid_objects = np.where((object_sizes > min_particle_size) & (object_sizes < max_particle_size))[0]
-valid_objects = valid_objects[valid_objects != 0]
+    valid_objects = np.where((object_sizes > min_particle_size) & (object_sizes < max_particle_size))[0]
+    valid_objects = valid_objects[valid_objects != 0]
 
     # Estimate Coordinates from CoM for LabelMaps.
-    octopiCoords = []
-    for object_num in tqdm(valid_objects):
-        com = ndi.center_of_mass(label_objs == object_num)
-        octopiCoords.append(com)
-
-    return octopiCoords
+    return ndi.center_of_mass(
+        np.ones_like(label_objs, dtype=np.float32),
+        labels=label_objs,
+        index=valid_objects,
+    )
 
 def remove_repeated_picks(coordinates: np.ndarray,
                                distance_threshold: float) -> np.ndarray:
