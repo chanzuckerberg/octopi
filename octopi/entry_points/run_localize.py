@@ -1,5 +1,5 @@
 from octopi.utils import parsers
-from typing import List, Tuple
+from typing import List, Optional, Tuple
 import rich_click as click
 
 def pick_particles(
@@ -15,7 +15,7 @@ def pick_particles(
     pick_objects: List[str],
     runIDs: List[str],
     n_procs: int,
-    seg_label: int = None,
+    seg_label: Optional[int] = None,
     ):
     from octopi.workflows import localize
 
