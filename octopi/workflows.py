@@ -150,7 +150,7 @@ def segment(config, tomo_algorithm, voxel_size, model_weights, model_config,
 
 def localize(config, voxel_size, seg_info, pick_user_id, pick_session_id, n_procs = 16,
             method = 'watershed', filter_size = 10, radius_min_scale = 0.4, radius_max_scale = 1.0,
-            run_ids = None, pick_objects = None):
+            run_ids = None, pick_objects = None, seg_label = None):
     """
     Extract 3D Coordinates from the Segmentation Maps
 
@@ -166,6 +166,8 @@ def localize(config, voxel_size, seg_info, pick_user_id, pick_session_id, n_proc
         radius_min_scale (float): The minimum radius scale to use for localization
         radius_max_scale (float): The maximum radius scale to use for localization
         run_ids (list): The list of run IDs to use for localization
+        seg_label (int): Segmentation label value to extract for all objects. When set,
+            overrides the copick/model config labels (use for binary masks, foreground=1).
     """
     
     # Load the Copick Config
@@ -180,17 +182,21 @@ def localize(config, voxel_size, seg_info, pick_user_id, pick_session_id, n_proc
         if len(obj) < 3 or not isinstance(obj[2], (float, int)):
             raise ValueError(f"Invalid object format: {obj}. Expected a tuple with (name, label, radius).")
   
-    # Load the Model Output Configuration
-    seg_config = io.get_config(config, seg_info[0], 'segment', seg_info[1], seg_info[2])
+    if seg_label is not None:
+        for row in objects:
+            row[1] = int(seg_label)
+    else:
+        # Load the Model Output Configuration
+        seg_config = io.get_config(config, seg_info[0], 'segment', seg_info[1], seg_info[2])
 
-    # sync labels from the model config and remove objects not in model labels
-    label_map = seg_config.get('labels', {})
-    for row in objects.copy():  # avoid modifying the list while iterating
-        name, label, radius = row
-        if name in label_map and label != label_map[name]:
-            row[1] = int(label_map[name])  # mutate in place
-        elif name not in label_map: # remove this entry from objects 
-            objects.remove(row)
+        # sync labels from the model config and remove objects not in model labels
+        label_map = seg_config.get('labels', {})
+        for row in objects.copy():  # avoid modifying the list while iterating
+            name, label, radius = row
+            if name in label_map and label != label_map[name]:
+                row[1] = int(label_map[name])  # mutate in place
+            elif name not in label_map: # remove this entry from objects
+                objects.remove(row)
 
     # Filter objects based on the provided list
     if pick_objects is not None:
