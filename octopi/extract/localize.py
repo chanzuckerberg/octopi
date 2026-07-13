@@ -249,7 +249,8 @@ def extract_particle_centroids_via_com(
     object_sizes = np.bincount(label_objs.flat)
 
     # Filter the objects based on size
-    valid_objects = np.where((object_sizes > min_particle_size) & (object_sizes < max_particle_size))[0]
+valid_objects = np.where((object_sizes > min_particle_size) & (object_sizes < max_particle_size))[0]
+valid_objects = valid_objects[valid_objects != 0]
 
     # Estimate Coordinates from CoM for LabelMaps.
     octopiCoords = []
