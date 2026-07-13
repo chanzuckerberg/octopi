@@ -130,7 +130,6 @@ def run_localize(config, method, seg_info, voxel_size, runids,
     Run the localize command.
     """
     import octopi.utils.io as io
-    import multiprocess as mp
     import copick, os
     
     # Save JSON with Parameters
@@ -153,9 +152,6 @@ def run_localize(config, method, seg_info, voxel_size, runids,
         output_path=output_path
     )
 
-    # Set multiprocessing start method
-    mp.set_start_method("spawn")
-    
     pick_particles(
         copick_config_path=config,
         method=method,
