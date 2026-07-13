@@ -128,7 +128,7 @@ def cli(config, method, seg_uri, voxel_size, runids,
 
 def run_localize(config, method, seg_info, voxel_size, runids,
         radius_min_scale, radius_max_scale, filter_size, pick_objects, n_procs,
-        pick_session_id, pick_user_id, seg_label = None):
+        pick_session_id, pick_user_id, seg_label: Optional[int] = None):
     """
     Run the localize command.
     """
