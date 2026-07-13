@@ -1,5 +1,5 @@
 from octopi.utils import parsers
-from typing import List, Tuple
+from typing import List, Optional, Tuple
 import rich_click as click
 
 def pick_particles(
@@ -15,14 +15,15 @@ def pick_particles(
     pick_objects: List[str],
     runIDs: List[str],
     n_procs: int,
+    seg_label: Optional[int] = None,
     ):
     from octopi.workflows import localize
 
     # Run 3D Localization
     localize(
         copick_config_path, voxel_size, seg_info, pick_user_id, pick_session_id, n_procs,
-        method, filter_size, radius_min_scale, radius_max_scale, 
-        run_ids = runIDs, pick_objects = pick_objects
+        method, filter_size, radius_min_scale, radius_max_scale,
+        run_ids = runIDs, pick_objects = pick_objects, seg_label = seg_label
     )
 
 
@@ -83,6 +84,8 @@ def save_parameters(seg_info: Tuple[str, str, str],
               help="Specific Objects to Find Picks for")
 @click.option('-fs', '--filter-size', type=int, default=10,
               help="Filter size for localization")
+@click.option('-lbl', '--label', 'seg_label', type=int, default=None,
+              help="Segmentation label value to extract for all objects. Overrides the copick/model config labels.")
 @click.option('-rmax','--radius-max-scale', type=float, default=1.0,
               help="Maximum radius scale for particles")
 @click.option('-rmin', '--radius-min-scale', type=float, default=0.5,
@@ -102,7 +105,7 @@ def save_parameters(seg_info: Tuple[str, str, str],
 @click.option('-c', '--config', type=click.Path(exists=True), required=True,
               help="Path to the CoPick configuration file")
 def cli(config, method, seg_uri, voxel_size, runids,
-        radius_min_scale, radius_max_scale, filter_size, pick_objects, n_procs,
+        radius_min_scale, radius_max_scale, filter_size, seg_label, pick_objects, n_procs,
         pick_session_id, pick_user_id):
     """
     Convert Segmentation Masks to 3D Particle Coordinates.
@@ -120,17 +123,16 @@ def cli(config, method, seg_uri, voxel_size, runids,
     print('\n🚀 Localizing Segmentation Masks into 3D Coordinates...\n')
     run_localize(config, method, seg_uri, voxel_size, runids,
         radius_min_scale, radius_max_scale, filter_size, pick_objects, n_procs,
-        pick_session_id, pick_user_id)
-    
+        pick_session_id, pick_user_id, seg_label)
+
 
 def run_localize(config, method, seg_info, voxel_size, runids,
         radius_min_scale, radius_max_scale, filter_size, pick_objects, n_procs,
-        pick_session_id, pick_user_id):
+        pick_session_id, pick_user_id, seg_label: Optional[int] = None):
     """
     Run the localize command.
     """
     import octopi.utils.io as io
-    import multiprocess as mp
     import copick, os
     
     # Save JSON with Parameters
@@ -153,9 +155,6 @@ def run_localize(config, method, seg_info, voxel_size, runids,
         output_path=output_path
     )
 
-    # Set multiprocessing start method
-    mp.set_start_method("spawn")
-    
     pick_particles(
         copick_config_path=config,
         method=method,
@@ -169,6 +168,7 @@ def run_localize(config, method, seg_info, voxel_size, runids,
         runIDs=runids,
         pick_objects=pick_objects,
         n_procs=n_procs,
+        seg_label=seg_label,
     )
 
 

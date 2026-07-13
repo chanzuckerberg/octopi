@@ -148,9 +148,30 @@ def segment(config, tomo_algorithm, voxel_size, model_weights, model_config,
         sessionid=seg_info[2]
     )
 
+# build once inside each pool worker so the copick root is
+# never pickled/sent across processes (pickling a portal-backed root 
+# recurses through its gql schema and raises RecursionError).
+_LOCALIZE_CTX = {}
+
+
+def _localize_init(config, objects, seg_info, method, voxel_size, filter_size,
+                   radius_min_scale, radius_max_scale, pick_session_id, pick_user_id):
+    import copick
+    _LOCALIZE_CTX['root'] = copick.from_file(config)
+    _LOCALIZE_CTX['args'] = (objects, seg_info, method, voxel_size, filter_size,
+                             radius_min_scale, radius_max_scale, pick_session_id, pick_user_id)
+
+
+def _localize_worker(run_id):
+    root = _LOCALIZE_CTX['root']
+    args = _LOCALIZE_CTX['args']
+    process_localization(root.get_run(run_id), *args)
+    return run_id
+
+
 def localize(config, voxel_size, seg_info, pick_user_id, pick_session_id, n_procs = 16,
             method = 'watershed', filter_size = 10, radius_min_scale = 0.4, radius_max_scale = 1.0,
-            run_ids = None, pick_objects = None):
+            run_ids = None, pick_objects = None, seg_label = None):
     """
     Extract 3D Coordinates from the Segmentation Maps
 
@@ -166,10 +187,12 @@ def localize(config, voxel_size, seg_info, pick_user_id, pick_session_id, n_proc
         radius_min_scale (float): The minimum radius scale to use for localization
         radius_max_scale (float): The maximum radius scale to use for localization
         run_ids (list): The list of run IDs to use for localization
+        seg_label (int): Segmentation label value to extract for all objects. When set,
+            overrides the copick/model config labels (use for binary masks, foreground=1).
     """
-    
+
     # Load the Copick Config
-    root = copick.from_file(config) 
+    root = copick.from_file(config)
 
     # Get objects that can be Picked build into mutable rows
     objects = [[obj.name, int(obj.label), float(obj.radius)]
@@ -180,22 +203,26 @@ def localize(config, voxel_size, seg_info, pick_user_id, pick_session_id, n_proc
         if len(obj) < 3 or not isinstance(obj[2], (float, int)):
             raise ValueError(f"Invalid object format: {obj}. Expected a tuple with (name, label, radius).")
   
-    # Load the Model Output Configuration
-    seg_config = io.get_config(config, seg_info[0], 'segment', seg_info[1], seg_info[2])
+    if seg_label is not None:
+        for row in objects:
+            row[1] = int(seg_label)
+    else:
+        # Load the Model Output Configuration
+        seg_config = io.get_config(config, seg_info[0], 'segment', seg_info[1], seg_info[2])
 
-    # Sync labels with the model config and drop objects the model does not predict.
-    # In copick label space the predict seg already holds copick GLOBAL labels (== obj.label),
-    # so no value remap is needed. In legacy space it holds the model's dense labels, so remap
-    # each object's global label to its model channel (old behavior).
-    label_map = seg_config.get('labels', {})
-    label_space = seg_config.get('label_space')
-    for row in objects.copy():  # avoid modifying the list while iterating
-        name, label, radius = row
-        if name not in label_map:  # object not predicted by the model -> drop it
-            objects.remove(row)
-            continue
-        if label_space != 'copick' and label != label_map[name]:
-            row[1] = int(label_map[name])  # legacy: remap global -> model dense label
+        # Sync labels with the model config and drop objects the model does not predict.
+        # In copick label space the predict seg already holds copick GLOBAL labels (== obj.label),
+        # so no value remap is needed. In legacy space it holds the model's dense labels, so remap
+        # each object's global label to its model channel (old behavior).
+        label_map = seg_config.get('labels', {})
+        label_space = seg_config.get('label_space')
+        for row in objects.copy():  # avoid modifying the list while iterating
+            name, label, radius = row
+            if name not in label_map:  # object not predicted by the model -> drop it
+                objects.remove(row)
+                continue
+            if label_space != 'copick' and label != label_map[name]:
+                row[1] = int(label_map[name])  # legacy: remap global -> model dense label
 
     # Filter objects based on the provided list
     if pick_objects is not None:
@@ -217,24 +244,15 @@ def localize(config, voxel_size, seg_info, pick_user_id, pick_session_id, n_proc
         print(f"No runs available for localization with the specified voxel size - {voxel_size}.\nExiting...")
         return
 
-     # Run Localization - Main Parallelization Loop
+    # Run Localization - Main Parallelization Loop.
+    # Rebuilds the copick root in _localize_init to prevent pickling issues.
     print(f"Using {n_procs} processes to parallelize across {n_run_ids} run IDs.")
-    with mp.Pool(processes=n_procs) as pool:
+    ctx = mp.get_context("spawn")
+    initargs = (config, objects, seg_info, method, voxel_size, filter_size,
+                radius_min_scale, radius_max_scale, pick_session_id, pick_user_id)
+    with ctx.Pool(processes=n_procs, initializer=_localize_init, initargs=initargs) as pool:
         with tqdm(total=n_run_ids, desc="Localization", unit="run") as pbar:
-            worker_func = lambda run_id: process_localization(
-                root.get_run(run_id),  
-                objects, 
-                seg_info,
-                method, 
-                voxel_size,
-                filter_size,
-                radius_min_scale, 
-                radius_max_scale,
-                pick_session_id,
-                pick_user_id
-            )
-
-            for _ in pool.imap_unordered(worker_func, run_ids, chunksize=1):
+            for _ in pool.imap_unordered(_localize_worker, run_ids, chunksize=1):
                 pbar.update(1)
 
     print('✅ Localization Complete!')
