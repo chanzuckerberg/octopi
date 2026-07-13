@@ -148,6 +148,27 @@ def segment(config, tomo_algorithm, voxel_size, model_weights, model_config,
         sessionid=seg_info[2]
     )
 
+# build once inside each pool worker so the copick root is
+# never pickled/sent across processes (pickling a portal-backed root 
+# recurses through its gql schema and raises RecursionError).
+_LOCALIZE_CTX = {}
+
+
+def _localize_init(config, objects, seg_info, method, voxel_size, filter_size,
+                   radius_min_scale, radius_max_scale, pick_session_id, pick_user_id):
+    import copick
+    _LOCALIZE_CTX['root'] = copick.from_file(config)
+    _LOCALIZE_CTX['args'] = (objects, seg_info, method, voxel_size, filter_size,
+                             radius_min_scale, radius_max_scale, pick_session_id, pick_user_id)
+
+
+def _localize_worker(run_id):
+    root = _LOCALIZE_CTX['root']
+    args = _LOCALIZE_CTX['args']
+    process_localization(root.get_run(run_id), *args)
+    return run_id
+
+
 def localize(config, voxel_size, seg_info, pick_user_id, pick_session_id, n_procs = 16,
             method = 'watershed', filter_size = 10, radius_min_scale = 0.4, radius_max_scale = 1.0,
             run_ids = None, pick_objects = None, seg_label = None):
@@ -169,9 +190,9 @@ def localize(config, voxel_size, seg_info, pick_user_id, pick_session_id, n_proc
         seg_label (int): Segmentation label value to extract for all objects. When set,
             overrides the copick/model config labels (use for binary masks, foreground=1).
     """
-    
+
     # Load the Copick Config
-    root = copick.from_file(config) 
+    root = copick.from_file(config)
 
     # Get objects that can be Picked build into mutable rows
     objects = [[obj.name, int(obj.label), float(obj.radius)]
@@ -218,24 +239,15 @@ def localize(config, voxel_size, seg_info, pick_user_id, pick_session_id, n_proc
         print(f"No runs available for localization with the specified voxel size - {voxel_size}.\nExiting...")
         return
 
-     # Run Localization - Main Parallelization Loop
+    # Run Localization - Main Parallelization Loop.
+    # Rebuilds the copick root in _localize_init to prevent pickling issues.
     print(f"Using {n_procs} processes to parallelize across {n_run_ids} run IDs.")
-    with mp.Pool(processes=n_procs) as pool:
+    ctx = mp.get_context("spawn")
+    initargs = (config, objects, seg_info, method, voxel_size, filter_size,
+                radius_min_scale, radius_max_scale, pick_session_id, pick_user_id)
+    with ctx.Pool(processes=n_procs, initializer=_localize_init, initargs=initargs) as pool:
         with tqdm(total=n_run_ids, desc="Localization", unit="run") as pbar:
-            worker_func = lambda run_id: process_localization(
-                root.get_run(run_id),  
-                objects, 
-                seg_info,
-                method, 
-                voxel_size,
-                filter_size,
-                radius_min_scale, 
-                radius_max_scale,
-                pick_session_id,
-                pick_user_id
-            )
-
-            for _ in pool.imap_unordered(worker_func, run_ids, chunksize=1):
+            for _ in pool.imap_unordered(_localize_worker, run_ids, chunksize=1):
                 pbar.update(1)
 
     print('✅ Localization Complete!')
