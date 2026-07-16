@@ -50,12 +50,12 @@ The editable (-e) install ensures that local code changes are immediately reflec
     │ model-explore   Perform model architecture search with Optuna.                  │
     ╰─────────────────────────────────────────────────────────────────────────────────╯
     ╭─ Inference ─────────────────────────────────────────────────────────────────────╮
-    │ segment           Segment volumes using trained neural network models.          │
-    │ localize          Convert Segmentation Masks to 3D Particle Coordinates.        │
-    │ membrane-extract  Extract membrane-bound picks based on proximity to organelle  │
-    │                   or membrane segmentation.                                     │
-    │ evaluate          Evaluate particle localization performance against ground     │
-    │                   truth annotations.                                            │
+    │ segment    Segment volumes using trained neural network models.                 │
+    │ localize   Convert Segmentation Masks to 3D Particle Coordinates.               │
+    │ extract    Extract objects or picks from existing pipeline outputs (isolate a   │
+    │            single object's mask, or split picks by membrane proximity).         │
+    │ evaluate   Evaluate particle localization performance against ground truth      │
+    │            annotations.                                                         │
     ╰─────────────────────────────────────────────────────────────────────────────────╯
     ```
 

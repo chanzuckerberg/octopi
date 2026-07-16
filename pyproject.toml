@@ -40,6 +40,7 @@ dependencies = [
     "mrcfile",
     "kaleido",
     "requests",
+    "huggingface_hub",
     "submitit",
     "torch-ema",
     "matplotlib",

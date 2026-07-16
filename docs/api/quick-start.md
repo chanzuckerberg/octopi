@@ -91,11 +91,10 @@ from octopi.workflows import segment
 
 segment(
     config=config,
-    tomo_algorithm='denoised',
-    voxel_size=10.012,
     model_weights=f'{results_folder}/best_model.pth',
     model_config=f'{results_folder}/model_config.yaml',
-    seg_info=['predict', 'octopi', '1'],
+    tomo_uri='denoised@10.012',
+    seg_uri='predict:octopi/1',
     ntta=4  # number of test-time augmentation rotations
 )
 ```
@@ -200,11 +199,10 @@ evaluate(
     print("Step 3: Running segmentation...")
     segment(
         config=config,
-        tomo_algorithm=tomo_algorithm,
-        voxel_size=voxel_size,
         model_weights=f'{results_folder}/best_model.pth',
         model_config=f'{results_folder}/model_config.yaml',
-        seg_info=['predict', 'octopi', '1'],
+        tomo_uri=f'{tomo_algorithm}@{voxel_size}',
+        seg_uri='predict:octopi/1',
         ntta=4
     )
 

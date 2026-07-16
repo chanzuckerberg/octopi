@@ -9,7 +9,7 @@ from octopi.entry_points.run_create_targets import cli as create_targets
 from octopi.entry_points.run_segment import cli as inference
 from octopi.entry_points.run_localize import cli as localize
 from octopi.entry_points.run_evaluate import cli as evaluate
-from octopi.entry_points.run_extract_mb_picks import cli as mb_extract
+from octopi.extract.cli import cli as extract_cli
 from octopi.mcp.cli import mcp_cli
 
 @click.group(context_settings=cli_context)
@@ -25,8 +25,8 @@ routines.add_command(inference)
 routines.add_command(localize)
 routines.add_command(model_explore)
 routines.add_command(evaluate)
-routines.add_command(mb_extract)
 routines.add_command(mcp_cli)
+routines.add_command(extract_cli)
 
 @click.group(context_settings=cli_context)
 def slurm_routines():

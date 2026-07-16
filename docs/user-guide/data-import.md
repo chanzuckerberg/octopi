@@ -78,9 +78,7 @@ Copick provides a CLI for generating configuration files that mount either local
         --proj-description "Synaptic Vesicles collected on 24sep24"
     ```
 
-    We can define either objects that are continuous segmentations (e.g., organelles or memebranes) or coordinates. For pickable objects, we can store meta-data including the particle radius and a corresponding PDB-ID:
-        
-        - `--objects name,is_particle,radius,pdb_id`.
+    We can define either objects that are continuous segmentations (e.g., organelles or memebranes) or coordinates. For pickable objects, we can store meta-data including the particle radius and a corresponding PDB-ID: `--objects name,is_particle,radius,pdb_id`.
 
     ??? info "`copick config filesystem` parameters"
 
@@ -124,6 +122,7 @@ If you have tomograms stored locally in `*.mrc` format (e.g., from Warp, IMOD, o
 
     ```bash 
     copick add tomogram \
+        ".mrc" \
         -c /path/to/config.json \
         --tomo-type sart \
     ```

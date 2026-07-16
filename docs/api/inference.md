@@ -7,9 +7,10 @@ This page covers running inference with trained octopi models, including segment
 Run trained models on tomograms to generate segmentation masks. The segmentation process takes your trained model weights and configuration to produce probability maps for each object class defined in your training targets.
 
 !!! info "Segmentation Parameters"
-    - **model_weights**: Path to your trained model weights (`.pth` file from training)
-    - **model_config**: Path to model configuration (`.yaml` file from training)
-    - **seg_info**: Tuple defining where to save segmentation results (`name`, `user_id`, `session_id`)
+    - **model_weights**: Path to your trained model weights (`.pth` file from training), or a pretrained checkpoint alias (e.g. `'tomogram-boundary'`) to auto-download from the [Hugging Face Hub](https://huggingface.co/biohub/octopi)
+    - **model_config**: Path to model configuration (`.yaml` file from training). Omit when `model_weights` is a checkpoint alias — its config is bundled and downloaded automatically
+    - **tomo_uri**: Tomogram URI in the form `"algorithm@voxel_size"` (e.g. `"denoised@10.0"`)
+    - **seg_uri**: Segmentation output URI in the form `"name:user_id/session_id"` (e.g. `"predict:octopi/1"`)
     - **use_tta**: Whether to use test-time augmentation for improved robustness
     - **run_ids**: Optional list of specific tomograms to process (None for all available)
 
@@ -27,7 +28,7 @@ The algorithm automatically applies size filtering based on object radii defined
 
     ```python
     import numpy as np
-    from octopi.pytorch.segmentation import Predictor
+    from octopi.pytorch.inference import Predictor
 
     model_weights = 'model_output/best_model.pth'
     model_config = 'model_output/model_config.yaml'
@@ -59,32 +60,42 @@ The algorithm automatically applies size filtering based on object radii defined
     config = 'eval_config.json'
     model_weights = 'model_output/best_model.pth'
     model_config = 'model_output/model_config.yaml'
-    seg_info = ['predict', 'octopi', '1']  # (name, user_id, session_id)
 
     segment(
         config=config,
-        tomo_algorithm='denoised',
-        voxel_size=10.0,
         model_weights=model_weights,
         model_config=model_config,
-        seg_info=seg_info,
+        tomo_uri='denoised@10.0',
+        seg_uri='predict:octopi/1',
         ntta=4
+    )
+    ```
+
+    You can also skip training entirely and segment with a pretrained checkpoint from the
+    [Hugging Face Hub](https://huggingface.co/biohub/octopi) — the weights and matching
+    config are downloaded and cached automatically, so `model_config` can be omitted:
+
+    ```python
+    segment(
+        config=config,
+        model_weights='tomogram-boundary',
+        tomo_uri='denoised@10.0',
+        seg_uri='predict:octopi/1',
     )
     ```
 
     <details markdown="1">
     <summary><strong>💡 segment() reference</strong></summary>
 
-    `segment(config, tomo_algorithm, voxel_size, model_weights, model_config, seg_info=['predict', 'octopi', '1'], run_ids=None, batch_size=1, ntta=4)`
+    `segment(config, model_weights, model_config=None, tomo_uri='wbp@10.0', seg_uri='predict:octopi/1', run_ids=None, batch_size=1, swbs=4, overlap=0.5, ntta=4)`
 
     **Parameters:**
 
     - `config` (str): Path to CoPick configuration file
-    - `tomo_algorithm` (str): Tomogram algorithm identifier
-    - `voxel_size` (float): Voxel spacing in Angstroms
-    - `model_weights` (str or list): Path(s) to trained model weights (.pth file(s))
-    - `model_config` (str or list): Path(s) to model configuration (.yaml file(s))
-    - `seg_info` (list): Output segmentation identifier `(name, user_id, session_id)`
+    - `model_weights` (str or list): Path(s) to trained model weights (.pth file(s)), or a pretrained checkpoint alias (e.g. `'tomogram-boundary'`)
+    - `model_config` (str or list): Path(s) to model configuration (.yaml file(s)). May be omitted when `model_weights` is a checkpoint alias
+    - `tomo_uri` (str): Tomogram URI in the form `"algorithm@voxel_size"` (default: `'wbp@10.0'`)
+    - `seg_uri` (str): Segmentation output URI in the form `"name:user_id/session_id"` (default: `'predict:octopi/1'`)
     - `run_ids` (list): Specific run IDs to process (default: None — all runs)
     - `batch_size` (int): Tomograms processed concurrently per GPU (default: 1)
     - `ntta` (int): Number of test-time augmentation rotations (default: 4; set to 1 to disable)

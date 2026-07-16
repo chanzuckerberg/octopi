@@ -143,53 +143,56 @@ def add_segmentation_targets(
 
 @click.command('create-targets', no_args_is_help=True)
 # Output Arguments
-@click.option('-sid', '--target-session-id', type=str, default="1",
-              help="Session ID for the target segmentation")
-@click.option('-uid','--target-user-id', type=str, default="octopi",
-              help="User ID associated with the target segmentation")
-@click.option('-name', '--target-segmentation-name', type=str, default='targets',
-              help="Name for the target segmentation")
+@click.option('-turi', '--target-uri', type=str, default="targets:octopi/1",
+              callback=lambda ctx, param, value: parsers.parse_target(value),
+              help="Target query as 'name', 'name:user_id', or 'name:user_id/session_id'. Default 'targets:octopi/1'.")
 # Parameters
-@click.option('-vs', '--voxel-size', type=float, default=10,
-              help="Voxel size for tomogram reconstruction")
+@click.option('-uri', '--tomo-uri', type=str, default="wbp@10.0",
+              help="Tomogram URI for target dimensions (tomo-alg@voxel-size)")
 @click.option('-rs', '--radius-scale', type=float, default=0.7,
               help="Scale factor for object radius")
-@click.option('-alg', '--tomo-alg', type=str, default="wbp",
-              help="Tomogram reconstruction algorithm")
 # Input Arguments
-@click.option('--run-ids', type=str, default=None,
+@click.option('--run-ids', '-runs', type=str, default=None,
               callback=lambda ctx, param, value: parsers.parse_list(value) if value else None,
               help="List of run IDs")
 @click.option('--seg-target', type=str, multiple=True,
               callback=lambda ctx, param, value: [parsers.parse_target(v) for v in value] if value else [],
-              help='Segmentation targets: "name" or "name,user_id,session_id"')
-@click.option('--picks-user-id', type=str, default=None,
+              help='Continuous segmentation target(s): "name", "name:user_id/session_id", or the legacy "name,user_id,session_id"')
+@click.option('--picks-user-id', '-puid', type=str, default=None,
               help="User ID associated with the picks")
-@click.option('--picks-session-id', type=str, default=None,
+@click.option('--picks-session-id', '-psid', type=str, default=None,
               help="Session ID for the picks")
 @click.option('-t', '--target', type=str, multiple=True,
               callback=lambda ctx, param, value: [parsers.parse_target(v) for v in value] if value else None,
-              help='Target specifications: "name" or "name,user_id,session_id"')
+              help='Pickable object target(s): "name", "name:user_id/session_id", or the legacy "name,user_id,session_id"')
 @click.option('-c', '--config', type=click.Path(exists=True), required=True,
               help="Path to the CoPick configuration file")
 def cli(config, target, picks_session_id, picks_user_id, seg_target, run_ids,
-        tomo_alg, radius_scale, voxel_size,
-        target_segmentation_name, target_user_id, target_session_id):
+        tomo_uri, radius_scale, target_uri):
     """
     Generate segmentation targets from CoPick configurations.
 
     This tool allows users to specify target labels for training in two ways:
 
-    1. Manual Specification: Define a subset of pickable objects using --target name or --target name,user_id,session_id
+    1. Manual Specification: Define a subset of pickable objects using --target name or --target name:user_id/session_id
 
     2. Automated Query: Provide --picks-session-id and/or --picks-user-id to automatically retrieve all pickable objects
 
     Example Usage:
 
-        Manual: octopi create-targets --config config.json --target ribosome --target apoferritin,123,456
+        Manual: octopi create-targets --config config.json --target ribosome --target apoferritin:manual/1 --tomo-uri wbp@10.0
 
-        Automated: octopi create-targets --config config.json --picks-session-id 123 --picks-user-id 456
+        Automated: octopi create-targets --config config.json --picks-session-id 123 --picks-user-id 456 --tomo-uri wbp@10.0
     """
+
+    # Parse the Tomogram URI
+    if '@' not in tomo_uri:
+        raise ValueError("Tomogram URI must contain '@' for voxel size, e.g. 'wbp@10.0'.")
+    tomo_alg, voxel_size = tomo_uri.split('@')
+    voxel_size = float(voxel_size)
+
+    # Parse the Target URI
+    target_segmentation_name, target_user_id, target_session_id = target_uri
 
     # Print Summary To User
     print('\n⚙️ Generating Target Segmentation Masks from the Following Copick-Query:')

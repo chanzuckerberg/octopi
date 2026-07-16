@@ -32,7 +32,7 @@ Once connected, you can describe what you want in plain language and Claude hand
 
     ---
 
-    Executes `create-targets`, `localize`, `evaluate`, and `membrane-extract` directly and reports back.
+    Executes `create-targets`, `localize`, `evaluate`, and `extract` directly and reports back.
 
 -   :material-chip:{ .lg .middle } **Hand off GPU jobs**
 
@@ -126,7 +126,7 @@ octopi create-targets \
     --target ribosome,manual,1 \
     --target virus-like-particle,tm,2 \
     --target membranes,membrane-seg,1 \
-    --voxel-size 10
+    --tomo-uri wbp@10.0
 ```
 
 ??? tip "URI shorthand for tomograms, segmentations, and picks"

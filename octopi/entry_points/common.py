@@ -22,9 +22,11 @@ def inference_model_parameters():
     """Decorator for adding inference model parameters"""
     def decorator(f):
         f = click.option("-mw", "--model-weights", type=str, required=True,
-                        help="Path to the model weights file")(f)
-        f = click.option("-mc", "--model-config", type=str, required=True,
-                        help="Path to the model configuration file")(f)
+                        help="Path to the model weights file, or a pretrained checkpoint alias "
+                             "(e.g. 'tomogram-boundary') to auto-download from the Hugging Face Hub")(f)
+        f = click.option("-mc", "--model-config", type=str, required=False, default=None,
+                        help="Path to the model configuration file. Omit when --model-weights is a "
+                             "Hugging Face checkpoint alias; its config is bundled and downloaded automatically")(f)
         return f
     return decorator
 
@@ -86,8 +88,7 @@ def inference_parameters():
                         callback=lambda ctx, param, value: parsers.parse_list(value) if value else None,
                         help="List of run IDs for prediction, e.g., run1,run2 or [run1,run2]. If not provided, all available runs will be processed.")(f)
         f = click.option('-suri', "--seg-uri", type=str, default='predict:octopi/1',
-                        callback=lambda ctx, param, value: parsers.parse_target(value) if value else value,
-                        help='Information Query to save Segmentation predictions under (e.g., "name" or "name:user_id/session_id"')(f)
+                        help='Segmentation output URI to save predictions under (e.g., "name" or "name:user_id/session_id")')(f)
         f = click.option('-swbs', "--sliding-window-batch-size", default=4, type=IntRange(min=1),
                         help="Batch size for sliding window inference")(f)
         f = click.option('--overlap', '-o', default=0.5, type=FloatRange(0.0, 1.0),

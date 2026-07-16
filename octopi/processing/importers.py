@@ -83,7 +83,7 @@ def import_tomos(
     print(f'✅ Import Complete! Imported {len(tomograms)} tomograms')
 
 
-@click.command('import')
+@click.command('import', no_args_is_help=True)
 # Input Arguments
 @click.option('-p', '--path', type=click.Path(exists=True), default=None, required=True,
               help="Path to the folder containing the tomograms")
