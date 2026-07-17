@@ -184,7 +184,7 @@ Octopi supports two complementary workflows:
             |----------|-------------|---------|------|
             | `--submitit` | Submit trials as independent SLURM jobs using submitit instead of running locally. | `False` | Enables HPC / multi-node execution |
             | `--njobs` | Maximum number of concurrent SLURM jobs (trials) to run at once. | `5` | Each job runs exactly one Optuna trial |
-            | `--compute-constraint` | CPU and memory request per SLURM job in the form `cpus,mem_gb`. | `4,16` | Example: `8,32` requests 8 CPUs and 32 GB RAM |
+            | `--compute-constraint` | CPU and memory request per SLURM job in the form `cpus,mem_gb`. | `12,8` | Example: `12,8` requests 12 CPUs with 8 GB RAM per core. |
             | `--timeout` | Walltime limit (hours) per SLURM job. | `4` | Jobs exceeding this limit are terminated by the scheduler |
 
             !!! example "What changes when `--submitit` is enabled?"
