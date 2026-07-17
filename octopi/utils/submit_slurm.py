@@ -16,8 +16,8 @@ def create_shellsubmit(
 
 {slurm_gpus}
 #SBATCH --time=18:00:00
-#SBATCH --cpus-per-task=4
-#SBATCH --mem-per-cpu=16G
+#SBATCH --cpus-per-task=12
+#SBATCH --mem-per-cpu=8G
 #SBATCH --job-name={job_name}
 #SBATCH --output={output_file}
 
@@ -43,8 +43,8 @@ def create_shellsubmit_array(
     shell_script_content = f"""#!/bin/bash
 
 #SBATCH --time=18:00:00
-#SBATCH --cpus-per-task=4
-#SBATCH --mem-per-cpu=16G
+#SBATCH --cpus-per-task=12
+#SBATCH --mem-per-cpu=8G
 #SBATCH --job-name={job_name}
 #SBATCH --output={output_file}
 #SBATCH --array={job_array[0]}-{job_array[1]}

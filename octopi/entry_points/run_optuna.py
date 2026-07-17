@@ -33,8 +33,10 @@ import rich_click as click
               help="Submit trials via SLURM (submitit) instead of local GPUs")
 @click.option('--njobs', '-nj', type=int, default=5,
               help="Number of concurrent training jobs when using submitit")
-@click.option('--cpu-constraint', '-cc', type=str, default='16,8',
-              help='Number of CPUs and mem-per-cpu to requested. (e.g., "4,16" for 4 CPUs and 16GB per CPU)')
+@click.option('--cpu-constraint', '-cc', type=str, default='12,8',
+              help='Number of CPUs and mem-per-cpu to request. (e.g., "12,8" for 12 CPUs and 8GB per CPU). '
+                   'DataLoader workers auto-scale to the CPU count (cpus-1, capped at 16), so keep them '
+                   'matched. 12 fits the fair CPU/GPU share on every node incl. H100 (14 cores/GPU).')
 @click.option('--gpu-constraint', '-gc', type=str, default=None,
               help='GPU constraint to use for SLURM jobs (e.g., "a6000" or "l40,a6000")')
 @click.option('--timeout', type=int, default=4,

@@ -332,8 +332,8 @@ class SubmititExplorer(ExploreSubmitter):
     def __init__(
         self,
         n_concurrent_jobs: int = 5,
-        cpus_per_task: int = 4,
-        mem_per_cpu: int = 16,
+        cpus_per_task: int = 12,
+        mem_per_cpu: int = 8,
         slurm_timeout_min: int = 1080,
         gpu_constraint: str = None,
         submitit_folder: str = "submitit_logs",

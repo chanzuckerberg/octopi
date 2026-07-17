@@ -20,24 +20,67 @@ def _spatial_shape(obj):
     except Exception:
         return None
 
-def auto_num_workers(cap: int = 16, min_workers: int = 1) -> int:
+def auto_num_workers(cap: int = 16, min_workers: int = 1, reserve: int = 1) -> int:
     """
-    Pick a DataLoader worker count that respects the CPUs actually available
+    Pick a DataLoader worker count that respects the CPUs actually *allocated*
     to this process.
 
-    On Linux this uses ``os.sched_getaffinity`` so SLURM ``--cpus-per-task``
-    bindings are honoured. Elsewhere it falls back to ``os.cpu_count``. The
-    result is clamped to ``cap`` since past ~16 workers gains are usually
-    noise for a 3D UNet with cached datasets, and each worker adds ~1-2 GB
-    of RAM overhead.
+    Priority order:
 
-    The cap only clamps from above: a 4-core laptop still gets 4 workers.
+    1. SLURM allocation env vars — ``SLURM_CPUS_PER_TASK`` (set when
+       ``--cpus-per-task`` is given), falling back to ``SLURM_CPUS_ON_NODE``
+       (set for essentially any job step, covering jobs that size CPUs
+       differently). These are checked first because on GPU partitions the
+       cgroup frequently does *not* restrict CPU affinity, so
+       ``os.sched_getaffinity`` reports every core on the node. Trusting that
+       would spawn dozens of 100%-CPU workers on a small allocation, starving
+       co-tenants and (via copy-on-write cache drift) thrashing node memory
+       into swap.
+    2. ``os.sched_getaffinity`` — honours cgroup CPU binding when SLURM isn't
+       the scheduler (or the vars are unset).
+    3. ``os.cpu_count`` — non-Linux fallback.
+
+    ``reserve`` cores are held back for the main process (and the validation
+    loader, which sizes itself from this value). The result is clamped to
+    ``cap`` as a sanity ceiling: training is loader-bound so throughput keeps
+    rising to ~16 workers, but past that gains flatten while RAM/context-switch
+    overhead grows, and the cap also guards the auto-detect path from reading a
+    whole 64-256 core node as the worker count. The cap does NOT encode a
+    per-node "fair share" (e.g. gpu-f = 14 cores/GPU) — that is a scheduling
+    policy invisible to this process and must be set via ``--cpus-per-task``.
+
+    The cap only clamps from above: a 4-core laptop still gets ~3 workers.
+
+    ``OCTOPI_MAX_WORKERS`` overrides the count entirely (bypasses cap/reserve)
+    for non-SLURM/desktop users on large workstations who want more workers
+    than the default cap. SLURM jobs should size via ``--cpus-per-task``
+    instead, so this is intended for interactive/local use.
     """
-    try:
-        n = len(os.sched_getaffinity(0))
-    except AttributeError:
-        n = 4 # default to small number on non-slurm platforms
-    return max(min_workers, min(cap, n))
+    override = os.environ.get("OCTOPI_MAX_WORKERS")
+    if override:
+        try:
+            return max(min_workers, int(override))
+        except ValueError:
+            pass  # malformed override -> fall through to auto-detection
+
+    # Prefer SLURM's view of the allocation. Both vars are plain integers;
+    # SLURM_JOB_CPUS_PER_NODE is intentionally skipped since it can be a packed
+    # form like "12(x2)".
+    n = None
+    for var in ("SLURM_CPUS_PER_TASK", "SLURM_CPUS_ON_NODE"):
+        val = os.environ.get(var)
+        if val:
+            try:
+                n = int(val)
+                break
+            except ValueError:
+                continue
+    if n is None:
+        try:
+            n = len(os.sched_getaffinity(0))
+        except AttributeError:
+            n = os.cpu_count() or 4  # non-Linux fallback
+    return max(min_workers, min(cap, n - reserve))
 
 def parse_resolution_uris(tomo_uris) -> list[tuple[str, float]]:
     """
