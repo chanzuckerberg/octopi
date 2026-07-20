@@ -62,7 +62,7 @@ def save_parameters( params_dict: dict, output_path: str ):
     io.save_parameters_yaml(params_dict, output_path)
 
 
-@click.command('membrane-extract', no_args_is_help=True)
+@click.command('mb-picks', no_args_is_help=True)
 # Output Arguments
 @click.option('-ssid','--save-session-id', type=str, required=True,
               help="Session ID to save the new picks")
@@ -74,7 +74,7 @@ def save_parameters( params_dict: dict, output_path: str ):
 @click.option('-t', '--threshold', type=str, default="1,10",
               help="Distance threshold for membrane proximity in Voxels (provide the min and max as 'min,max' if only one value is provided, it is used as max with min=1)",)
 # Input Arguments
-@click.option('-rids','--runIDs', type=str, default=None,
+@click.option('-runs','--runIDs', type=str, default=None,
               callback=lambda ctx, param, value: parsers.parse_list(value) if value else None,
               help="List of run IDs to process")
 @click.option('-suri','--seg-uri', type=str, default=None,
@@ -116,14 +116,14 @@ def cli(config, voxel_size, picks_uri, seg_uri, runids,
     Examples:
 
     # Extract membrane-bound picks with default distance threshold (1–10 voxels)
-    octopi membrane-extract -c config.json \\
+    octopi extract mb-picks -c config.json \\
         --picks-uri predictions:octopi/1 \\
         --seg-uri membrane:membrain-seg/1 \\
         --save-user-id octopi \\
         --save-session-id 1
 
     # Use a custom distance range (2–6 voxels)
-    octopi membrane-extract -c config.json \\
+    octopi extract mb-picks -c config.json \\
         --picks-uri predictions:octopi/1 \\
         --seg-uri membrane:membrain-seg/1 \\
         --threshold 2,6 \\
@@ -162,7 +162,7 @@ def run_mb_extract(
     overlay_root = io.remove_prefix(root.config.overlay_root)
     basepath = os.path.join(overlay_root, 'logs')
     os.makedirs(basepath, exist_ok=True)
-    output_yaml = f'membrane-extract_{save_user_id}_{save_session_id}.yaml'
+    output_yaml = f'extract-mb-picks_{save_user_id}_{save_session_id}.yaml'
     output_path = os.path.join(basepath, output_yaml)        
 
     # Save parameters

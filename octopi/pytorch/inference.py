@@ -51,6 +51,11 @@ class Predictor:
             rank (int, optional): Rank of the current process for distributed inference. Defaults to 0.
         """
 
+        # Resolve checkpoint aliases (e.g. "tomogram-boundary") against the HF Hub;
+        # local paths pass through unchanged.
+        from octopi.utils.hub import resolve_model_source
+        model_weights, model_config = resolve_model_source(model_weights, model_config)
+
         # Open the Copick Project
         self.config = config
         self.root = copick.from_file(config)
@@ -585,6 +590,11 @@ class MultiGpuPredictor:
         device: Optional[str] = None,  # ignored; we choose per-process cuda device
         compile_model: bool = False,
     ):
+        # Resolve checkpoint aliases once here so every spawned worker process
+        # receives already-local paths instead of racing to download from the Hub.
+        from octopi.utils.hub import resolve_model_source
+        model_weights, model_config = resolve_model_source(model_weights, model_config)
+
         self.config = config
         self.root = copick.from_file(config)
         self.model_config = model_config

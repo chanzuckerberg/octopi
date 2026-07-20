@@ -17,11 +17,7 @@ click.rich_click.COMMAND_GROUPS = {
         },
         {
             "name": "Inference",
-            "commands": ["segment", "localize", "membrane-extract", "evaluate"]
-        },
-        {
-            "name": "nnUNet",
-            "commands": ["nnunet"]
+            "commands": ["segment", "localize", "evaluate", "extract"]
         }
     ]
 }
@@ -57,11 +53,11 @@ click.rich_click.OPTION_GROUPS = {
         },
         {
             "name": "Parameters",
-            "options": ["--tomo-alg", "--radius-scale", "--voxel-size"]
+            "options": ["--tomo-uri", "--radius-scale"]
         },
         {
             "name": "Output Arguments",
-            "options": ["--target-segmentation-name", "--target-user-id", "--target-session-id"]
+            "options": ["--target-uri"]
         }
     ],
     "routines segment": [
@@ -125,7 +121,7 @@ click.rich_click.OPTION_GROUPS = {
             "options": ["--save-path"]
         }
     ],
-    "routines membrane-extract": [
+    "routines extract mb-picks": [
         {
             "name": "Input Arguments",
             "options": ["--config", "--voxel-size", "--picks-uri",
@@ -138,6 +134,16 @@ click.rich_click.OPTION_GROUPS = {
         {
             "name": "Output Arguments",
             "options": ["--save-user-id", "--save-session-id"]
+        }
+    ],
+    "routines extract seg": [
+        {
+            "name": "Input Arguments",
+            "options": ["--config", "--name", "--seg-uri", "--run-ids"]
+        },
+        {
+            "name": "Output Arguments",
+            "options": ["--user-id", "--session-id"]
         }
     ],
     "routines download": [

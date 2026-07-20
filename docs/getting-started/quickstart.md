@@ -17,10 +17,9 @@ Create semantic masks for your proteins of interest using annotation metadata:
 ```bash
 octopi create-targets \
     --config config.json \
-    --tomo-alg wbp --voxel-size 10 \
+    --tomo-uri wbp@10.0 \
     --picks-user-id data-portal --picks-session-id 0 \
-    --target-session-id 1 --target-segmentation-name targets \
-    --target-user-id octopi
+    --target-uri targets:octopi/1
 ```
 
 🎯 This creates training targets for a single copick query. To produce targets from multiple coordinate queries,  refer to the [Prepare Labels](../user-guide/labels.md) section.

@@ -8,7 +8,8 @@ Octopi inference follows a systematic two-step approach:
 
 1. **Segmentation** - Apply trained model to generate 3D probability masks with test-time augmentation (TTA).
 2. **Localization** - Convert probability masks into 3D coordinates using size-based filtering.
-3. **Evaluation (Optional)** - Compare predicted coordinates against ground truth annotations.
+3. **Extraction (Optional)** - Isolate a single object from a prediction, or split picks by membrane proximity.
+4. **Evaluation (Optional)** - Compare predicted coordinates against ground truth annotations.
 
 ??? tip "Parallelism and Resource Utilization"
 
@@ -53,8 +54,8 @@ octopi segment \
 
         | Parameter | Description | Notes |
         |----------|-------------|------|
-        | `--model-config` | Model configuration file(s). | Required; comma-separated for ensembles |
-        | `--model-weights` | Model weight file(s). | Must match `--model-config` order |
+        | `--model-config` | Model configuration file(s). | Required for local weights; comma-separated for ensembles. Omit when `--model-weights` is a Hugging Face checkpoint alias |
+        | `--model-weights` | Model weight file(s), or a pretrained checkpoint alias. | Must match `--model-config` order for local files |
 
     === "Inference"
 
@@ -75,6 +76,24 @@ octopi segment \
     --model-weights model1.pth,model2.pth \
     --seg-uri ensemble:octopi/1
 ```
+
+### Pretrained Checkpoints
+
+In development! Only one pre-trained model is available. More to come.
+
+!!! tip "Skip training with a pretrained checkpoint"
+
+    Pass a checkpoint name from the  Hugging Face Hub repo as `--model-weights`. It's downloaded and cached automatically, so `--model-config` can be omitted.
+
+    ```bash
+    octopi segment \
+        --config config.json \
+        --tomo-uri wbp@10.0 \
+        --model-weights tomogram-boundary \
+        --seg-uri predict:octopi/1
+    ```
+
+    💡 - See the [model card](https://huggingface.co/biohub/octopi) for the full list of available checkpoints.
 
 ---
 
@@ -120,12 +139,57 @@ The localization algorithm uses **particle size information** from your copick c
         | `--pick-session-id` | Session ID for particle picks. | `1` | Used for result grouping |
         | `--pick-user-id` | User ID for particle picks. | `octopi` | Used for result grouping |
 
-## Context-Aware Particle Extraction
+## Extraction (Optional)
 
-This optional post-processing step splits an existing set of particle picks into two groups:
+`octopi extract` is a command group for post-processing outputs you've already generated — isolating a single object from a raw multi-class prediction, or splitting picks by proximity to a membrane/organelle segmentation.
+
+### Isolate a Single Object
+
+Pull one object's mask out of a raw multi-class `octopi segment` prediction and save it as its own standalone segmentation.
+
+```bash
+octopi extract seg \
+    --config config.json \
+    --seg-uri predict:octopi/1 \
+    --name membranes \
+    --session-id 1
+```
+
+Octopi reads the inference log written by `octopi segment` to recover the voxel size and the object's integer label within the raw prediction, then writes a binary mask for just that object as a new segmentation.
+
+??? info "`octopi extract seg -h`"
+
+    === "Input"
+
+        | Parameter | Description | Default | Notes |
+        |----------|-------------|---------|------|
+        | `--config` | Path to the CoPick configuration file. | – | Required |
+        | `--name` | Object name to extract from the raw multi-class prediction. | – | Required. Example: `membranes` |
+        | `--seg-uri` | Source segmentation to extract from (`name:user_id/session_id`). | `predict:octopi/1` | Must be a prediction written by `octopi segment` |
+        | `--run-ids` | Specific run IDs to process. | All runs | Example: `run1,run2` |
+
+    === "Output"
+
+        | Parameter | Description | Default | Notes |
+        |----------|-------------|---------|------|
+        | `--user-id` | User ID for the extracted segmentation. | Source segmentation's user ID | |
+        | `--session-id` | Session ID for the extracted segmentation. | `1` | |
+
+### Membrane-Proximity Picks
+
+This step splits an existing set of particle picks into two groups:
 
 - **Membrane-close picks**: particles within a configurable distance threshold of a membrane/organelle segmentation.
 - **Membrane-far picks**: particles outside that threshold.
+
+```bash
+octopi extract mb-picks \
+    --config config.json \
+    --picks-uri ribosome:octopi/1 \
+    --seg-uri membrane:membrain-seg/1 \
+    --save-user-id octopi \
+    --save-session-id 10
+```
 
 For membrane-close particles, we can also **align orientations** so that each particle’s rotation is consistent with the local membrane normal (estimated from the vector between the particle and the closest organelle center).
 
@@ -239,17 +303,6 @@ octopi evaluate
     - **False Negatives (FN)**: Ground truth particles with no nearby predictions
 
 ---
-
-## Visualization
-
-To visualize your results and validate the quality of segmentations and coordinates, refer to our interactive notebook:
-
-**📓 [Inference Notebook](https://github.com/chanzuckerberg/octopi/blob/main/notebooks/inference.ipynb)**
-
-With this notebook, we can overlay the segmentation masks or coordiantes the tomograms. 
-
-![Coordinates Visualization](../assets/coordinates.png)
-*Example of predicted particle coordinates displayed on a holdout tomogram from cryo-ET training dataset. The visualization shows Octopi's localization results overlaid on tomographic data from [DatasetID: 10440](https://cryoetdataportal.czscience.com/datasets/10440).*
 
 ## Next Steps
 

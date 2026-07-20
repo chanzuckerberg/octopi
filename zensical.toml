@@ -1,7 +1,7 @@
 [project]
 site_name = "octopi 🐙🐙🐙"
-repo_url = "https://github.com/chanzuckerberg/octopi"
-repo_name = "chanzuckerberg/octopi"
+repo_url = "https://github.com/Biohub/octopi"
+repo_name = "Biohub/octopi"
 copyright = "2025, Jonathan Schwartz"
 extra_javascript = [
     "javascripts/mathjax.js",
@@ -79,7 +79,7 @@ toggle.name = "Switch to light mode"
 
 [[project.extra.social]]
 icon = "fontawesome/brands/github"
-link = "https://github.com/chanzuckerberg/octopi"
+link = "https://github.com/Biohub/octopi"
 
 # --- Markdown Extensions (must list all defaults when overriding any) ---
 

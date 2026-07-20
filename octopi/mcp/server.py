@@ -34,18 +34,19 @@ URI FORMATS
     → --seg-uri predict:octopi/1
 
   Pick/Target URI  "name:user_id/session_id"   e.g. "ribosome:manual/1"
-    → --target ribosome,manual,1  (for create-targets source picks)
-    → --picks-uri ribosome:manual/1  (for membrane-extract)
+    → --target ribosome:manual/1  (for create-targets source picks, repeatable)
+    → --seg-target membrane:membrane-seg/1  (for create-targets continuous/segmentation targets, repeatable)
+    → --picks-uri ribosome:manual/1  (for extract mb-picks)
     → --pick-user-id manual --pick-session-id 1  (for localize output)
-    → --target-uri targets:octopi/1  (for train / model-explore target segmentation)
+    → --target-uri targets:octopi/1  (for create-targets / train / model-explore target segmentation)
 
   Multiple URIs of the same type are passed as repeated flags, e.g.:
-    --target ribosome,manual,1 --target virus-like-particle,tm,2
+    --target ribosome:manual/1 --target virus-like-particle:tm/2
 
 STEP 1 — create-targets
   Convert pick coordinates from a CoPick project into 3D segmentation masks (Zarr).
   This is a fast command — you can run it directly.
-  Key params: --config, --target (pick URI → name,user_id,session_id), --voxel-size, --radius-scale
+  Key params: --config, --target (pick URI → name,user_id,session_id), --tomo-uri, --target-uri (output seg URI), --radius-scale
 
 STEP 2 — train OR model-explore
   train: Train a 3D U-Net model on tomogram/segmentation pairs. GPU-intensive, takes hours.
@@ -59,6 +60,9 @@ STEP 2 — train OR model-explore
 STEP 3 — segment
   Run sliding-window inference on tomograms to produce probability maps.
   Supports model ensembling (comma-separated --model-config and --model-weights paths).
+  --model-weights also accepts a pretrained checkpoint alias (e.g. 'tomogram-boundary') to
+  auto-download from the biohub/octopi Hugging Face Hub repo — in that case omit
+  --model-config, since its config is bundled and downloaded automatically.
   GPU-intensive — always suggest rather than run unless the user explicitly asks.
   Key params: --config, --model-config, --model-weights, --tomo-uri (tomo URI), --seg-uri (seg URI)
 
@@ -72,19 +76,24 @@ STEP 5 (optional) — evaluate
   Fast command — can run directly.
   Key params: --config, --ground-truth-user-id, --predict-user-id
 
-STEP 6 (optional) — membrane-extract
-  Split picks by proximity to a membrane or organelle segmentation.
-  Fast command — can run directly.
-  Key params: --config, --picks-uri (pick URI), --seg-uri (seg URI), --threshold, --save-session-id
+STEP 6 (optional) — extract
+  Command group for post-processing existing pipeline outputs. Fast — can run directly.
+  extract mb-picks: split picks by proximity to a membrane or organelle segmentation.
+    Key params: --config, --picks-uri (pick URI), --seg-uri (seg URI), --threshold, --save-session-id
+  extract seg: isolate a single object's mask from a multi-class `segment` prediction.
+    Key params: --config, --name (object name), --seg-uri (source seg URI), --session-id
 
 HOW TO RESPOND
 - Use get_command_help to look up flags before suggesting a command.
 - ALWAYS suggest long-running commands (train, model-explore, segment) as copy-pasteable code blocks.
   NEVER run them unless the user explicitly says "run it", "go ahead and run it", or "execute it".
 - Describing what they want ("I'd like to train a model") is NOT permission to run — suggest instead.
-- For fast commands (create-targets, localize, evaluate, membrane-extract), you may run them directly
+- For fast commands (create-targets, localize, evaluate, extract), you may run them directly
   if the user has provided all required parameters.
 - If the user provides all required parameters, go straight to the suggestion without asking follow-up questions.
+- Default to CLI commands (this server only knows the CLI). Only suggest the Python API
+  (octopi.workflows) if the user is clearly programming — writing a script or notebook, not
+  running a one-off command — e.g. "how do I call segment from my script/notebook."
 """,
 )
 
@@ -95,7 +104,8 @@ OCTOPI_COMMANDS = [
     ("segment", "Run sliding-window inference to produce probability maps — GPU-intensive"),
     ("localize", "Convert segmentation maps to 3D particle coordinates — fast"),
     ("evaluate", "Measure Precision/Recall/F1 against ground truth — fast"),
-    ("membrane-extract", "Split picks by membrane proximity (alias: mb-extract) — fast"),
+    ("extract mb-picks", "Split picks by membrane proximity — fast"),
+    ("extract seg", "Isolate a single object's mask from a multi-class prediction — fast"),
 ]
 
 LONG_RUNNING = {"train", "model-explore", "segment"}
@@ -112,7 +122,7 @@ def list_octopi_commands() -> dict[str, Any]:
     return {
         "success": True,
         "commands": [{"command": f"octopi {cmd}", "description": desc} for cmd, desc in OCTOPI_COMMANDS],
-        "workflow_order": ["create-targets", "train or model-explore", "segment", "localize", "evaluate (optional)", "membrane-extract (optional)"],
+        "workflow_order": ["create-targets", "train or model-explore", "segment", "localize", "evaluate (optional)", "extract (optional)"],
         "tip": "Call get_command_help with a command name (e.g. 'train') to see all options.",
     }
 
@@ -122,9 +132,10 @@ def get_command_help(command: str) -> dict[str, Any]:
     """Get the full --help output for an octopi command.
 
     Args:
-        command: Command name, e.g. 'train', 'segment', 'create-targets', 'model-explore'.
+        command: Command name, e.g. 'train', 'segment', 'create-targets', or a group
+            subcommand like 'extract seg'.
     """
-    cmd = ["octopi", command, "--help"]
+    cmd = ["octopi", *command.split(), "--help"]
     try:
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
         help_text = result.stdout or result.stderr
@@ -145,12 +156,12 @@ def get_command_help(command: str) -> dict[str, Any]:
 def run_octopi_command(args: list[str], working_dir: str | None = None) -> dict[str, Any]:
     """Run an octopi command and return its output.
 
-    Use this for fast commands: create-targets, localize, evaluate, membrane-extract.
+    Use this for fast commands: create-targets, localize, evaluate, extract.
     For long-running GPU jobs (train, model-explore, segment), suggest the command as a
     copy-pasteable block instead — only run them if the user explicitly asks you to.
 
     Args:
-        args: Arguments after 'octopi', e.g. ['create-targets', '--config', 'config.json', '--voxel-size', '10'].
+        args: Arguments after 'octopi', e.g. ['create-targets', '--config', 'config.json', '--tomo-uri', 'wbp@10.0'].
         working_dir: Directory to run the command in. Defaults to cwd.
     """
     cwd = working_dir or os.getcwd()

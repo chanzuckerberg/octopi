@@ -96,4 +96,4 @@
 
 ## Getting Help
 
-Open an issue on our [GitHub repository](https://github.com/chanzuckerberg/octopi).
+Open an issue on our [GitHub repository](https://github.com/Biohub/octopi).

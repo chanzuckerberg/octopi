@@ -3,9 +3,9 @@ import octopi.processing.evaluate as octopi_evaluate
 from monai.metrics import ConfusionMatrixMetric
 from octopi.models import common as builder
 from octopi.models.common import wrap_loss_for_ds
-from octopi.pytorch import segmentation
-from octopi.pytorch import trainer 
-from octopi.utils import io
+from octopi.pytorch import inference
+from octopi.pytorch import trainer
+from octopi.utils import io, parsers
 import multiprocess as mp
 from pprint import pprint
 import copick, torch, os
@@ -103,36 +103,46 @@ def train(data_generator, loss_function, batch_size = 16,
     io.save_parameters_to_yaml(model_builder, model_trainer, data_generator, cfg_name)
     io.save_results_to_csv(results, os.path.join(model_save_path, "results.csv"))
 
-def segment(config, tomo_algorithm, voxel_size, model_weights, model_config, 
-            seg_info = ['predict', 'octopi', '1'], run_ids = None, batch_size = 1,
-            swbs = 4, overlap = 0.5, ntta = 4):
+def segment(config, model_weights, model_config = None,
+            tomo_uri = 'wbp@10.0', seg_uri = 'predict:octopi/1',
+            run_ids = None, batch_size = 1, swbs = 4, overlap = 0.5, ntta = 4):
     """
     Segment a Dataset using a Trained Model or Ensemble of Models
 
     Args:
         config (str): Path to the Copick Config File
-        tomo_algorithm (str): The tomographic algorithm to use for segmentation
-        voxel_size (float): The voxel size of the data
-        model_weights (str, list): The path to the model weights or a list of paths to the model weights
-        model_config (str, list): The model configuration or a list of model configurations
-        seg_info (list): The segmentation information
+        model_weights (str, list): The path to the model weights, a pretrained checkpoint alias, or a list of these for ensemble prediction
+        model_config (str, list): The model configuration or a list of model configurations. May be omitted when model_weights is a checkpoint alias
+        tomo_uri (str): Tomogram URI in the form "algorithm@voxel_size", e.g. "wbp@10.0"
+        seg_uri (str): Segmentation output URI in the form "name:user_id/session_id", e.g. "predict:octopi/1"
         swbs (int): The sliding window batch size for inference
         overlap (float): The overlap between sliding windows for inference
         ntta (int): The number of test-time augmentations for inference
         run_ids (list): The list of run IDs to use for segmentation
     """
 
+    # Parse the Tomogram URI
+    if '@' not in tomo_uri:
+        raise ValueError(f"Tomogram URI '{tomo_uri}' must contain '@' for voxel size, e.g. 'wbp@10.0'.")
+    tomo_algorithm, voxel_size = tomo_uri.split('@')
+    voxel_size = float(voxel_size)
+
+    # Parse the Segmentation URI
+    seg_name, seg_userid, seg_sessionid = parsers.parse_target(seg_uri)
+    seg_userid = seg_userid or 'octopi'
+    seg_sessionid = seg_sessionid or '1'
+
     # Initialize the Predictor
     gpu_count = torch.cuda.device_count()
     if gpu_count > 1:
         print(f"# of GPUs Available: {gpu_count} -- Using Multi-GPU Predictor.")
-        predict = segmentation.MultiGpuPredictor(
+        predict = inference.MultiGpuPredictor(
             config, model_config, model_weights,
             sw_bs=swbs, overlap=overlap, ntta=ntta
         )
     else:
         print(f"# of GPUs Available: {gpu_count} -- Using Single-GPU Predictor.")
-        predict = segmentation.Predictor(
+        predict = inference.Predictor(
             config, model_config, model_weights,
             sw_bs=swbs, overlap=overlap, ntta=ntta
         )
@@ -143,9 +153,9 @@ def segment(config, tomo_algorithm, voxel_size, model_weights, model_config,
         num_tomos_per_batch=batch_size,
         tomo_algorithm=tomo_algorithm,
         voxel_spacing=voxel_size,
-        name=seg_info[0],
-        userid=seg_info[1],
-        sessionid=seg_info[2]
+        name=seg_name,
+        userid=seg_userid,
+        sessionid=seg_sessionid
     )
 
 # build once inside each pool worker so the copick root is

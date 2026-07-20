@@ -33,12 +33,14 @@ dependencies = [
     "nibabel",
     "mlflow",
     "optuna",
+    "psycopg2-binary",
     "monai",
     "pandas",
     "plotly",
     "mrcfile",
     "kaleido",
     "requests",
+    "huggingface_hub",
     "submitit",
     "torch-ema",
     "matplotlib",
@@ -78,6 +80,6 @@ dependency-overrides = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/chanzuckerberg/octopi"
-Documentation = "https://chanzuckerberg.github.io/octopi/"
-Issues = "https://github.com/chanzuckerberg/octopi/issues"
+Homepage = "https://github.com/Biohub/octopi"
+Documentation = "https://biohub.github.io/octopi/"
+Issues = "https://github.com/Biohub/octopi/issues"

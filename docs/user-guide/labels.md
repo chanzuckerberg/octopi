@@ -6,11 +6,11 @@ We will use Copick to manage the filesystem, extract runIDs, and create spherica
 
 * **Generating Targets**: For each tomogram, we extract particle coordinates and generate spherical targets based on these coordinates, and save the target data in OME Zarr format.
 
-* **Target dimensions** are determined with an associated tomogram, (specified by the `--tomo-alg` and `--voxel-size` parameters).
+* **Target dimensions** are determined with an associated tomogram, (specified by the `--tomo-uri` parameter, e.g. `wbp@10.0`).
 
 * **Additional segmentations** like organelles and membranes can be included as continuous targets with the `--seg-target` flag. 
 
-The segmentations are saved with the associated `target-session-id`, `target-user-id` and `target-name` flags.  
+The segmentations are saved under the query specified by the `--target-uri` flag (`name:user_id/session_id`).  
 
 ## Method 1: Automated Query
 
@@ -27,9 +27,8 @@ octopi create-targets \
     --config config.json \
     --picks-user-id data-portal --picks-session-id 0 \
     --seg-target membrane \
-    --tomo-alg wbp --voxel-size 10 \
-    --target-session-id 1 --target-segmentation-name targets \
-    --target-user-id octopi
+    --tomo-uri wbp@10.0 \
+    --target-uri targets:octopi/1
 ```
 
 This command automatically finds all pickable objects associated with `data-portal` user and session `0`, plus includes membrane segmentations.
@@ -48,24 +47,26 @@ For more control, manually specify which protein types and annotation sources to
 ```bash
 octopi create-targets \
     --config config.json \
-    --target apoferritin --target beta-galactosidase,slabpick,1 \
-    --target ribosome,pytom,0 --target virus-like-particle,pytom,0 \
+    --target apoferritin --target beta-galactosidase:slabpick/1 \
+    --target ribosome:pytom/0 --target virus-like-particle:pytom/0 \
     --seg-target membrane \
-    --tomo-alg wbp --voxel-size 10 \
-    --target-session-id 1 --target-segmentation-name targets \
-    --target-user-id octopi
+    --tomo-uri wbp@10.0 \
+    --target-uri targets:octopi/1
 ```
 
 ### Target Specification Formats
 
+`--target` and `--seg-target` both accept the same query grammar:
+
 | Format | Description | Example |
 |--------|-------------|---------|
 | `protein_name` | Use default user/session from config | `apoferritin` |
-| `protein_name,user_id,session_id` | Specify source explicitly | `ribosome,pytom,0` |
+| `protein_name:user_id/session_id` | Specify source explicitly (preferred) | `ribosome:pytom/0` |
+| `protein_name,user_id,session_id` | Legacy comma form (still supported) | `ribosome,pytom,0` |
 
 ## Check Target Quality
 
-To validate your training targets, refer to our interactive notebook: [Inspect Segmentation Targets](https://github.com/chanzuckerberg/octopi/blob/main/notebooks/inspect_segmentation_targets.ipynb)
+To validate your training targets, refer to our interactive notebook: [Inspect Segmentation Targets](https://github.com/Biohub/octopi/blob/main/notebooks/inspect_segmentation_targets.ipynb)
 
 This notebook shows how to load segmentation targets and overlay targets on tomograms.
 
@@ -79,10 +80,10 @@ This notebook shows how to load segmentation targets and overlay targets on tomo
 | Parameter | Description | Example | Required |
 |-----------|-------------|---------|----------|
 | `--config` | Path to CoPick configuration file | `config.json` | ✅ |
-| `--target` | Target specifications: "name" or "name,user_id,session_id" | `ribosome,pytom,0` | * |
+| `--target` | Pickable object target(s): "name" or "name:user_id/session_id" | `ribosome:pytom/0` | * |
 | `--picks-session-id` | Session ID for automated pick retrieval | `0` | * |
 | `--picks-user-id` | User ID for automated pick retrieval | `data-portal` | * |
-| `--seg-target` | Segmentation targets: "name" or "name,user_id,session_id" | `membrane` | ❌ |
+| `--seg-target` | Continuous segmentation target(s): "name" or "name:user_id/session_id" | `membrane` | ❌ |
 | `--run-ids` | Specific run IDs to process | `run_001,run_002` | ❌ |
 
 *Either `--target` OR both `--picks-session-id` and `--picks-user-id` must be specified.
@@ -91,17 +92,14 @@ This notebook shows how to load segmentation targets and overlay targets on tomo
 
 | Parameter | Description | Default | Example |
 |-----------|-------------|---------|---------|
-| `--tomo-alg` | Tomogram reconstruction algorithm | `wbp` | `wbp`, `denoised` |
+| `--tomo-uri` | Tomogram URI in the form `alg@voxel_size` | `wbp@10.0` | `denoised@10.0` |
 | `--radius-scale` | Scale factor for object radius | `0.8` | `0.8` (80% of original radius) |
-| `--voxel-size` | Voxel size for tomogram reconstruction | `10` | `10` (10 Ångström) |
 
 ### Output Arguments
 
 | Parameter | Description | Default | Example |
 |-----------|-------------|---------|---------|
-| `--target-segmentation-name` | Name for the target segmentation | `targets` | `my_targets` |
-| `--target-user-id` | User ID for target segmentation | `octopi` | `my_experiment` |
-| `--target-session-id` | Session ID for target segmentation | `1` | `1` |
+| `--target-uri` | Output query as `name`, `name:user_id`, or `name:user_id/session_id` | `targets:octopi/1` | `my_targets:my_experiment/1` |
 
 
  
