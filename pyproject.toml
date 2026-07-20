@@ -80,6 +80,6 @@ dependency-overrides = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/chanzuckerberg/octopi"
-Documentation = "https://chanzuckerberg.github.io/octopi/"
-Issues = "https://github.com/chanzuckerberg/octopi/issues"
+Homepage = "https://github.com/Biohub/octopi"
+Documentation = "https://biohub.github.io/octopi/"
+Issues = "https://github.com/Biohub/octopi/issues"

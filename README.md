@@ -1,6 +1,6 @@
 # OCTOPI 🐙🐙🐙
 
-[![License](https://img.shields.io/pypi/l/octopi.svg?color=green)](https://github.com/chanzuckerberg/octopi/raw/main/LICENSE)
+[![License](https://img.shields.io/pypi/l/octopi.svg?color=green)](https://github.com/Biohub/octopi/raw/main/LICENSE)
 [![PyPI](https://img.shields.io/pypi/v/octopi.svg?color=green)](https://pypi.org/project/octopi)
 [![Python Version](https://img.shields.io/pypi/pyversions/octopi.svg?color=green)](https://www.python.org/)
 
@@ -47,7 +47,7 @@ octopi
 
 ## 📚 Documentation
 
-For detailed documentation, tutorials, CLI and API reference, visit our [documentation](https://chanzuckerberg.github.io/octopi/).
+For detailed documentation, tutorials, CLI and API reference, visit our [documentation](https://biohub.github.io/octopi/).
 
 ## 🤝 Contributing
 

@@ -14,7 +14,7 @@ This will install the latest stable release along with all required dependencies
 If you want to contribute to octopi or need the latest development version, you can install from source:
 
 ```bash
-git clone https://github.com/chanzuckerberg/octopi.git
+git clone https://github.com/Biohub/octopi.git
 cd octopi
 pip install -e .
 ```
