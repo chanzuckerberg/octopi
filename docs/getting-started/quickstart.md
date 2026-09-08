@@ -67,7 +67,7 @@ octopi create-targets \
 
     | Resource | Format | Example | Used by |
     |----------|--------|---------|---------|
-    | **Tomogram** | `algorithm@voxel_size` | `wbp@10.0` | `--tomo-uri` — repeat the flag for multi-resolution training (`--tomo-uri wbp@10.0 --tomo-uri wbp@5.0`) |
+    | **Tomogram** | `algorithm@voxel_size` | `wbp@10.0` | `--tomo-uri` — repeatable for multi-source training (`train`/`model-explore` only): mix voxel sizes and/or reconstruction algorithms, e.g. `--tomo-uri wbp@10.0 --tomo-uri denoised@10.0` |
     | **Segmentation** | `name:user_id/session_id` | `predict:octopi/1` | `--seg-uri`, `--target-uri`, `--seg-target` |
     | **Picks / targets** | `name:user_id/session_id` | `ribosome:manual/1` | `--target`, `--picks-uri` |
 

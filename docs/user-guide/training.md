@@ -23,6 +23,28 @@ Octopi supports two complementary workflows:
     1. Collects all runs that contain both the requested tomograms and the specified segmentation targets
     2. Splits the data into training and validation sets according to the `--data-split` ratio
 
+??? tip "Multi-Source Training"
+
+    Both **single-model training** and **model exploration** accept multiple `--tomo-uri` flags. Each `alg@voxel_size` you pass is treated as an independent training source for the same target segmentation — Octopi doesn't distinguish "different resolution" from "different reconstruction algorithm," so you can mix either:
+
+    ```bash
+    # Multi-resolution: same algorithm, two voxel sizes
+    octopi train \
+        --config config.json \
+        --tomo-uri wbp@10.0 --tomo-uri wbp@5.0 \
+        --target-uri targets:octopi/1
+    ```
+
+    ```bash
+    # Multi-algorithm: same voxel size, two reconstructions
+    octopi train \
+        --config config.json \
+        --tomo-uri wbp@10.0 --tomo-uri denoised@10.0 \
+        --target-uri targets:octopi/1
+    ```
+
+    Mixing algorithms this way trains a model that's robust across reconstructions (e.g. WBP vs. denoised) rather than across resolutions — useful if you're not sure which reconstruction will be available at inference time. Both forms use the same training targets, since targets are keyed by voxel size, not by tomogram algorithm — so `targets:octopi/1` at 10.0 Å applies to every algorithm requested at that voxel size. You can also combine both dimensions at once (e.g. `--tomo-uri wbp@10.0 --tomo-uri denoised@5.0`).
+
 === "Training Individual Models"
 
     ## Single Model Training
@@ -60,7 +82,7 @@ Octopi supports two complementary workflows:
             | Parameter | Description | Example |
             |----------|-------------|---------|
             | `--config` | One or more CoPick configuration files. Multiple entries may be provided as `session_name,path`. | `config.json` |
-            | `--tomo-uri` | Tomogram URI in the form `alg@voxel_size`. Repeat the flag for multi-resolution training. | `wbp@10.0` |
+            | `--tomo-uri` | Tomogram URI in the form `alg@voxel_size`. Repeat the flag for multi-source training (mix voxel sizes and/or reconstruction algorithms). | `wbp@10.0` |
             | `--target-uri` | Target segmentation in the form `name`, `name:user_id`, or `name:user_id/session_id`. | `targets:octopi/1` |
             | `--trainRunIDs` | Explicit list of run IDs to use for training (overrides automatic splitting). | `run1,run2` |
             | `--validateRunIDs` | Explicit list of run IDs to use for validation. | `run3,run4` |
@@ -106,7 +128,7 @@ Octopi supports two complementary workflows:
 
             | Resource | Format | Example | Used by |
             |----------|--------|---------|---------|
-            | **Tomogram** | `algorithm@voxel_size` | `wbp@10.0` | `--tomo-uri` — repeat the flag for multi-resolution training (`--tomo-uri wbp@10.0 --tomo-uri wbp@5.0`) |
+            | **Tomogram** | `algorithm@voxel_size` | `wbp@10.0` | `--tomo-uri` — repeatable for multi-source training (`train`/`model-explore` only): mix voxel sizes and/or reconstruction algorithms, e.g. `--tomo-uri wbp@10.0 --tomo-uri denoised@10.0` |
             | **Segmentation** | `name:user_id/session_id` | `predict:octopi/1` | `--seg-uri`, `--target-uri`, `--seg-target` |
             | **Picks / targets** | `name:user_id/session_id` | `ribosome:manual/1` | `--target`, `--picks-uri` |
 
@@ -162,7 +184,7 @@ Octopi supports two complementary workflows:
             | Parameter | Description | Default | Notes |
             |----------|-------------|---------|------|
             | `--config` | One or more CoPick config paths. Multiple entries may be provided as `session_name,path`. | – | Use multiple `--config` entries to combine sessions |
-            | `--tomo-uri` | Tomogram URI in the form `alg@voxel_size`. Repeat the flag for multi-resolution training. | `wbp@10.0` | Example: `--tomo-uri wbp@10.0 --tomo-uri wbp@5.0` |
+            | `--tomo-uri` | Tomogram URI in the form `alg@voxel_size`. Repeat the flag for multi-source training (mix voxel sizes and/or reconstruction algorithms). | `wbp@10.0` | Example: `--tomo-uri wbp@10.0 --tomo-uri denoised@10.0` |
             | `--target-uri` | Target segmentation: `name`, `name:user_id`, or `name:user_id/session_id`. | `targets:octopi/1` | From the label preparation step |
             | `--trainRunIDs` | Explicit list of run IDs to use for training (overrides automatic splitting). | – | Example: `run1,run2` |
             | `--validateRunIDs` | Explicit list of run IDs to use for validation. | – | Example: `run3,run4` |
@@ -221,7 +243,7 @@ Octopi supports two complementary workflows:
 
             | Resource | Format | Example | Used by |
             |----------|--------|---------|---------|
-            | **Tomogram** | `algorithm@voxel_size` | `wbp@10.0` | `--tomo-uri` — repeat the flag for multi-resolution training (`--tomo-uri wbp@10.0 --tomo-uri wbp@5.0`) |
+            | **Tomogram** | `algorithm@voxel_size` | `wbp@10.0` | `--tomo-uri` — repeatable for multi-source training (`train`/`model-explore` only): mix voxel sizes and/or reconstruction algorithms, e.g. `--tomo-uri wbp@10.0 --tomo-uri denoised@10.0` |
             | **Segmentation** | `name:user_id/session_id` | `predict:octopi/1` | `--seg-uri`, `--target-uri`, `--seg-target` |
             | **Picks / targets** | `name:user_id/session_id` | `ribosome:manual/1` | `--target`, `--picks-uri` |
 

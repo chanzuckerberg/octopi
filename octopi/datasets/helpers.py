@@ -85,7 +85,7 @@ def auto_num_workers(cap: int = 16, min_workers: int = 1, reserve: int = 1) -> i
 def parse_resolution_uris(tomo_uris) -> list[tuple[str, float]]:
     """
     Parse tomogram URIs of the form ``alg@voxel_size`` into ``(alg, voxel_size)``
-    resolution pairs for multi-resolution training.
+    resolution pairs for multi-source training (mixing voxel sizes and/or reconstruction algorithms).
 
     Accepts a single string, a comma-separated string, or a list/tuple of either,
     e.g. ``"wbp@10.0"``, ``"wbp@10.0,wbp@5.0"``, or ``["wbp@10.0", "wbp@5.0"]``.

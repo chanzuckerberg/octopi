@@ -33,8 +33,9 @@ class CopickDataModule:
         self.verbose = verbose
 
         # Parse tomogram URIs into (alg, voxel_size) resolution pairs. Each pair
-        # is an independent training source (multi-resolution training); the
-        # target segmentation voxel size is derived from each tomogram URI.
+        # is an independent training source (multi-source training — mixing voxel
+        # sizes and/or reconstruction algorithms); the target segmentation voxel
+        # size is derived from each tomogram URI.
         self.tomo_uris = tomo_uris
         self.resolutions = utils.parse_resolution_uris(tomo_uris)
 
@@ -238,7 +239,8 @@ class MultiCopickDataModule:
 
         Args:
             configs (list): List of config file paths.
-            tomo_uris: Tomogram URI(s) (``alg@voxel_size``) for multi-resolution training.
+            tomo_uris: Tomogram URI(s) (``alg@voxel_size``) for multi-source training — may mix
+                voxel sizes and/or reconstruction algorithms.
             Other arguments are inherited from TrainLoaderManager.
         """
         # Read Copick Projects

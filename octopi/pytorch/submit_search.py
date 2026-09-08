@@ -38,7 +38,8 @@ class ExploreSubmitter:
             target_name (str): Name of the target for segmentation.
             target_user_id (str): Optional user ID for tracking.
             target_session_id (str): Optional session ID for tracking.
-            tomo_uris: Tomogram URI(s) ('alg@voxel_size') for multi-resolution training.
+            tomo_uris: Tomogram URI(s) ('alg@voxel_size') for multi-source training — may mix
+                voxel sizes and/or reconstruction algorithms.
             model_type (str): Type of model to use.
             random_seed (int): Seed for reproducibility.
             num_epochs (int): Number of epochs per trial.

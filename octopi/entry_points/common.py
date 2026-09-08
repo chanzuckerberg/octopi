@@ -70,7 +70,10 @@ def config_parameters(single_config: bool):
         f = click.option("-uri", "--tomo-uri", "tomo_uris", type=str, multiple=True,
                         default=("wbp@10.0",),
                         help="Tomogram URI(s) as 'alg@voxel_size'. Repeat the flag for "
-                             "multi-resolution training, e.g. --tomo-uri wbp@10.0 --tomo-uri wbp@5.0. "
+                             "multi-source training — combine different voxel sizes "
+                             "(e.g. --tomo-uri wbp@10.0 --tomo-uri wbp@5.0) and/or different "
+                             "reconstruction algorithms at the same voxel size "
+                             "(e.g. --tomo-uri wbp@10.0 --tomo-uri denoised@10.0). "
                              "The target segmentation voxel size is derived from each URI.")(f)
         if single_config:
             f = click.option("-c", "--config", type=click.Path(exists=True), required=True,

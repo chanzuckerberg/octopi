@@ -15,7 +15,8 @@ class DataGeneratorConfig:
     name: str           # Name of the target for segmentation
 
     # Tomogram URI(s) as 'alg@voxel_size'. A list (or comma string) enables
-    # multi-resolution training; the target voxel size is derived per URI.
+    # multi-source training — mixing voxel sizes and/or reconstruction algorithms;
+    # the target voxel size is derived per URI.
     tomo_uris: Union[str, List[str]] = "wbp@10.0"
 
     # Optional identifiers for the target query
