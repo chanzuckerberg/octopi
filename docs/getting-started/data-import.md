@@ -201,13 +201,13 @@ The [CryoET Data Portal](https://cryoetdataportal.czscience.com) provides access
 
 ### 1. Direct Portal Access
 
-You can train models directly using data from the portal without downloading:
+You can train models directly using data from the portal without downloading, by pointing `octopi train` at a copick config file whose `overlay_root` mounts the Data Portal (see the [Copick Config File](#configuration-file) section above):
 
 ```bash
-octopi train-model \
+octopi train \
     --config portal_config.json \
-    --datasetID 10445 \
-    --voxel-size 10
+    --tomo-uri wbp@10 \
+    --target-uri targets:octopi/1
 ```
 
 ### 2. Local Download and Processing
@@ -218,7 +218,7 @@ For larger datasets or when running multiple experiments, it is recommended to d
 octopi download \
     -c /path/to/config.json \
     --datasetID 10445 \
-    --overlay-path /path/to/saved/zarrs \
+    --overlay /path/to/saved/zarrs \
     --input-voxel-size 5 --output-voxel-size 10 \
     --target-type wbp --source-type wbp-denoised-denoiset-ctfdeconv 
 ```
@@ -227,13 +227,13 @@ octopi download \
 
     | Parameter | Description |
     |----------|-------------|
-    | `--config, -c` | Existing copick configuration file |
-    | `--datasetID, -ds` | CryoET Data Portal dataset ID |
-    | `--overlay-path` | Overlay directory when creating a new project |
-    | `--input-voxel-size` | Original voxel size of portal tomograms (Å) |
-    | `--output-voxel-size` | Target voxel size after downsampling (Å) |
-    | `--target-type` | Local tomogram type name in copick |
-    | `--source-type` | Portal tomogram type label |
+    | `--config, -c` | Existing copick configuration file (alternative to `--datasetID`) |
+    | `--datasetID, -ds` | CryoET Data Portal dataset ID (alternative to `--config`) |
+    | `--overlay, -o` | Overlay directory (required when creating a new project from `--datasetID`) |
+    | `--input-voxel-size, -ivs` | Original voxel size of portal tomograms (Å) |
+    | `--output-voxel-size, -ovs` | Target voxel size after downsampling (Å) |
+    | `--target-type, -t` | Local tomogram type name in copick |
+    | `--source-type, -s` | Portal tomogram type label |
 
 Similar to local MRC import, you can downsample portal data by specifying both `--input-voxel-size` and `--output-voxel-size` parameters.  To find available tomogram names for a dataset available on the portal, use:
 

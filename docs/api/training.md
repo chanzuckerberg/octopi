@@ -57,7 +57,7 @@ seg_targets = ['membrane', 'membrain-seg', '2']  # Optional segmentation targets
 # Create targets
 create_sub_train_targets(
     config, pick_targets, seg_targets, voxel_size, radius_scale, 
-    tomogram_algorithm, target_name, target_user_id, target_session_id
+    tomogram_algorithm, target_name, target_user_id, target_session_id, None
 )
 ```
 
@@ -86,7 +86,7 @@ results_folder = 'model_output'
 cfg = DataGeneratorConfig(
     config=config,
     name='targets', user_id='octopi', session_id='1',
-    voxel_size=10.012, tomo_algorithm='denoised',
+    tomo_uris='denoised@10.012',
     trainRunIDs=['run_001', 'run_002', 'run_003'],
     validateRunIDs=['run_004'],
 )
@@ -198,72 +198,27 @@ from octopi.utils.losses import FocalTverskyLoss, WeightedFocalTverskyLoss
 
 ## Model Exploration
 
-In cases where we'd like to automatically explore the model architecture landscape to determine which model configuration would be optimal for our given experiment, we can use the `ModelSearchSubmit` class. Here, the Bayesian optimizer will explore various loss functions and their associated hyperparameters, as well as architecture parameters which are defined in the model class. This automated approach significantly reduces the number of input parameters you need to provide, as the system intelligently searches through the hyperparameter space.
+In cases where we'd like to automatically explore the model architecture landscape to determine which model configuration would be optimal for our given experiment, octopi uses Optuna's Bayesian optimization to explore various loss functions and their associated hyperparameters, as well as architecture parameters defined in each model class. This automated approach significantly reduces the number of input parameters you need to provide, as the system intelligently searches through the hyperparameter space.
 
-The automated search process uses Optuna's Bayesian optimization to efficiently explore combinations of:
+The automated search process efficiently explores combinations of:
 
 - **Loss function types** and their hyperparameters (alpha, beta, gamma values)
 - **Model architecture parameters** (channel sizes, dropout rates, number of residual units)
+- **Model family** — `Unet`, `SwinUNETR`, `DynUNet`, or `SegResNet`
 
 This is particularly valuable when working with new datasets or particle types where optimal configurations are unknown.
 
-```python
-from octopi.pytorch.model_search_submitter import ModelSearchSubmit
+!!! note "CLI-only"
+    Model exploration is exposed through the `octopi model-explore` CLI command rather than a Python class — there is no `ModelSearchSubmit`-style API. See the [Model Exploration section](../user-guide/training.md#model-exploration) of the Training guide for the full command reference, including local multi-GPU execution and SLURM/submitit support for HPC clusters.
 
-config = 'config.json'
-target_name = 'targets'
-target_user_id = 'octopi'
-target_session_id = '1'
-tomo_algorithm = 'denoised'
-voxel_size = 10
-Nclass = 6 # number of objects + 1 for background
-
-optimizer = ModelSearchSubmit(
-    config, target_name, target_user_id, target_session_id,
-    tomo_algorithm, voxel_size, Nclass, 'UNet' )
-
-optimizer.run_model_search()
+```bash
+octopi model-explore \
+    --config config.json \
+    --tomo-uri denoised@10.0 \
+    --target-uri targets:octopi/1 \
+    --model-type Unet \
+    --num-trials 100
 ```
-
-<details markdown="1">
-<summary><strong>💡 ModelSearchSubmit Class Reference</strong></summary>
-
-`ModelSearchSubmit(copick_config, target_name, target_user_id, target_session_id, tomo_algorithm, voxel_size, Nclass, model_type, best_metric='avg_f1', num_epochs=1000, num_trials=100, data_split=0.8, random_seed=42, val_interval=10, tomo_batch_size=15, trainRunIDs=None, validateRunIDs=None, mlflow_experiment_name='explore')`
-
-Initialize the ModelSearch class for architecture search with Optuna.
-
-**Parameters:**
-
-- `copick_config` (str or dict): Path to the CoPick configuration file or a dictionary for multi-config training
-- `target_name` (str): Name of the target for segmentation
-- `target_user_id` (str): User ID for target tracking
-- `target_session_id` (str): Session ID for target tracking
-- `tomo_algorithm` (str): Tomogram algorithm to use
-- `voxel_size` (float): Voxel size for tomograms
-- `Nclass` (int): Number of prediction classes
-- `model_type` (str): Type of model to use (e.g., 'UNet')
-- `best_metric` (str): Metric to optimize (default: 'avg_f1')
-- `num_epochs` (int): Number of epochs per trial (default: 1000)
-- `num_trials` (int): Number of trials for hyperparameter optimization (default: 100)
-- `data_split` (float): Data split ratio for train/validation (default: 0.8)
-- `random_seed` (int): Seed for reproducibility (default: 42)
-- `val_interval` (int): Validation interval during training (default: 10)
-- `tomo_batch_size` (int): Batch size for tomogram loading (default: 15)
-- `trainRunIDs` (List[str]): List of training run IDs (default: None - uses all available)
-- `validateRunIDs` (List[str]): List of validation run IDs (default: None - uses all available)
-- `mlflow_experiment_name` (str): MLflow experiment name for tracking (default: 'explore')
-
-**Methods:**
-
-- `run_model_search()`: Executes the Bayesian optimization search across the defined parameter space
-
-**Outputs:**
-
-- MLflow experiment logs with trial results and metrics
-- Best model configuration and weights
-- Hyperparameter optimization history and visualizations
-
-</details>
 
 ## Next Steps
 

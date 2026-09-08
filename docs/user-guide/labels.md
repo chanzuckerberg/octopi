@@ -12,6 +12,19 @@ We will use Copick to manage the filesystem, extract runIDs, and create spherica
 
 The segmentations are saved under the query specified by the `--target-uri` flag (`name:user_id/session_id`).  
 
+??? tip "URI Formats"
+    Octopi commands identify tomograms, segmentations, and picks with short URI strings instead of separate flags for each part.
+
+    | Resource | Format | Example | Used by |
+    |----------|--------|---------|---------|
+    | **Tomogram** | `algorithm@voxel_size` | `wbp@10.0` | `--tomo-uri` — repeat the flag for multi-resolution training (`--tomo-uri wbp@10.0 --tomo-uri wbp@5.0`) |
+    | **Segmentation** | `name:user_id/session_id` | `predict:octopi/1` | `--seg-uri`, `--target-uri`, `--seg-target` |
+    | **Picks / targets** | `name:user_id/session_id` | `ribosome:manual/1` | `--target`, `--picks-uri` |
+
+    Everything after `name` is optional — `name`, `name:user_id`, and `name:user_id/session_id` are all valid, and the legacy comma form `name,user_id,session_id` still works. Repeat a flag (e.g. `--target ribosome:manual/1 --target virus-like-particle:tm/2`) to pass multiple URIs of the same type.
+
+    `octopi localize` is the one exception — since it *writes* new picks rather than reading an existing pick set, its output is specified with separate `--pick-user-id`/`--pick-session-id` flags instead of a combined URI.
+
 ## Method 1: Automated Query
 
 The simplest approach is to let Octopi automatically find all pickable objects from a specific annotation source.
@@ -93,7 +106,7 @@ This notebook shows how to load segmentation targets and overlay targets on tomo
 | Parameter | Description | Default | Example |
 |-----------|-------------|---------|---------|
 | `--tomo-uri` | Tomogram URI in the form `alg@voxel_size` | `wbp@10.0` | `denoised@10.0` |
-| `--radius-scale` | Scale factor for object radius | `0.8` | `0.8` (80% of original radius) |
+| `--radius-scale` | Scale factor for object radius | `0.7` | `0.8` (80% of original radius) |
 
 ### Output Arguments
 
