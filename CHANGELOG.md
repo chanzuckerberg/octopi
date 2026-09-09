@@ -1,5 +1,26 @@
 # Changelog
 
+## [1.7.0](https://github.com/Biohub/octopi/compare/octopi-v1.6.0...octopi-v1.7.0) (2026-09-09)
+
+
+### ✨ Features
+
+* Huggingface ([#78](https://github.com/Biohub/octopi/issues/78)) ([7ddfbc4](https://github.com/Biohub/octopi/commit/7ddfbc4df8587da4740ed5d35d0b3b6753d80bb3))
+* multi-resolution training, sliding-window validation, and URI-based CLI ([#71](https://github.com/Biohub/octopi/issues/71)) ([0e9420c](https://github.com/Biohub/octopi/commit/0e9420c051b6d0372d0929856de8df7b6024503e))
+
+
+### 🐞 Bug Fixes
+
+* add label override flag for localization ([#75](https://github.com/Biohub/octopi/issues/75)) ([4f39f80](https://github.com/Biohub/octopi/commit/4f39f80be4efec280615d1f748c78823059b36ed))
+* center of mass localization ([#76](https://github.com/Biohub/octopi/issues/76)) ([1fb23d7](https://github.com/Biohub/octopi/commit/1fb23d71bd60c456a4adf633f5cffa736748d39f))
+* data portal localization pickling issues ([#77](https://github.com/Biohub/octopi/issues/77)) ([7edb379](https://github.com/Biohub/octopi/commit/7edb37972ba3d3333f767fa854b64a9bc44a0fa5))
+* handle dict copick_config_path in score-weight lookup ([#72](https://github.com/Biohub/octopi/issues/72)) ([9264d2d](https://github.com/Biohub/octopi/commit/9264d2df1f0f775d249feee94ac8730a2b5a1e91))
+
+
+### 📝 Documentation
+
+* fix stale CLI/API examples and document URI grammar ([#79](https://github.com/Biohub/octopi/issues/79)) ([41e6582](https://github.com/Biohub/octopi/commit/41e65827b24e14e96b62d9e8e4eb2dbab09fcae2))
+
 ## [1.6.0](https://github.com/chanzuckerberg/octopi/compare/octopi-v1.5.0...octopi-v1.6.0) (2026-06-09)
 
 
