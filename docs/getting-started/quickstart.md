@@ -68,8 +68,8 @@ octopi create-targets \
     | Resource | Format | Example | Used by |
     |----------|--------|---------|---------|
     | **Tomogram** | `algorithm@voxel_size` | `wbp@10.0` | `--tomo-uri` — repeatable for multi-source training (`train`/`model-explore` only): mix voxel sizes and/or reconstruction algorithms, e.g. `--tomo-uri wbp@10.0 --tomo-uri denoised@10.0` |
-    | **Segmentation** | `name:user_id/session_id` | `predict:octopi/1` | `--seg-uri`, `--target-uri`, `--seg-target` |
-    | **Picks / targets** | `name:user_id/session_id` | `ribosome:manual/1` | `--target`, `--picks-uri` |
+    | **Segmentation** | `name:user_id/session_id` | `predict:octopi/1` | `--seg-uri`, `--target-uri` |
+    | **Picks / targets** | `name:user_id/session_id` | `ribosome:manual/1` | `--target` (accepts either a pick set or a continuous segmentation for `create-targets`, auto-detected), `--picks-uri` |
 
     Everything after `name` is optional — `name`, `name:user_id`, and `name:user_id/session_id` are all valid, and the legacy comma form `name,user_id,session_id` still works. Repeat a flag (e.g. `--target ribosome:manual/1 --target virus-like-particle:tm/2`) to pass multiple URIs of the same type.
 

@@ -38,19 +38,22 @@ URI FORMATS
     → --seg-uri predict:octopi/1
 
   Pick/Target URI  "name:user_id/session_id"   e.g. "ribosome:manual/1"
-    → --target ribosome:manual/1  (for create-targets source picks, repeatable)
-    → --seg-target membrane:membrane-seg/1  (for create-targets continuous/segmentation targets, repeatable)
+    → --target ribosome:manual/1  (for create-targets, repeatable — accepts EITHER a particle pick set
+      or a continuous segmentation, e.g. "membrane:membrane-seg/1"; the type is auto-detected from the
+      CoPick config, so there is no separate flag for segmentation targets)
     → --picks-uri ribosome:manual/1  (for extract mb-picks)
     → --pick-user-id manual --pick-session-id 1  (for localize output)
     → --target-uri targets:octopi/1  (for create-targets / train / model-explore target segmentation)
 
   Multiple URIs of the same type are passed as repeated flags, e.g.:
     --target ribosome:manual/1 --target virus-like-particle:tm/2
+    (labels are assigned sequentially in the order --target is given, so mixing particle and
+    segmentation names in one command preserves their true relative order)
 
 STEP 1 — create-targets
   Convert pick coordinates from a CoPick project into 3D segmentation masks (Zarr).
   This is a fast command — you can run it directly.
-  Key params: --config, --target (pick URI → name,user_id,session_id), --tomo-uri, --target-uri (output seg URI), --radius-scale
+  Key params: --config, --target (repeatable; particle or segmentation, auto-detected), --tomo-uri, --target-uri (output seg URI), --radius-scale
 
 STEP 2 — train OR model-explore
   train: Train a 3D U-Net model on tomogram/segmentation pairs. GPU-intensive, takes hours.

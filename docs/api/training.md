@@ -4,12 +4,11 @@ This page covers data preparation and training deep learning models for 3D parti
 
 ## Target Creation
 
-Before training, you need to create training targets from existing particle annotations. We can explicitly define all the objects we'd like to query with a list of tuples `(object_name, user_id, session_id)` defining source annotations. This query can either be for point coordinates for protein coordinates, or continuous segmentations such as for membranes or organelles generated from software such as [membrain-seg](https://github.com/teamtomo/membrain-seg) or saber.
+Before training, you need to create training targets from existing particle annotations. We can explicitly define all the objects we'd like to query with a single ordered list of tuples `(object_name, user_id, session_id)` defining source annotations. Each entry can either be point coordinates for protein locations, or a continuous segmentation such as for membranes or organelles generated from software such as [membrain-seg](https://github.com/teamtomo/membrain-seg) or saber — the type is auto-detected per object from the CoPick config, so both kinds are listed together in one list.
 
 The target creation process uses the following key parameters:
 
-* **pick_targets**: List of tuples (object_name, user_id, session_id) defining source point annotations
-* **seg_targets**: List of segmentation targets (same format as pick_targets) for continuous structures
+* **targets**: Ordered list of tuples (object_name, user_id, session_id) defining source annotations — particle picks and continuous segmentations can be freely mixed; labels are assigned sequentially in list order
 * **radius_scale**: Scale factor for creating spherical targets relative to object radius defined in config
 * **run_ids**: Optional subset of tomograms (None for all available)
 
@@ -45,18 +44,18 @@ voxel_size = 10.012
 tomogram_algorithm = 'wbp-denoised-denoiset-ctfdeconv'
 radius_scale = 0.7  # Fraction of particle radius for sphere targets
 
-# Define source annotations
-pick_targets = [
+# Define source annotations — particle picks and continuous segmentations, in the
+# order their labels should be assigned (type is auto-detected from the config)
+targets = [
     ('ribosome', 'data-portal', '1'),
     ('virus-like-particle', 'data-portal', '1'),
-    ('apoferritin', 'data-portal', '1')
+    ('apoferritin', 'data-portal', '1'),
+    ('membrane', 'membrain-seg', '2'),  # continuous segmentation target
 ]
-
-seg_targets = ['membrane', 'membrain-seg', '2']  # Optional segmentation targets
 
 # Create targets
 create_sub_train_targets(
-    config, pick_targets, seg_targets, voxel_size, radius_scale, 
+    config, targets, voxel_size, radius_scale, 
     tomogram_algorithm, target_name, target_user_id, target_session_id, None
 )
 ```
