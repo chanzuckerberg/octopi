@@ -31,7 +31,7 @@ pick_targets = [
 
 create_sub_train_targets(
     config, pick_targets, [], voxel_size, radius_scale,
-    tomo_algorithm, 'targets', 'octopi', '1'
+    tomo_algorithm, 'targets', 'octopi', '1', None
 )
 ```
 
@@ -52,7 +52,7 @@ results_folder = 'model_output'
 cfg = DataGeneratorConfig(
     config=config,
     name='targets', user_id='octopi', session_id='1',
-    voxel_size=10.012, tomo_algorithm='denoised',
+    tomo_uris=f'{tomo_algorithm}@{voxel_size}',
 )
 data_generator = cfg.create_data_generator()
 
@@ -164,14 +164,14 @@ evaluate(
     print("Step 1: Creating training targets...")
     create_sub_train_targets(
         config, pick_targets, [], voxel_size, 0.7,
-        tomo_algorithm, 'targets', 'octopi', '1'
+        tomo_algorithm, 'targets', 'octopi', '1', None
     )
 
     print("Step 2: Training model...")
     cfg = DataGeneratorConfig(
         config=config,
         name='targets', user_id='octopi', session_id='1',
-        voxel_size=voxel_size, tomo_algorithm=tomo_algorithm,
+        tomo_uris=f'{tomo_algorithm}@{voxel_size}',
     )
     data_generator = cfg.create_data_generator()
 

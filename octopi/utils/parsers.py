@@ -76,29 +76,6 @@ def parse_target(value: str) -> Tuple[str, Union[str, None], Union[str, None]]:
     return name, (user_id or None), (session_id or None)
 
 
-def parse_seg_target(value: str) -> List[Tuple[str, Union[str, None], Union[str, None]]]:
-    """
-    Parse segmentation targets. Each target can have the format:
-      - "name"
-      - "name,user_id,session_id"
-    Multiple targets can be comma-separated.
-    """
-    targets = []
-    for target in value.split(';'):  # Use ';' as a separator for multiple targets
-        parts = target.split(',')
-        if len(parts) == 1:
-            name = parts[0]
-            targets.append((name, None, None))
-        elif len(parts) == 3:
-            name, user_id, session_id = parts
-            targets.append((name, user_id, session_id))
-        else:
-            raise argparse.ArgumentTypeError(
-                f"Invalid seg-target format: '{target}'. Expected 'name' or 'name,user_id,session_id'."
-            )
-    return targets
-
-
 def parse_copick_configs(config_entries: List[str]):
     """
     Parse a string representing a list of CoPick configuration file paths.

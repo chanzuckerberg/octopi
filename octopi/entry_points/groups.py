@@ -48,8 +48,8 @@ click.rich_click.OPTION_GROUPS = {
     "routines create-targets": [
         {
             "name": "Input Arguments",
-            "options": ["--config", "--target", "--picks-session-id", "--picks-user-id", 
-                       "--seg-target", "--run-ids"]
+            "options": ["--config", "--target", "--picks-session-id", "--picks-user-id",
+                       "--run-ids"]
         },
         {
             "name": "Parameters",

@@ -166,17 +166,17 @@ Add your model to octopi's model registry by adding an `elif` branch to `get_mod
 ```python
 # In octopi/models/common.py
 from octopi.models import (
-    Unet, AttentionUnet, MedNeXt, SegResNet,
+    Unet, SwinUNETR, DynUnet, SegResNet,
     MyCustomModel  # import your new module
 )
 
 def get_model(architecture):
     if architecture == "Unet":
         model = Unet.myUNet()
-    elif architecture == "AttentionUnet":
-        model = AttentionUnet.myAttentionUnet()
-    elif architecture == "MedNeXt":
-        model = MedNeXt.myMedNeXt()
+    elif architecture == "SwinUNETR":
+        model = SwinUNETR.mySwinUNETR()
+    elif architecture == "DynUNet":
+        model = DynUnet.myDynUNet()
     elif architecture == "SegResNet":
         model = SegResNet.mySegResNet()
     elif architecture == "MyCustomModel":          # add this
@@ -186,17 +186,29 @@ def get_model(architecture):
     return model
 ```
 
+!!! note "Currently shipped architectures"
+    Octopi currently ships `Unet`, `SwinUNETR`, `DynUNet`, and `SegResNet` in `octopi/models/`. Older revisions of this page referenced `AttentionUnet` and `MedNeXt` — those were never merged; use this template to add them yourself if needed.
+
 ### Step 3: Use in Training
 
 Once registered, your model can be used in training workflows:
 
 ```python
+from octopi.datasets.config import DataGeneratorConfig
 from octopi.workflows import train
+
+# Build the data generator (see the Training guide for details)
+cfg = DataGeneratorConfig(
+    config=config,
+    name='targets', user_id='octopi', session_id='1',
+    tomo_uris='denoised@10.0',
+)
+data_generator = cfg.create_data_generator()
 
 # Model configuration for your custom architecture
 model_config = {
     'architecture': 'MyCustomModel',
-    'num_classes': 6,
+    'num_classes': data_generator.Nclasses,
     'your_param1': value1,
     'your_param2': value2,
     # Add your specific parameters
@@ -204,34 +216,21 @@ model_config = {
 
 # Train using your custom model
 train(
-    config=config,
-    target_info=target_info,
-    tomo_algorithm='denoised',
-    voxel_size=10.0,
-    loss_function=loss_function,
+    data_generator, loss_function,
     model_config=model_config,
-    # ... other parameters
+    model_save_path='results',
 )
 ```
 
 ### Step 4: Use in Model Exploration
 
-Your custom model automatically works with automated hyperparameter search:
+Architecture search runs through the `octopi model-explore` CLI — there is no separate Python entry point for it. `--model-type` is a fixed `click.Choice`, so also add your model's name to that choice list in `octopi/entry_points/run_optuna.py` alongside the `get_model()` registration from Step 2:
 
-```python
-from octopi.pytorch.model_search_submitter import ModelSearchSubmit
-
-optimizer = ModelSearchSubmit(
-    copick_config=config,
-    target_name=target_name,
-    target_user_id=target_user_id,
-    target_session_id=target_session_id,
-    tomo_algorithm='denoised',
-    voxel_size=10.0,
-    Nclass=6,
-    model_type='MyCustomModel',  # Use your custom model
-    num_trials=50
-)
-
-optimizer.run_model_search()
+```bash
+octopi model-explore \
+    --config config.json \
+    --tomo-uri denoised@10.0 \
+    --target-uri targets:octopi/1 \
+    --model-type MyCustomModel \
+    --num-trials 50
 ```

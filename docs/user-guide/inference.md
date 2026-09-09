@@ -11,6 +11,19 @@ Octopi inference follows a systematic two-step approach:
 3. **Extraction (Optional)** - Isolate a single object from a prediction, or split picks by membrane proximity.
 4. **Evaluation (Optional)** - Compare predicted coordinates against ground truth annotations.
 
+??? tip "URI Formats"
+    Octopi commands identify tomograms, segmentations, and picks with short URI strings instead of separate flags for each part.
+
+    | Resource | Format | Example | Used by |
+    |----------|--------|---------|---------|
+    | **Tomogram** | `algorithm@voxel_size` | `wbp@10.0` | `--tomo-uri` — repeatable for multi-source training (`train`/`model-explore` only): mix voxel sizes and/or reconstruction algorithms, e.g. `--tomo-uri wbp@10.0 --tomo-uri denoised@10.0` |
+    | **Segmentation** | `name:user_id/session_id` | `predict:octopi/1` | `--seg-uri` |
+    | **Picks / targets** | `name:user_id/session_id` | `ribosome:manual/1` | `--picks-uri` |
+
+    Everything after `name` is optional — `name`, `name:user_id`, and `name:user_id/session_id` are all valid, and the legacy comma form `name,user_id,session_id` still works.
+
+    `octopi localize` is the one exception — since it *writes* new picks rather than reading an existing pick set, its output is specified with separate `--pick-user-id`/`--pick-session-id` flags instead of a combined URI.
+
 ??? tip "Parallelism and Resource Utilization"
 
     Octopi parallelizes inference workloads at the **run level**, automatically adapting to the available compute resources.
@@ -62,7 +75,9 @@ octopi segment \
         | Parameter | Description | Default | Notes |
         |----------|-------------|---------|------|
         | `--seg-uri` | Output segmentation URI (`name:user_id/session_id`). | `predict:octopi/1` | Used to organize results |
-        | `--tomo-batch-size` | Number of tomograms processed concurrently. | `1` | One per GPU worker |
+        | `--sliding-window-batch-size` | Batch size for sliding-window inference. | `4` | |
+        | `--overlap` | Overlap fraction between sliding windows. | `0.5` | |
+        | `--ntta` | Number of test-time augmentation rotations. | `4` | Higher values improve accuracy at the cost of runtime |
         | `--run-ids` | Specific run IDs to segment. | All runs | Example: `run1,run2` |
 
 ### Model Ensembles
@@ -269,11 +284,11 @@ For membrane-close particles, we can also **align orientations** so that each pa
 Evaluate the particle coordinates against the coordinates that were used to generate the segmentation masks. 
 
 ```bash
-octopi evaluate 
-    --config config.json
-    --ground-truth-user-id data-portal --ground-truth-session-id 0
-    --predict-user-id octopi --predict-session-id 1
-    --save-path evaluate_results
+octopi evaluate \
+    --config config.json \
+    --ground-truth-user-id data-portal --ground-truth-session-id 0 \
+    --predict-user-id octopi --predict-session-id 1 \
+    --output evaluate_results
 ```
 
 ??? tip "Setting class weights for evaluation (e.g. ML Challenge dataset)"
